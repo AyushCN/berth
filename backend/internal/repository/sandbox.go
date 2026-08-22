@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// SandboxRepository wraps sqlc-generated queries.
 type SandboxRepository struct {
 	queries *Queries
 }
