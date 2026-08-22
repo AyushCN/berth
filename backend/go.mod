@@ -1,8 +1,6 @@
 module github.com/AyushCN/berth
 
-go 1.23
-
-toolchain go1.23.0
+go 1.25.0
 
 require (
 	github.com/containerd/containerd/v2 v2.0.0
