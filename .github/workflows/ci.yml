@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+          working-directory: ./backend
+      - name: go vet
+        run: cd backend && go vet ./...
+
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: berth
+          POSTGRES_PASSWORD: berth
+          POSTGRES_DB: berth_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Install sqlc
+        run: |
+          curl -L https://github.com/sqlc-dev/sqlc/releases/download/v1.27.0/sqlc_1.27.0_linux_amd64.tar.gz | tar xz -C /tmp
+          sudo mv /tmp/sqlc /usr/local/bin/
+      - name: sqlc generate
+        run: cd backend && sqlc generate
+      - name: golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar xz -C /tmp
+          sudo mv /tmp/migrate /usr/local/bin/
+      - name: Run migrations
+        run: cd backend && migrate -path migrations -database "postgres://berth:berth@localhost:5432/berth_test?sslmode=disable" up
+      - name: go test
+        run: cd backend && go test -race -coverprofile=coverage.out ./...
+        env:
+          DATABASE_URL: postgres://berth:berth@localhost:5432/berth_test?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint
+      - run: cd frontend && npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+
+  test-ml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: cd ml && pip install -r requirements.txt
+      - run: cd ml && pytest --cov=features --cov=models tests/
