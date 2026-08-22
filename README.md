@@ -2,6 +2,25 @@
 
 > Predictive ephemeral sandbox platform with gVisor isolation.
 
+## ⚠️ Current Status: Phase 0–1 Scaffold
+
+This project is currently in early development. It is **NOT complete**.
+Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of what works and what is vaporware.
+
+### What Works Currently
+- Rootless containerd daemon setup
+- gVisor (runsc) runtime integration
+- Container lifecycle (Create/Start/Stop/Exec)
+- Hardened OCI Spec (namespaces, capabilities, seccomp)
+- Bridge networking scaffold
+
+### What Does NOT Exist Yet (Vaporware)
+- ❌ Auth flow (GitHub OAuth)
+- ❌ Real-time collaborative editing (CRDT sync)
+- ❌ Prediction Service (XGBoost)
+- ❌ Frontend UI (Next.js)
+- ❌ End-to-end Git clone to container execution loop
+
 ## Quick Start
 
 ```bash
@@ -39,12 +58,6 @@ berth/
 ├── scripts/          # Setup and utility scripts
 └── docs/             # Architecture docs + IEEE paper
 ```
-
-## Status
-
-- **Phase 0:** Project Scaffolding (Complete)
-- **Phase 1:** gVisor Isolation Layer & Rootless Containerd (Complete)
-- **Phase 2:** API + Auth + Prediction Service (Pending)
 
 ## License
 

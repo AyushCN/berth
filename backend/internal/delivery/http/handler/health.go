@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/swordrookie/berth/internal/infrastructure/db"
-	"github.com/swordrookie/berth/internal/infrastructure/redis"
+	"github.com/AyushCN/berth/internal/infrastructure/db"
+	"github.com/AyushCN/berth/internal/infrastructure/redis"
 )
 
 func HealthCheck(c *gin.Context) {

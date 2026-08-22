@@ -17,7 +17,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"syscall"
 
-	"github.com/swordrookie/berth/internal/domain"
+	"github.com/AyushCN/berth/internal/domain"
 )
 
 // LayerManager handles base images, dependency layers, and overlayfs composition.
@@ -82,7 +82,7 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 
 	// Check cache first
 	cacheRef := fmt.Sprintf("berth-deps:%s-%s", profile.Language, hashString(baseImage+profile.InstallCmd))
-	if existing, err := lm.client.GetImage(ctx, cacheRef); err == nil {
+	if _, err := lm.client.GetImage(ctx, cacheRef); err == nil {
 		slog.Info("dependency layer cache hit", "ref", cacheRef)
 		return cacheRef, nil
 	}
@@ -114,7 +114,7 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 	}
 
 	if err := task.Start(ctx); err != nil {
-		_ = task.Delete(ctx, client.WithProcessKill)
+		task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("failed to start build task: %w", err)
 	}
 
@@ -128,13 +128,13 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 	process, err := task.Exec(ctx, "install", processSpec, cio.NewCreator(cio.WithStdio))
 	if err != nil {
 		_ = task.Kill(ctx, syscall.SIGKILL)
-		_ = task.Delete(ctx, client.WithProcessKill)
+		task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("failed to exec install: %w", err)
 	}
 
 	if err := process.Start(ctx); err != nil {
 		_ = task.Kill(ctx, syscall.SIGKILL)
-		_ = task.Delete(ctx, client.WithProcessKill)
+		task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("failed to start install: %w", err)
 	}
 
@@ -142,17 +142,17 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 	status := <-statusC
 	if status.ExitCode() != 0 {
 		_ = task.Kill(ctx, syscall.SIGKILL)
-		_ = task.Delete(ctx, client.WithProcessKill)
+		task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("install command failed with exit code %d", status.ExitCode())
 	}
 
-	_ = process.Delete(ctx)
+	process.Delete(ctx)
 
 	// Stop the task
 	_ = task.Kill(ctx, syscall.SIGTERM)
 	exitCh, _ := task.Wait(ctx)
 	<-exitCh
-	_ = task.Delete(ctx, client.WithProcessKill)
+	task.Delete(ctx, client.WithProcessKill)
 
 	// TODO(Phase 2): Commit the container's snapshot as a new image.
 	// In containerd v2, this requires:

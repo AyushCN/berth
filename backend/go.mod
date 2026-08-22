@@ -1,4 +1,4 @@
-module github.com/swordrookie/berth
+module github.com/AyushCN/berth
 
 go 1.23
 

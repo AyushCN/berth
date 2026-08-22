@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
-	"github.com/swordrookie/berth/internal/domain"
+	"github.com/AyushCN/berth/internal/domain"
 )
 
 const (
@@ -62,20 +62,21 @@ func NewRuntime(sockPath string) (*Runtime, error) {
 	}
 
 	// Ensure namespace exists
-	ctx := context.Background()
-	nsService := c.NamespaceService()
-	if _, err := nsService.GetNamespace(ctx, berthNamespace); err != nil {
-		if errdefs.IsNotFound(err) {
-			if err := nsService.CreateNamespace(ctx, namespaces.Namespace{
-				Name: berthNamespace,
-			}); err != nil {
-				return nil, fmt.Errorf("failed to create berth namespace: %w", err)
-			}
-			slog.Info("created containerd namespace", "namespace", berthNamespace)
-		} else {
-			return nil, fmt.Errorf("failed to check namespace: %w", err)
-		}
-	}
+	// Ensure namespace exists
+	// ctx := context.Background()
+	// nsService := c.NamespaceService()
+	// if _, err := nsService.GetNamespace(ctx, berthNamespace); err != nil {
+	// 	if errdefs.IsNotFound(err) {
+	// 		if err := nsService.CreateNamespace(ctx, namespaces.Namespace{
+	// 			Name: berthNamespace,
+	// 		}); err != nil {
+	// 			return nil, fmt.Errorf("failed to create berth namespace: %w", err)
+	// 		}
+	// 		slog.Info("created containerd namespace", "namespace", berthNamespace)
+	// 	} else {
+	// 		return nil, fmt.Errorf("failed to check namespace: %w", err)
+	// 	}
+	// }
 
 	layerMgr, err := NewLayerManager(c)
 	if err != nil {
@@ -178,10 +179,9 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 
-	// Use cio.WithOutput to redirect stdout/stderr directly to log file
+	// Create task
 	task, err := container.NewTask(ctx, cio.NewCreator(
 		cio.WithFIFODir(fifoDir),
-		cio.WithOutput(logFile, logFile),
 	))
 	if err != nil {
 		_ = logFile.Close()

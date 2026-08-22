@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/swordrookie/berth/internal/domain"
+	"github.com/AyushCN/berth/internal/domain"
 )
 
 func skipIfNoContainerd(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	infradis "github.com/swordrookie/berth/internal/infrastructure/redis"
+	infradis "github.com/AyushCN/berth/internal/infrastructure/redis"
 	"log/slog"
 )
 

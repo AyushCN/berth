@@ -1,5 +1,5 @@
 
-agents_md = """# Berth — Predictive Ephemeral Sandbox Platform
+# Berth — Predictive Ephemeral Sandbox Platform
 
 > A research-grade, single-host ephemeral development environment platform with predictive pre-warming, gVisor isolation, and CRDT-based collaboration. Built for reproducible systems research and IEEE publication.
 
@@ -405,16 +405,6 @@ To prevent scope creep and architectural cowardice:
 *Last updated: 2026-08-22*
 *Version: 1.0 — Foundation Draft*
 *Target: IEEE CLOUD 2027 / IC2E 2027*
-"""
-
-with open('/mnt/agents/output/AGENTS.md', 'w') as f:
-    f.write(agents_md)
-
-print("AGENTS.md created successfully.")
-print(f"File size: {len(agents_md)} bytes")
-
-
-
 | Layer                     | Language                 | Framework                             |
 | ------------------------- | ------------------------ | ------------------------------------- |
 | **Backend API & Workers** | **Go 1.23**              | Gin (or stdlib), sqlc, Temporal SDK   |

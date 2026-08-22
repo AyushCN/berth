@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/swordrookie/berth/internal/config"
-	"github.com/swordrookie/berth/internal/infrastructure/db"
-	"github.com/swordrookie/berth/internal/infrastructure/redis"
-	"github.com/swordrookie/berth/internal/delivery/http/handler"
-	"github.com/swordrookie/berth/internal/delivery/http/middleware"
-	infracontainerd "github.com/swordrookie/berth/internal/infrastructure/containerd"
+	"github.com/AyushCN/berth/internal/config"
+	"github.com/AyushCN/berth/internal/infrastructure/db"
+	"github.com/AyushCN/berth/internal/infrastructure/redis"
+	"github.com/AyushCN/berth/internal/delivery/http/handler"
+	"github.com/AyushCN/berth/internal/delivery/http/middleware"
+	infracontainerd "github.com/AyushCN/berth/internal/infrastructure/containerd"
 )
 
 func main() {
