@@ -1,6 +1,6 @@
 module github.com/swordrookie/berth
 
-go 1.25
+go 1.23
 
 require (
 	github.com/containerd/containerd/v2 v2.0.0

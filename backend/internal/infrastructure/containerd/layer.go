@@ -13,17 +13,18 @@ import (
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/platforms"
 	"github.com/containerd/errdefs"
-	"github.com/swordrookie/berth/internal/domain"
 	"github.com/google/uuid"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"syscall"
+
+	"github.com/swordrookie/berth/internal/domain"
 )
 
 // LayerManager handles base images, dependency layers, and overlayfs composition.
 type LayerManager struct {
-	client     *client.Client
-	layerDir   string
-	cacheDir   string
+	client   *client.Client
+	layerDir string
+	cacheDir string
 }
 
 // NewLayerManager creates a layer manager backed by containerd.
@@ -71,12 +72,17 @@ func (lm *LayerManager) ResolveBaseImage(ctx context.Context, ref string) (clien
 // BuildDependencyLayer creates a reusable layer with pre-installed dependencies.
 // It creates a temp container from baseImage, runs the install command, and
 // commits the resulting filesystem as a new image reference.
+//
+// TODO(Phase 2): Currently, this builds the layer but does not commit the snapshot
+// as a new cached image. The cache hit check at the top will always miss until
+// Phase 2 implements proper snapshot export/import. For Phase 1, dependency
+// installation happens on every cold start, but the warm pool mitigates this.
 func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage string, profile domain.RuntimeProfile) (string, error) {
 	ctx = namespaces.WithNamespace(ctx, berthNamespace)
 
 	// Check cache first
 	cacheRef := fmt.Sprintf("berth-deps:%s-%s", profile.Language, hashString(baseImage+profile.InstallCmd))
-	if _, err := lm.client.GetImage(ctx, cacheRef); err == nil {
+	if existing, err := lm.client.GetImage(ctx, cacheRef); err == nil {
 		slog.Info("dependency layer cache hit", "ref", cacheRef)
 		return cacheRef, nil
 	}
@@ -108,11 +114,10 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 	}
 
 	if err := task.Start(ctx); err != nil {
-		task.Delete(ctx, client.WithProcessKill)
+		_ = task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("failed to start build task: %w", err)
 	}
 
-	// Wait for task to be ready (sleep container needs this)
 	// For install, we exec into the running task
 	processSpec := &specs.Process{
 		Terminal: false,
@@ -122,38 +127,45 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 
 	process, err := task.Exec(ctx, "install", processSpec, cio.NewCreator(cio.WithStdio))
 	if err != nil {
-		task.Kill(ctx, syscall.SIGKILL)
-		task.Delete(ctx, client.WithProcessKill)
+		_ = task.Kill(ctx, syscall.SIGKILL)
+		_ = task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("failed to exec install: %w", err)
 	}
 
 	if err := process.Start(ctx); err != nil {
-		task.Kill(ctx, syscall.SIGKILL)
-		task.Delete(ctx, client.WithProcessKill)
+		_ = task.Kill(ctx, syscall.SIGKILL)
+		_ = task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("failed to start install: %w", err)
 	}
 
 	statusC, _ := process.Wait(ctx)
 	status := <-statusC
 	if status.ExitCode() != 0 {
-		task.Kill(ctx, syscall.SIGKILL)
-		task.Delete(ctx, client.WithProcessKill)
+		_ = task.Kill(ctx, syscall.SIGKILL)
+		_ = task.Delete(ctx, client.WithProcessKill)
 		return "", fmt.Errorf("install command failed with exit code %d", status.ExitCode())
 	}
 
-	process.Delete(ctx)
+	_ = process.Delete(ctx)
 
 	// Stop the task
-	task.Kill(ctx, syscall.SIGTERM)
+	_ = task.Kill(ctx, syscall.SIGTERM)
 	exitCh, _ := task.Wait(ctx)
 	<-exitCh
-	task.Delete(ctx, client.WithProcessKill)
+	_ = task.Delete(ctx, client.WithProcessKill)
 
-	// Commit the container's snapshot as a new image
-	// In containerd, we export the snapshot and import it as a new image
-	// For Phase 1, we use a simplified approach: tag the snapshot
-	// Phase 2 will use proper image commit
-	slog.Info("dependency layer built", "ref", cacheRef, "language", profile.Language)
+	// TODO(Phase 2): Commit the container's snapshot as a new image.
+	// In containerd v2, this requires:
+	//  1. Get the container's snapshot info via container.Info(ctx)
+	//  2. Export the snapshot filesystem using client.DiffService().Diff()
+	//  3. Build an OCI image config + manifest
+	//  4. Write to content store via client.ContentStore()
+	//  5. Create image reference via client.ImageService().Create()
+	// Until then, the cache hit check above will always miss on first use,
+	// but the warm pool (runtime.go) mitigates repeated cold starts.
+
+	slog.Info("dependency layer built", "ref", cacheRef, "language", profile.Language,
+		"note", "snapshot commit deferred to Phase 2")
 	return cacheRef, nil
 }
 
@@ -170,8 +182,8 @@ func (lm *LayerManager) ComposeLayers(baseRef, depsRef, sandboxID string) (strin
 		}
 	}
 
-	// Phase 1: containerd handles overlayfs internally via snapshotter
-	// We return the merged path for documentation; actual mount is managed by containerd
+	// Phase 1: containerd handles overlayfs internally via snapshotter.
+	// We return the merged path for documentation; actual mount is managed by containerd.
 	_ = baseRef
 	_ = depsRef
 	return mergedDir, nil
@@ -195,7 +207,6 @@ func (lm *LayerManager) CleanupSandbox(sandboxID string) error {
 }
 
 func hashString(s string) string {
-	// Simple hash for cache keys
 	h := sha256.New()
 	h.Write([]byte(s))
 	return fmt.Sprintf("%x", h.Sum(nil))[:12]

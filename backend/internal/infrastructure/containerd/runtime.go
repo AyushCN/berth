@@ -3,6 +3,7 @@ package containerd
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,19 +23,19 @@ import (
 )
 
 const (
-	berthNamespace   = "berth"
-	gvisorRuntime    = "io.containerd.runsc.v1"
-	defaultTimeout   = 30 * time.Second
+	berthNamespace      = "berth"
+	gvisorRuntime       = "io.containerd.runsc.v1"
+	defaultTimeout      = 30 * time.Second
 	defaultCgroupParent = "berth.slice"
 )
 
 // Runtime implements domain.ContainerRuntime using containerd + gVisor.
 type Runtime struct {
-	client      *client.Client
-	sockPath    string
-	layerMgr    *LayerManager
-	netMgr      *NetworkManager
-	warmPool    *WarmPool
+	client   *client.Client
+	sockPath string
+	layerMgr *LayerManager
+	netMgr   *NetworkManager
+	warmPool *WarmPool
 }
 
 // NewRuntime creates a new containerd-backed runtime.
@@ -60,7 +61,21 @@ func NewRuntime(sockPath string) (*Runtime, error) {
 		return nil, fmt.Errorf("failed to connect to containerd after 10 attempts: %w", err)
 	}
 
-	// Ensure namespace exists (simplified for Phase 1)
+	// Ensure namespace exists
+	ctx := context.Background()
+	nsService := c.NamespaceService()
+	if _, err := nsService.GetNamespace(ctx, berthNamespace); err != nil {
+		if errdefs.IsNotFound(err) {
+			if err := nsService.CreateNamespace(ctx, namespaces.Namespace{
+				Name: berthNamespace,
+			}); err != nil {
+				return nil, fmt.Errorf("failed to create berth namespace: %w", err)
+			}
+			slog.Info("created containerd namespace", "namespace", berthNamespace)
+		} else {
+			return nil, fmt.Errorf("failed to check namespace: %w", err)
+		}
+	}
 
 	layerMgr, err := NewLayerManager(c)
 	if err != nil {
@@ -158,17 +173,22 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 	fifoDir := filepath.Join(home, ".local", "state", "berth", "fifo", containerID)
 	_ = os.MkdirAll(fifoDir, 0755)
 
-	var taskOpts []cio.Opt
-	taskOpts = append(taskOpts, cio.WithFIFODir(fifoDir))
-
-	task, err := container.NewTask(ctx, cio.NewCreator(taskOpts...))
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	// Use cio.WithOutput to redirect stdout/stderr directly to log file
+	task, err := container.NewTask(ctx, cio.NewCreator(
+		cio.WithFIFODir(fifoDir),
+		cio.WithOutput(logFile, logFile),
+	))
+	if err != nil {
+		_ = logFile.Close()
 		return fmt.Errorf("failed to create task: %w", err)
 	}
 
-	// Setup port forwarding (simple: map host port to container port)
-	// In Phase 1, we forward all traffic on a host port to the container
-	// Phase 2 will add per-sandbox IP allocation
+	// Setup port forwarding
 	if err := r.netMgr.ForwardPort(containerID, 0, 0); err != nil {
 		slog.Warn("port forwarding setup failed", "error", err)
 	}
@@ -177,8 +197,8 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 		return fmt.Errorf("failed to start task: %w", err)
 	}
 
-	// Start log streaming goroutine
-	go r.streamLogs(ctx, task, logPath)
+	// Start log streaming goroutine (reads from FIFO as backup)
+	go r.streamLogs(ctx, task, logPath, fifoDir)
 
 	slog.Info("sandbox started", "container_id", containerID, "pid", task.Pid())
 	return nil
@@ -334,21 +354,66 @@ func (r *Runtime) deleteContainer(ctx context.Context, container client.Containe
 	return nil
 }
 
-func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath string) {
-	// In Phase 1, we use containerd's built-in log FIFO
-	// Phase 2 will switch to NATS streaming
+func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath string, fifoDir string) {
+	// Phase 1: Primary logging is handled by cio.WithOutput in StartSandbox.
+	// This goroutine serves as a backup reader from the FIFO directory
+	// in case the direct output redirection misses anything.
+	// Phase 2 will replace this with NATS streaming.
+
+	stdoutFifo := filepath.Join(fifoDir, "stdout")
+	stderrFifo := filepath.Join(fifoDir, "stderr")
+
+	// Wait a moment for FIFOs to be created
+	time.Sleep(100 * time.Millisecond)
+
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		slog.Error("failed to open log file", "error", err)
+		slog.Error("failed to open log file for streaming", "error", err)
 		return
 	}
 	defer logFile.Close()
 
-	// Attach to task IO
-	// Note: In containerd v2, direct IO attachment from outside the NewTask
-	// requires loading the existing IO. For Phase 1, we rely on the FIFO
-	// created during NewTask and read from it.
-	// This is a simplified approach; production would use a proper log driver.
+	// Read stdout FIFO
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			f, err := os.Open(stdoutFifo)
+			if err != nil {
+				if os.IsNotExist(err) {
+					time.Sleep(500 * time.Millisecond)
+					continue
+				}
+				slog.Error("failed to open stdout fifo", "error", err)
+				return
+			}
+			_, _ = io.Copy(logFile, f)
+			f.Close()
+		}
+	}()
+
+	// Read stderr FIFO
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		f, err := os.Open(stderrFifo)
+		if err != nil {
+			if os.IsNotExist(err) {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			slog.Error("failed to open stderr fifo", "error", err)
+			return
+		}
+		_, _ = io.Copy(logFile, f)
+		f.Close()
+	}
 }
 
 // --- OCI spec options ---
@@ -403,23 +468,21 @@ func withDroppedCapabilities() oci.SpecOpts {
 		if s.Process.Capabilities == nil {
 			s.Process.Capabilities = &specs.LinuxCapabilities{}
 		}
-		// Drop all, add only minimal set
-		s.Process.Capabilities.Bounding = []string{"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_SETGID", "CAP_SETUID", "CAP_KILL"}
-		s.Process.Capabilities.Effective = s.Process.Capabilities.Bounding
-		s.Process.Capabilities.Permitted = s.Process.Capabilities.Bounding
+		caps := []string{"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_SETGID", "CAP_SETUID", "CAP_KILL"}
+		s.Process.Capabilities.Bounding = caps
+		s.Process.Capabilities.Effective = caps
+		s.Process.Capabilities.Permitted = caps
 		s.Process.Capabilities.Ambient = []string{}
 		return nil
 	}
 }
 
 func withSeccomp() oci.SpecOpts {
-	// Use default seccomp profile provided by containerd
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		if s.Linux == nil {
 			s.Linux = &specs.Linux{}
 		}
 		// containerd applies default seccomp when Seccomp is nil
-		// We explicitly set it to default for clarity
 		s.Linux.Seccomp = nil
 		return nil
 	}
