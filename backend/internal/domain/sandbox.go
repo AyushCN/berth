@@ -75,6 +75,7 @@ type SandboxRepository interface {
 	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]*Sandbox, error)
 	ListByProject(ctx context.Context, projectID uuid.UUID) ([]*Sandbox, error)
 	UpdateState(ctx context.Context, id uuid.UUID, state SandboxState) error
+	UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 }

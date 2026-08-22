@@ -44,3 +44,4 @@ view change.md
 *.py
 berth_sandbox
 backend/backend
+backend/api

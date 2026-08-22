@@ -50,6 +50,7 @@ func (uc *SandboxUsecase) CreateEnvironment(ctx context.Context, uid uuid.UUID, 
 			_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
 			return
 		}
+		_ = uc.repo.UpdateContainerID(bgCtx, id, containerID)
 		
 		if err := uc.runtime.StartSandbox(bgCtx, containerID); err != nil {
 			slog.Error("failed to start container", "error", err)
@@ -68,16 +69,36 @@ func (uc *SandboxUsecase) GetEnvironment(ctx context.Context, id uuid.UUID) (any
 }
 
 func (uc *SandboxUsecase) DeleteEnvironment(ctx context.Context, id uuid.UUID) error {
-	if err := uc.runtime.DeleteSandbox(ctx, id.String()); err != nil {
-		slog.Error("failed to delete container", "error", err)
+	sandbox, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if sandbox.ContainerID != nil {
+		if err := uc.runtime.DeleteSandbox(ctx, *sandbox.ContainerID); err != nil {
+			slog.Error("failed to delete container", "error", err)
+		}
 	}
 	return uc.repo.Delete(ctx, id)
 }
 
 func (uc *SandboxUsecase) ExecCommand(ctx context.Context, id uuid.UUID, cmd []string) (string, error) {
-	return uc.runtime.Exec(ctx, id.String(), cmd)
+	sandbox, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if sandbox.ContainerID == nil {
+		return "", fmt.Errorf("sandbox is not running (no container id)")
+	}
+	return uc.runtime.Exec(ctx, *sandbox.ContainerID, cmd)
 }
 
 func (uc *SandboxUsecase) GetLogs(ctx context.Context, id uuid.UUID, lines int) (string, error) {
-	return uc.runtime.GetLogs(ctx, id.String(), lines)
+	sandbox, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if sandbox.ContainerID == nil {
+		return "", fmt.Errorf("sandbox is not running (no container id)")
+	}
+	return uc.runtime.GetLogs(ctx, *sandbox.ContainerID, lines)
 }

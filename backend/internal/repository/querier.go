@@ -22,6 +22,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	ListSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sandbox, error)
 	ListSandboxesByProject(ctx context.Context, projectID pgtype.UUID) ([]Sandbox, error)
+	UpdateContainerID(ctx context.Context, arg UpdateContainerIDParams) error
 	UpdateSandboxContainer(ctx context.Context, arg UpdateSandboxContainerParams) error
 	UpdateSandboxState(ctx context.Context, arg UpdateSandboxStateParams) error
 	UpdateUserToken(ctx context.Context, arg UpdateUserTokenParams) error

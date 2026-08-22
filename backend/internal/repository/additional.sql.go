@@ -64,6 +64,20 @@ func (q *Queries) ListSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) (
 	return items, nil
 }
 
+const updateContainerID = `-- name: UpdateContainerID :exec
+UPDATE sandboxes SET container_id = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateContainerIDParams struct {
+	ID          uuid.UUID   `json:"id"`
+	ContainerID pgtype.Text `json:"container_id"`
+}
+
+func (q *Queries) UpdateContainerID(ctx context.Context, arg UpdateContainerIDParams) error {
+	_, err := q.db.Exec(ctx, updateContainerID, arg.ID, arg.ContainerID)
+	return err
+}
+
 const updateUserToken = `-- name: UpdateUserToken :exec
 UPDATE users SET github_token_encrypted = $2, updated_at = NOW() WHERE id = $1
 `

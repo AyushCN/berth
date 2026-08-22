@@ -29,6 +29,10 @@ func NewWSHandler(nc *infranats.Client) *WSHandler {
 
 // HandleSandboxWS upgrades to WebSocket and bridges to NATS.
 func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
+	if h.natsClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "real-time sync unavailable"})
+		return
+	}
 	sandboxID := c.Param("id")
 	if sandboxID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "sandbox id required"})

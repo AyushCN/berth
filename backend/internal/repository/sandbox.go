@@ -67,6 +67,13 @@ func (r *SandboxRepository) UpdateState(ctx context.Context, id uuid.UUID, state
 	})
 }
 
+func (r *SandboxRepository) UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error {
+	return r.queries.UpdateContainerID(ctx, UpdateContainerIDParams{
+		ID:          id,
+		ContainerID: pgtype.Text{String: containerID, Valid: true},
+	})
+}
+
 func (r *SandboxRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.queries.DeleteSandbox(ctx, id)
 }
