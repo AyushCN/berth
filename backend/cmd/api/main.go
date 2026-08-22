@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	stdhttp "net/http"
 	"os"
 	"os/signal"
@@ -109,7 +108,7 @@ func main() {
 
 	// Graceful shutdown
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && err != stdhttp.ErrServerClosed {
 			slog.Error("server failed to start", "error", err)
 			os.Exit(1)
 		}
