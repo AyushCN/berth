@@ -18,5 +18,5 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 ## ❌ Missing (Vaporware)
 - **Prediction Service:** No ML models (XGBoost/ONNX), no feature extraction, no Python service.
 - **Real-Time Sync (CRDT):** No Yjs operational transforms, no WebSocket event bus, no Monaco integration.
-- **Frontend UI:** The Next.js 15 application has not been scaffolded.
+- **Frontend UI:** 🟡 Scaffolded. Next.js project exists, not wired to production API yet.
 - **End-to-End Loop:** You cannot currently click a button to clone a repository and instantly run it in a sandbox.
