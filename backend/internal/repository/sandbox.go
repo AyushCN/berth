@@ -83,15 +83,21 @@ func (r *SandboxRepository) CountByOwner(ctx context.Context, ownerID uuid.UUID)
 }
 
 func toDomainSandbox(s Sandbox) *domain.Sandbox {
-	return &domain.Sandbox{
+	sb := &domain.Sandbox{
 		ID:        s.ID,
 		OwnerID:   s.OwnerID,
 		Name:      s.Name,
 		GitURL:    s.GitUrl,
 		GitBranch: s.GitBranch,
 		State:     domain.SandboxState(s.State),
-		ContainerID: nil,
 		CreatedAt: s.CreatedAt.Time,
 		UpdatedAt: s.UpdatedAt.Time,
 	}
+	if s.ContainerID.Valid {
+		sb.ContainerID = &s.ContainerID.String
+	}
+	if s.PublicUrl.Valid {
+		sb.PublicURL = &s.PublicUrl.String
+	}
+	return sb
 }

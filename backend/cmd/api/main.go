@@ -60,7 +60,9 @@ func main() {
 		slog.Warn("nats not available, continuing without real-time sync", "error", err)
 		natsClient = nil
 	}
-	defer natsClient.Close()
+	if natsClient != nil {
+		defer natsClient.Close()
+	}
 
 	// OPA
 	// opaEngine, err := opa.NewEngine()

@@ -77,8 +77,12 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 	}
 }
 
-// HandleFileSyncWS handles collaborative file editing via Yjs.
+// HandleFileSyncWS upgrades to WebSocket and bridges to NATS for file sync.
 func (h *WSHandler) HandleFileSyncWS(c *gin.Context) {
+	if h.natsClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "real-time sync unavailable"})
+		return
+	}
 	sandboxID := c.Param("id")
 	filePath := c.Query("path")
 	if filePath == "" {
