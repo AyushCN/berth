@@ -14,12 +14,21 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 - Hardened OCI Spec (namespaces, capabilities, seccomp)
 - Bridge networking scaffold
 
+### Honest Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 0: Scaffold | ✅ Done | CI, schema, scripts |
+| Phase 1: Isolation | 🟡 Partial | Runtime works, warm pool is stub |
+| Phase 2: Auth + API | 🟡 In Progress | Usecases implemented, handler wiring pending |
+| Phase 3: Frontend | ❌ Not started | No project |
+| Phase 4: Prediction | ❌ Not started | No model |
+| Phase 5: Evaluation | ❌ Not started | No benchmarks |
+
 ### What Does NOT Exist Yet (Vaporware)
-- ❌ Auth flow (GitHub OAuth)
 - ❌ Real-time collaborative editing (CRDT sync)
 - ❌ Prediction Service (XGBoost)
 - ❌ Frontend UI (Next.js)
-- ❌ End-to-end Git clone to container execution loop
 
 ## Quick Start
 

@@ -4,18 +4,23 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	stdhttp "net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/AyushCN/berth/internal/config"
-	"github.com/AyushCN/berth/internal/infrastructure/db"
-	"github.com/AyushCN/berth/internal/infrastructure/redis"
+	berthhttp "github.com/AyushCN/berth/internal/delivery/http"
 	"github.com/AyushCN/berth/internal/delivery/http/handler"
-	"github.com/AyushCN/berth/internal/delivery/http/middleware"
-	infracontainerd "github.com/AyushCN/berth/internal/infrastructure/containerd"
+	"github.com/AyushCN/berth/internal/infrastructure/containerd"
+	"github.com/AyushCN/berth/internal/infrastructure/db"
+	"github.com/AyushCN/berth/internal/infrastructure/github"
+	"github.com/AyushCN/berth/internal/infrastructure/nats"
+	"github.com/AyushCN/berth/internal/infrastructure/redis"
+	"github.com/AyushCN/berth/internal/repository"
+	"github.com/AyushCN/berth/internal/usecase"
 )
 
 func main() {
@@ -41,49 +46,61 @@ func main() {
 	}
 	defer redis.Close()
 
-	// Initialize Containerd Runtime
-	containerdSock := os.Getenv("CONTAINERD_SOCK")
-	if containerdSock == "" {
-		slog.Warn("CONTAINERD_SOCK not set, using default rootless path")
-		containerdSock = os.Getenv("XDG_RUNTIME_DIR") + "/containerd/containerd.sock"
-	}
-	runtime, err := infracontainerd.NewRuntime(containerdSock)
+	// containerd runtime
+	runtime, err := containerd.NewRuntime(os.Getenv("CONTAINERD_SOCK"))
 	if err != nil {
 		slog.Error("failed to init container runtime", "error", err)
 		os.Exit(1)
 	}
 	defer runtime.Close()
 
-	// Setup router
-	if cfg.Env == "production" {
-		gin.SetMode(gin.ReleaseMode)
+	// NATS
+	natsClient, err := nats.NewClient("nats://localhost:4222")
+	if err != nil {
+		slog.Warn("nats not available, continuing without real-time sync", "error", err)
+		natsClient = nil
+	}
+	defer natsClient.Close()
+
+	// OPA
+	// opaEngine, err := opa.NewEngine()
+	// if err != nil {
+	// 	slog.Error("failed to init opa", "error", err)
+	// 	os.Exit(1)
+	// }
+	// _ = opaEngine
+
+	// Repositories
+	queries := repository.New(db.Pool())
+	userRepo := repository.NewUserRepository(queries)
+	sandboxRepo := repository.NewSandboxRepository(queries)
+
+	// OAuth client
+	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, "http://localhost:3000/api/auth/github/callback")
+
+	// Usecases
+	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret)
+	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, runtime, nil) // predictor nil for now
+	workspaceDir := os.Getenv("WORKSPACE_ROOT")
+	if workspaceDir == "" {
+		home, _ := os.UserHomeDir()
+		workspaceDir = filepath.Join(home, ".local", "state", "berth", "workspaces")
+	}
+	_ = os.MkdirAll(workspaceDir, 0755)
+	fileUC := usecase.NewFileUsecase(workspaceDir)
+
+	// Handlers
+	deps := &berthhttp.Dependencies{
+		AuthHandler:    handler.NewAuthHandler(authUC),
+		SandboxHandler: handler.NewSandboxHandler(sandboxUC),
+		FileHandler:    handler.NewFileHandler(fileUC),
+		WSHandler:      handler.NewWSHandler(natsClient),
 	}
 
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(middleware.Logger())
-	r.Use(middleware.CORS())
+	// Router
+	r := berthhttp.NewRouter(cfg, deps)
 
-	// Health check (no auth)
-	r.GET("/health", handler.HealthCheck)
-
-	// API routes
-	api := r.Group("/api")
-	api.Use(middleware.RateLimit())
-	{
-		api.POST("/auth/github", handler.GithubLogin)
-		api.GET("/auth/github/callback", handler.GithubCallback)
-
-		authenticated := api.Group("")
-		authenticated.Use(middleware.Auth(cfg.JWTSecret))
-		{
-			authenticated.GET("/user/me", handler.GetMe)
-			authenticated.GET("/environments", handler.ListEnvironments)
-			authenticated.POST("/environments", handler.CreateEnvironment)
-		}
-	}
-
-	srv := &http.Server{
+	srv := &stdhttp.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: r,
 	}

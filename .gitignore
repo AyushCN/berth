@@ -41,4 +41,6 @@ infra/data/
 agent.md
 docs/view-change.md
 view change.md
-
+*.py
+berth_sandbox
+backend/backend

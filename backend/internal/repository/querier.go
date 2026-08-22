@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	CountSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CreateSandbox(ctx context.Context, arg CreateSandboxParams) (Sandbox, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteSandbox(ctx context.Context, id uuid.UUID) error
@@ -19,9 +20,11 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByGithubID(ctx context.Context, githubID pgtype.Text) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	ListSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sandbox, error)
 	ListSandboxesByProject(ctx context.Context, projectID pgtype.UUID) ([]Sandbox, error)
 	UpdateSandboxContainer(ctx context.Context, arg UpdateSandboxContainerParams) error
 	UpdateSandboxState(ctx context.Context, arg UpdateSandboxStateParams) error
+	UpdateUserToken(ctx context.Context, arg UpdateUserTokenParams) error
 }
 
 var _ Querier = (*Queries)(nil)

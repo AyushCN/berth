@@ -72,9 +72,11 @@ type WarmPoolEntry struct {
 type SandboxRepository interface {
 	Create(ctx context.Context, s *Sandbox) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Sandbox, error)
+	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]*Sandbox, error)
 	ListByProject(ctx context.Context, projectID uuid.UUID) ([]*Sandbox, error)
 	UpdateState(ctx context.Context, id uuid.UUID, state SandboxState) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 }
 
 // PredictionService defines the interface for the ML prediction microservice.
