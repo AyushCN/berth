@@ -36,3 +36,9 @@ infra/data/
 # Build Artifacts
 *.tar.gz
 *.zip
+
+# Scratchpads
+agent.md
+docs/view-change.md
+view change.md
+

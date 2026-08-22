@@ -15,6 +15,7 @@ import (
 	"github.com/swordrookie/berth/internal/infrastructure/redis"
 	"github.com/swordrookie/berth/internal/delivery/http/handler"
 	"github.com/swordrookie/berth/internal/delivery/http/middleware"
+	infracontainerd "github.com/swordrookie/berth/internal/infrastructure/containerd"
 )
 
 func main() {
@@ -39,6 +40,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer redis.Close()
+
+	// Initialize Containerd Runtime
+	containerdSock := os.Getenv("CONTAINERD_SOCK")
+	if containerdSock == "" {
+		slog.Warn("CONTAINERD_SOCK not set, using default rootless path")
+		containerdSock = os.Getenv("XDG_RUNTIME_DIR") + "/containerd/containerd.sock"
+	}
+	runtime, err := infracontainerd.NewRuntime(containerdSock)
+	if err != nil {
+		slog.Error("failed to init container runtime", "error", err)
+		os.Exit(1)
+	}
+	defer runtime.Close()
 
 	// Setup router
 	if cfg.Env == "production" {

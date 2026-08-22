@@ -17,8 +17,9 @@ Berth is a single-host ephemeral sandbox platform for research on predictive pre
 │  (Semi-Trusted)   │  ONNX Runtime, no network egress         │
 ├─────────────────────────────────────────────────────────────┤
 │  DATA PLANE       │  containerd + gVisor (runsc)          │
-│  (Untrusted User  │  Per-sandbox overlayfs + 9P mount       │
-│   Code Executes)  │  Cilium eBPF network policies           │
+│  (Untrusted User  │  Rootless containerd for local dev    │
+│   Code Executes)  │  Per-sandbox overlayfs + 9P mount       │
+│                   │  Cilium eBPF network policies           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
