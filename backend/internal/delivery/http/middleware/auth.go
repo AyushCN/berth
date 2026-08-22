@@ -35,7 +35,12 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			c.Set("userId", claims["userId"])
+			userID, ok := claims["userId"].(string)
+			if !ok || userID == "" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid userId claim"})
+				return
+			}
+			c.Set("userId", userID)
 		} else {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
 			return

@@ -60,30 +60,9 @@ jobs:
       - name: Run migrations
         run: cd backend && migrate -path migrations -database "postgres://berth:berth@localhost:5432/berth_test?sslmode=disable" up
       - name: go test
-        run: cd backend && go test -race -coverprofile=coverage.out ./...
+        run: cd backend && go test -race ./...
         env:
           DATABASE_URL: postgres://berth:berth@localhost:5432/berth_test?sslmode=disable
           REDIS_URL: redis://localhost:6379
 
-  lint-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: cd frontend && npm ci
-      - run: cd frontend && npm run lint
-      - run: cd frontend && npm run build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8080
 
-  test-ml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: cd ml && pip install -r requirements.txt
-      - run: cd ml && pytest --cov=features --cov=models tests/

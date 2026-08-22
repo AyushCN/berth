@@ -15,7 +15,7 @@ func RateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		client := infradis.Client()
 		if client == nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "rate limiter unavailable"})
 			return
 		}
 
@@ -25,7 +25,7 @@ func RateLimit() gin.HandlerFunc {
 		count, err := client.Incr(ctx, key).Result()
 		if err != nil {
 			slog.Error("redis rate limit error", "error", err)
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "rate limiter unavailable"})
 			return
 		}
 
