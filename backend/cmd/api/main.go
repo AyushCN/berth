@@ -46,12 +46,19 @@ func main() {
 	defer redis.Close()
 
 	// containerd runtime
-	runtime, err := containerd.NewRuntime(os.Getenv("CONTAINERD_SOCK"))
-	if err != nil {
-		slog.Error("failed to init container runtime", "error", err)
-		os.Exit(1)
+	var runtime *containerd.Runtime
+	if os.Getenv("MOCK_CONTAINERD") == "1" {
+		slog.Warn("MOCK_CONTAINERD=1: skipping real containerd init for frontend test")
+		runtime = nil
+	} else {
+		var err error
+		runtime, err = containerd.NewRuntime(os.Getenv("CONTAINERD_SOCK"))
+		if err != nil {
+			slog.Error("failed to init container runtime", "error", err)
+			os.Exit(1)
+		}
+		defer runtime.Close()
 	}
-	defer runtime.Close()
 
 	// NATS
 	natsClient, err := nats.NewClient("nats://localhost:4222")

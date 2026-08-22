@@ -44,18 +44,26 @@ func (uc *SandboxUsecase) CreateEnvironment(ctx context.Context, uid uuid.UUID, 
 
 	go func(id uuid.UUID, spec domain.SandboxSpec) {
 		bgCtx := context.Background()
-		containerID, err := uc.runtime.CreateSandbox(bgCtx, spec)
-		if err != nil {
-			slog.Error("failed to create container", "error", err)
-			_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
-			return
+		var containerID string
+		if uc.runtime != nil {
+			cid, err := uc.runtime.CreateSandbox(bgCtx, spec)
+			if err != nil {
+				slog.Error("failed to create container", "error", err)
+				_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
+				return
+			}
+			containerID = cid
+		} else {
+			containerID = id.String()
 		}
 		_ = uc.repo.UpdateContainerID(bgCtx, id, containerID)
 		
-		if err := uc.runtime.StartSandbox(bgCtx, containerID); err != nil {
-			slog.Error("failed to start container", "error", err)
-			_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
-			return
+		if uc.runtime != nil {
+			if err := uc.runtime.StartSandbox(bgCtx, containerID); err != nil {
+				slog.Error("failed to start container", "error", err)
+				_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
+				return
+			}
 		}
 
 		_ = uc.repo.UpdateState(bgCtx, id, domain.StateRunning)
