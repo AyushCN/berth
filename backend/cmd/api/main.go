@@ -39,6 +39,19 @@ func main() {
 	}
 	defer db.Close()
 
+	if os.Getenv("MOCK_CONTAINERD") == "1" {
+		_, err := db.Pool().Exec(context.Background(), `
+			INSERT INTO users (id, email, username, github_id, github_username, avatar_url)
+			VALUES ('00000000-0000-0000-0000-000000000001', 'dev@berth.local', 'dev_user', '0', 'dev_user', '')
+			ON CONFLICT (id) DO NOTHING
+		`)
+		if err != nil {
+			slog.Error("failed to create mock dev user", "error", err)
+		} else {
+			slog.Info("mock dev user initialized")
+		}
+	}
+
 	if err := redis.Init(cfg.RedisURL); err != nil {
 		slog.Error("failed to init redis", "error", err)
 		os.Exit(1)

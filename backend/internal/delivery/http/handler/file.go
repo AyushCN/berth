@@ -74,9 +74,16 @@ func (h *FileHandler) UpdateFileContent(c *gin.Context) {
 		return
 	}
 
+	const maxFileSize = 10 * 1024 * 1024 // 10MB
+	if c.Request.ContentLength > maxFileSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 10MB limit"})
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxFileSize)
+
 	content, err := c.GetRawData()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read file content (possibly exceeds 10MB limit): " + err.Error()})
 		return
 	}
 

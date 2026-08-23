@@ -149,6 +149,14 @@ func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (s
 		return "", fmt.Errorf("failed to create network: %w", err)
 	}
 
+	// 4b. Allocate IP for the container
+	_, err = r.netMgr.AllocateIP(networkID, containerID)
+	if err != nil {
+		_ = container.Delete(ctx, client.WithSnapshotCleanup)
+		_ = r.netMgr.DestroyNetwork(ctx, networkID)
+		return "", fmt.Errorf("failed to allocate IP: %w", err)
+	}
+
 	// 5. Store metadata in warm pool for later return
 	r.warmPool.Register(containerID, spec.BaseImage)
 
@@ -468,10 +476,11 @@ func withDroppedCapabilities() oci.SpecOpts {
 		if s.Process.Capabilities == nil {
 			s.Process.Capabilities = &specs.LinuxCapabilities{}
 		}
-		caps := []string{"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_SETGID", "CAP_SETUID", "CAP_KILL"}
-		s.Process.Capabilities.Bounding = caps
-		s.Process.Capabilities.Effective = caps
-		s.Process.Capabilities.Permitted = caps
+		// gVisor intercepts syscalls in userspace; drop all capabilities.
+		s.Process.Capabilities.Bounding = []string{}
+		s.Process.Capabilities.Effective = []string{}
+		s.Process.Capabilities.Permitted = []string{}
+		s.Process.Capabilities.Inheritable = []string{}
 		s.Process.Capabilities.Ambient = []string{}
 		return nil
 	}

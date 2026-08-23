@@ -10,21 +10,41 @@ import (
 	"log/slog"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // TODO: restrict in production
-	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
 // WSHandler handles WebSocket connections for real-time sync.
 type WSHandler struct {
-	natsClient *infranats.Client
+	natsClient     *infranats.Client
+	allowedOrigins []string
 }
 
-func NewWSHandler(nc *infranats.Client) *WSHandler {
-	return &WSHandler{natsClient: nc}
+// NewWSHandler creates a WebSocket handler with strict origin validation.
+// allowedOrigins defaults to local dev addresses if none are provided.
+// In production, pass cfg.FrontendURL: handler.NewWSHandler(natsClient, cfg.FrontendURL)
+func NewWSHandler(nc *infranats.Client, allowedOrigins ...string) *WSHandler {
+	origins := allowedOrigins
+	if len(origins) == 0 {
+		origins = []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+		}
+	}
+	return &WSHandler{natsClient: nc, allowedOrigins: origins}
+}
+
+func (h *WSHandler) upgrader() *websocket.Upgrader {
+	return &websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			for _, allowed := range h.allowedOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			slog.Warn("websocket origin rejected", "origin", origin)
+			return false
+		},
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 }
 
 // HandleSandboxWS upgrades to WebSocket and bridges to NATS.
@@ -39,14 +59,13 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.upgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		slog.Error("websocket upgrade failed", "error", err)
 		return
 	}
 	defer conn.Close()
 
-	// Subscribe to NATS subject for this sandbox
 	subject := "sandbox." + sandboxID + ".events"
 	sub, err := h.natsClient.Subscribe(subject, "ws-"+sandboxID, func(msg *nats.Msg) {
 		if err := conn.WriteMessage(websocket.TextMessage, msg.Data); err != nil {
@@ -60,7 +79,6 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 	}
 	defer sub.Unsubscribe()
 
-	// Read from WebSocket and publish to NATS
 	for {
 		msgType, data, err := conn.ReadMessage()
 		if err != nil {
@@ -90,14 +108,13 @@ func (h *WSHandler) HandleFileSyncWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.upgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		slog.Error("websocket upgrade failed", "error", err)
 		return
 	}
 	defer conn.Close()
 
-	// Phase 2: simple echo. Phase 3: Yjs awareness + CRDT sync.
 	subject := "file." + sandboxID + "." + filePath
 	sub, err := h.natsClient.Subscribe(subject, "file-"+sandboxID, func(msg *nats.Msg) {
 		_ = conn.WriteMessage(websocket.BinaryMessage, msg.Data)
