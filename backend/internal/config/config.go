@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // Config holds all application configuration.
@@ -15,8 +16,10 @@ type Config struct {
 	JWTSecret          string
 	GithubClientID     string
 	GithubClientSecret string
+	FrontendURL        string
 	PredictionAddr     string // gRPC address for Python prediction service
 	ContainerdSocket   string
+	WorkspaceDir       string
 }
 
 // Load reads configuration from environment variables.
@@ -46,7 +49,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required in api mode")
 	}
 
-	return &Config{
+	cfg := &Config{
 		Mode:               mode,
 		Env:                getEnv("ENV", "development"),
 		Port:               port,
@@ -55,9 +58,19 @@ func Load() (*Config, error) {
 		JWTSecret:          jwtSecret,
 		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
 		PredictionAddr:     getEnv("PREDICTION_ADDR", "localhost:50052"),
 		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
-	}, nil
+	}
+
+	workspaceDir := os.Getenv("WORKSPACE_ROOT")
+	if workspaceDir == "" {
+		home, _ := os.UserHomeDir()
+		workspaceDir = filepath.Join(home, ".local", "state", "berth", "workspaces")
+	}
+	cfg.WorkspaceDir = workspaceDir
+
+	return cfg, nil
 }
 
 func getEnv(key, fallback string) string {
