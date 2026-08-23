@@ -3,10 +3,12 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/AyushCN/berth/internal/domain"
 	"log/slog"
-	"time"
+	"os"
+	"path/filepath"
+
+	"github.com/AyushCN/berth/internal/domain"
+	"github.com/google/uuid"
 )
 
 type CreateEnvironmentRequest struct {
@@ -36,49 +38,14 @@ func (uc *SandboxUsecase) CreateEnvironment(ctx context.Context, uid uuid.UUID, 
 		Name:      req.Name,
 		GitURL:    req.GitURL,
 		GitBranch: req.GitBranch,
-		State:     domain.StateBuilding,
+		State:     domain.StatePending, // Worker will pick this up
 	}
 
 	if err := uc.repo.Create(ctx, env); err != nil {
 		return nil, fmt.Errorf("failed to create sandbox in db: %w", err)
 	}
 
-	go func(id uuid.UUID, spec domain.SandboxSpec) {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("sandbox creation panicked", "recover", r)
-				_ = uc.repo.UpdateState(context.Background(), id, domain.StateFailed)
-			}
-		}()
-		
-		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		var containerID string
-		if uc.runtime != nil {
-			cid, err := uc.runtime.CreateSandbox(bgCtx, spec)
-			if err != nil {
-				slog.Error("failed to create container", "error", err)
-				_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
-				return
-			}
-			containerID = cid
-		} else {
-			containerID = id.String()
-		}
-		_ = uc.repo.UpdateContainerID(bgCtx, id, containerID)
-		
-		if uc.runtime != nil {
-			if err := uc.runtime.StartSandbox(bgCtx, containerID); err != nil {
-				slog.Error("failed to start container", "error", err)
-				_ = uc.repo.UpdateState(bgCtx, id, domain.StateFailed)
-				return
-			}
-		}
-
-		_ = uc.repo.UpdateState(bgCtx, id, domain.StateRunning)
-	}(env.ID, domain.SandboxSpec{ID: env.ID, BaseImage: "node:18-alpine"})
-
+	// No goroutine! The worker daemon polls PostgreSQL for PENDING sandboxes.
 	return env, nil
 }
 
@@ -91,7 +58,7 @@ func (uc *SandboxUsecase) DeleteEnvironment(ctx context.Context, id uuid.UUID) e
 	if err != nil {
 		return err
 	}
-	if sandbox.ContainerID != nil {
+	if sandbox.ContainerID != nil && uc.runtime != nil {
 		if err := uc.runtime.DeleteSandbox(ctx, *sandbox.ContainerID); err != nil {
 			slog.Error("failed to delete container", "error", err)
 		}
@@ -100,6 +67,9 @@ func (uc *SandboxUsecase) DeleteEnvironment(ctx context.Context, id uuid.UUID) e
 }
 
 func (uc *SandboxUsecase) ExecCommand(ctx context.Context, id uuid.UUID, cmd []string) (string, error) {
+	if uc.runtime == nil {
+		return "", fmt.Errorf("exec is not supported in api-only mode")
+	}
 	sandbox, err := uc.repo.GetByID(ctx, id)
 	if err != nil {
 		return "", err
@@ -118,5 +88,19 @@ func (uc *SandboxUsecase) GetLogs(ctx context.Context, id uuid.UUID, lines int) 
 	if sandbox.ContainerID == nil {
 		return "", fmt.Errorf("sandbox is not running (no container id)")
 	}
-	return uc.runtime.GetLogs(ctx, *sandbox.ContainerID, lines)
+	if uc.runtime != nil {
+		return uc.runtime.GetLogs(ctx, *sandbox.ContainerID, lines)
+	}
+
+	// API Mode fallback (reads from shared host disk)
+	home, _ := os.UserHomeDir()
+	logPath := filepath.Join(home, ".local", "state", "berth", "logs", *sandbox.ContainerID, "task.log")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
 }

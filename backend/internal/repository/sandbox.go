@@ -83,6 +83,14 @@ func (r *SandboxRepository) CountByOwner(ctx context.Context, ownerID uuid.UUID)
 	return r.queries.CountSandboxesByOwner(ctx, ownerID)
 }
 
+func (r *SandboxRepository) PopPendingSandbox(ctx context.Context) (*domain.Sandbox, error) {
+	s, err := r.queries.PopPendingSandbox(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return toDomainSandbox(s), nil
+}
+
 func toDomainSandbox(s Sandbox) *domain.Sandbox {
 	sb := &domain.Sandbox{
 		ID:        s.ID,

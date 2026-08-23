@@ -7,18 +7,25 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Env          string
-	Port         string
-	DatabaseURL  string
-	RedisURL     string
-	JWTSecret    string
+	Mode               string // "api" or "worker"
+	Env                string
+	Port               string
+	DatabaseURL        string
+	RedisURL           string
+	JWTSecret          string
 	GithubClientID     string
 	GithubClientSecret string
 	PredictionAddr     string // gRPC address for Python prediction service
+	ContainerdSocket   string
 }
 
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
+	mode := os.Getenv("MODE")
+	if mode == "" {
+		mode = "api"
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -35,11 +42,12 @@ func Load() (*Config, error) {
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
+	if mode == "api" && jwtSecret == "" {
+		return nil, fmt.Errorf("JWT_SECRET is required in api mode")
 	}
 
 	return &Config{
+		Mode:               mode,
 		Env:                getEnv("ENV", "development"),
 		Port:               port,
 		DatabaseURL:        dbURL,
@@ -48,6 +56,7 @@ func Load() (*Config, error) {
 		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 		PredictionAddr:     getEnv("PREDICTION_ADDR", "localhost:50051"),
+		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
 	}, nil
 }
 

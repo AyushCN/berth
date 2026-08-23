@@ -24,6 +24,7 @@ type SandboxState string
 
 const (
 	StateIdle     SandboxState = "IDLE"
+	StatePending  SandboxState = "PENDING"
 	StateBuilding SandboxState = "BUILDING"
 	StateRunning  SandboxState = "RUNNING"
 	StateStopped  SandboxState = "STOPPED"
@@ -78,6 +79,7 @@ type SandboxRepository interface {
 	UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
+	PopPendingSandbox(ctx context.Context) (*Sandbox, error)
 }
 
 // PredictionService defines the interface for the ML prediction microservice.

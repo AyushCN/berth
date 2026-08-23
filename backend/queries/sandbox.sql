@@ -35,3 +35,16 @@ SELECT * FROM users WHERE email = $1;
 
 -- name: GetUserByGithubID :one
 SELECT * FROM users WHERE github_id = $1;
+
+-- name: PopPendingSandbox :one
+UPDATE sandboxes 
+SET state = 'BUILDING', updated_at = NOW() 
+WHERE id = (
+    SELECT id 
+    FROM sandboxes 
+    WHERE state = 'PENDING' 
+    ORDER BY created_at ASC 
+    FOR UPDATE SKIP LOCKED 
+    LIMIT 1
+) 
+RETURNING *;

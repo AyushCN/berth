@@ -13,14 +13,12 @@ import (
 	"github.com/AyushCN/berth/internal/config"
 	berthhttp "github.com/AyushCN/berth/internal/delivery/http"
 	"github.com/AyushCN/berth/internal/delivery/http/handler"
-	"github.com/AyushCN/berth/internal/infrastructure/containerd"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
 	"github.com/AyushCN/berth/internal/infrastructure/github"
 	"github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
 	"github.com/AyushCN/berth/internal/usecase"
-	"github.com/AyushCN/berth/internal/domain"
 )
 
 func main() {
@@ -59,23 +57,7 @@ func main() {
 	}
 	defer redis.Close()
 
-	// containerd runtime
-	var runtime domain.ContainerRuntime
-	if os.Getenv("MOCK_CONTAINERD") == "1" {
-		slog.Warn("MOCK_CONTAINERD=1: skipping real containerd init for frontend test")
-		runtime = nil
-	} else {
-		var err error
-		r, err := containerd.NewRuntime(os.Getenv("CONTAINERD_SOCK"))
-		if err != nil {
-			slog.Error("failed to init container runtime", "error", err)
-			os.Exit(1)
-		}
-		defer r.Close()
-		runtime = r
-	}
-
-	// NATS
+	// Repositories
 	natsClient, err := nats.NewClient("nats://localhost:4222")
 	if err != nil {
 		slog.Warn("nats not available, continuing without real-time sync", "error", err)
@@ -103,7 +85,7 @@ func main() {
 
 	// Usecases
 	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret)
-	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, runtime, nil) // predictor nil for now
+	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, nil, nil) // runtime and predictor nil in API mode
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")
 	if workspaceDir == "" {
 		home, _ := os.UserHomeDir()
