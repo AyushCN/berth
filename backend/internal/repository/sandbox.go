@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var _ domain.SandboxRepository = (*SandboxRepository)(nil)
+
 type SandboxRepository struct {
 	queries *Queries
 }

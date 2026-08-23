@@ -7,6 +7,8 @@ import (
 	"github.com/AyushCN/berth/internal/domain"
 )
 
+var _ domain.UserRepository = (*UserRepository)(nil)
+
 // UserRepository wraps sqlc-generated queries.
 type UserRepository struct {
 	queries *Queries
