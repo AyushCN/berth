@@ -19,12 +19,16 @@ func NewSandboxRepository(q *Queries) *SandboxRepository {
 
 func (r *SandboxRepository) Create(ctx context.Context, s *domain.Sandbox) error {
 	_, err := r.queries.CreateSandbox(ctx, CreateSandboxParams{
-		ProjectID: pgtype.UUID{},
-		OwnerID:   s.OwnerID,
-		Name:      s.Name,
-		GitUrl:    s.GitURL,
-		GitBranch: s.GitBranch,
-		State:     string(s.State),
+		ProjectID:          pgtype.UUID{},
+		OwnerID:            s.OwnerID,
+		Name:               s.Name,
+		GitUrl:             s.GitURL,
+		GitBranch:          s.GitBranch,
+		State:              string(s.State),
+		RuntimeLanguage:    pgtype.Text{},
+		RuntimeBaseImage:   pgtype.Text{},
+		RuntimePort:        pgtype.Int4{},
+		NeedsDb:            pgtype.Bool{},
 	})
 	return err
 }
@@ -69,9 +73,10 @@ func (r *SandboxRepository) UpdateState(ctx context.Context, id uuid.UUID, state
 }
 
 func (r *SandboxRepository) UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error {
-	return r.queries.UpdateContainerID(ctx, UpdateContainerIDParams{
+	return r.queries.UpdateSandboxContainer(ctx, UpdateSandboxContainerParams{
 		ID:          id,
 		ContainerID: pgtype.Text{String: containerID, Valid: true},
+		PublicUrl:   pgtype.Text{Valid: false},
 	})
 }
 

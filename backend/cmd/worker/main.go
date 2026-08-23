@@ -19,12 +19,18 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	// Set mode explicitly so Load() handles validation
-	os.Setenv("MODE", "worker")
+	if os.Getenv("MODE") == "" {
+		os.Setenv("MODE", "worker")
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load worker config", "error", err)
+		os.Exit(1)
+	}
+
+	if cfg.Mode != "worker" {
+		slog.Error("worker binary requires MODE=worker", "mode", cfg.Mode)
 		os.Exit(1)
 	}
 

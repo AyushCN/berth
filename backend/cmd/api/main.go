@@ -38,7 +38,12 @@ func main() {
 	}
 	defer db.Close()
 
-	if os.Getenv("MOCK_CONTAINERD") == "1" {
+	if cfg.Mode != "api" {
+		slog.Error("api binary requires MODE=api", "mode", cfg.Mode)
+		os.Exit(1)
+	}
+
+	if cfg.Env != "production" {
 		_, err := db.Pool().Exec(context.Background(), `
 			INSERT INTO users (id, email, username, github_id, github_username, avatar_url)
 			VALUES ('00000000-0000-0000-0000-000000000001', 'dev@berth.local', 'dev_user', '0', 'dev_user', '')

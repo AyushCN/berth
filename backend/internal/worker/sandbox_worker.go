@@ -40,11 +40,10 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	// PopPendingSandbox sets state to BUILDING atomically
 	sandbox, err := w.repo.PopPendingSandbox(ctx)
 	if err != nil {
-		// sql.ErrNoRows or pgx.ErrNoRows is expected, but depending on the adapter we might need to check the string.
-		// For now we just ignore if no rows are returned. If it's a real error, we might log it, but we don't want to spam.
-		if err.Error() != "no rows in result set" {
-			slog.Debug("no pending sandboxes or error", "error", err)
+		if err.Error() == "no rows in result set" { // fallback for some adapters
+			return
 		}
+		slog.Debug("no pending sandboxes or error", "error", err)
 		return
 	}
 

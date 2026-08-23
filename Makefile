@@ -4,6 +4,7 @@ all: sqlc build
 
 build:
 	cd backend && go build -o bin/berth-api ./cmd/api
+	cd backend && go build -o bin/berth-worker ./cmd/worker
 
 test:
 	cd backend && go test -race -v ./...
