@@ -2,44 +2,64 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
+	"math/rand"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+
 	"github.com/AyushCN/berth/internal/domain"
-	"github.com/AyushCN/berth/internal/infrastructure/github"
 	"github.com/AyushCN/berth/pkg/crypto"
 )
 
 type AuthUsecase struct {
-	userRepo    domain.UserRepository
-	oauthClient *github.OAuthClient
-	jwtSecret   string
+	userRepo      domain.UserRepository
+	oauthProvider domain.OAuthProvider
+	jwtSecret     string
 }
 
-func NewAuthUsecase(repo domain.UserRepository, client *github.OAuthClient, secret string) *AuthUsecase {
-	return &AuthUsecase{userRepo: repo, oauthClient: client, jwtSecret: secret}
+func NewAuthUsecase(repo domain.UserRepository, provider domain.OAuthProvider, secret string) *AuthUsecase {
+	return &AuthUsecase{userRepo: repo, oauthProvider: provider, jwtSecret: secret}
 }
 
 func (uc *AuthUsecase) GenerateState() string {
 	return uuid.New().String()
 }
 
+func (uc *AuthUsecase) GenerateAuthorizeURL() (authorizeURL, state, verifier string, err error) {
+	b := make([]byte, 32)
+	_, err = rand.Read(b)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate pkce verifier: %w", err)
+	}
+	verifier = base64.RawURLEncoding.EncodeToString(b)
+	h := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(h[:])
+	method := "S256"
+
+	state = uc.GenerateState()
+	authorizeURL = uc.oauthProvider.AuthorizeURL(state, challenge, method)
+
+	return authorizeURL, state, verifier, nil
+}
+
 func (uc *AuthUsecase) ProcessCallback(ctx context.Context, code, verifier string) (string, any, error) {
-	token, err := uc.oauthClient.ExchangeToken(code, verifier)
+	token, err := uc.oauthProvider.ExchangeToken(code, verifier)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to exchange token: %w", err)
 	}
 
-	ghUser, err := uc.oauthClient.GetUser(token)
+	extUser, err := uc.oauthProvider.GetUser(token)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	email := ghUser.Email
+	email := extUser.Email
 	if email == "" {
-		email, err = uc.oauthClient.GetPrimaryEmail(token)
+		email, err = uc.oauthProvider.GetPrimaryEmail(token)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to get primary email: %w", err)
 		}
@@ -50,17 +70,17 @@ func (uc *AuthUsecase) ProcessCallback(ctx context.Context, code, verifier strin
 		return "", nil, fmt.Errorf("failed to encrypt token: %w", err)
 	}
 
-	user, err := uc.userRepo.GetByGithubID(ctx, fmt.Sprint(ghUser.ID))
+	user, err := uc.userRepo.GetByGithubID(ctx, extUser.ID)
 	if err != nil {
 		// Create new user
 		user = &domain.User{
 			ID:                   uuid.New(),
 			Email:                email,
-			Username:             ghUser.Login,
-			GithubID:             fmt.Sprint(ghUser.ID),
-			GithubUsername:       ghUser.Login,
+			Username:             extUser.Username,
+			GithubID:             extUser.ID,
+			GithubUsername:       extUser.Username,
 			GithubTokenEncrypted: encryptedToken,
-			AvatarURL:            ghUser.AvatarURL,
+			AvatarURL:            extUser.AvatarURL,
 		}
 		if err := uc.userRepo.Create(ctx, user); err != nil {
 			return "", nil, fmt.Errorf("failed to create user: %w", err)
@@ -84,4 +104,8 @@ func (uc *AuthUsecase) ProcessCallback(ctx context.Context, code, verifier strin
 	}
 
 	return tokenString, user, nil
+}
+
+func (uc *AuthUsecase) GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	return uc.userRepo.GetByID(ctx, id)
 }

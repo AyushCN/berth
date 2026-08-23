@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	
+	"github.com/AyushCN/berth/internal/domain"
 )
 
 const (
@@ -97,7 +99,7 @@ func (c *OAuthClient) ExchangeToken(code, codeVerifier string) (string, error) {
 }
 
 // GetUser fetches the authenticated GitHub user.
-func (c *OAuthClient) GetUser(token string) (*GitHubUser, error) {
+func (c *OAuthClient) GetUser(token string) (*domain.ExternalUser, error) {
 	req, _ := http.NewRequest("GET", githubUserURL, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -113,7 +115,15 @@ func (c *OAuthClient) GetUser(token string) (*GitHubUser, error) {
 	if err := json.Unmarshal(body, &user); err != nil {
 		return nil, fmt.Errorf("failed to parse user: %w", err)
 	}
-	return &user, nil
+	
+	extUser := &domain.ExternalUser{
+		ID:        fmt.Sprint(user.ID),
+		Username:  user.Login,
+		Email:     user.Email,
+		AvatarURL: user.AvatarURL,
+	}
+	
+	return extUser, nil
 }
 
 // GetPrimaryEmail fetches the primary email of the authenticated user.
