@@ -92,24 +92,28 @@ func TestRuntimeLifecycle(t *testing.T) {
 }
 
 func TestWarmPool(t *testing.T) {
-	wp := NewWarmPool()
-	wp.maxSize = 2
+	wp := NewWarmPool(1000, func(ctx context.Context, id string) error {
+		return nil
+	})
+	defer wp.Stop()
 
-	// Register containers
-	wp.Register("c1", "alpine:latest")
-	wp.Register("c2", "alpine:latest")
-	wp.Register("c3", "alpine:latest") // should be dropped (pool full)
+	// PreWarm containers
+	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c1", nil })
+	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c2", nil })
+	
+	// Third one should evict c1 because 400+400+400 > 1000
+	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c3", nil }) 
 
 	// Take one
 	id := wp.Take("alpine:latest")
-	if id != "c1" {
-		t.Errorf("expected c1, got %s", id)
+	if id != "c2" { // c1 was evicted, so queue should have c2, c3
+		t.Errorf("expected c2, got %s", id)
 	}
 
 	// Take another
 	id = wp.Take("alpine:latest")
-	if id != "c2" {
-		t.Errorf("expected c2, got %s", id)
+	if id != "c3" {
+		t.Errorf("expected c3, got %s", id)
 	}
 
 	// Pool empty

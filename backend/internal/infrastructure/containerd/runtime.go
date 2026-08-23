@@ -88,13 +88,20 @@ func NewRuntime(sockPath string) (*Runtime, error) {
 		return nil, fmt.Errorf("failed to init network manager: %w", err)
 	}
 
-	return &Runtime{
+	r := &Runtime{
 		client:   c,
 		sockPath: sockPath,
 		layerMgr: layerMgr,
 		netMgr:   netMgr,
-		warmPool: NewWarmPool(),
-	}, nil
+	}
+
+	r.warmPool = NewWarmPool(8*1024*1024*1024, func(ctx context.Context, id string) error {
+		return r.DeleteSandbox(ctx, id)
+	})
+
+	go r.MaintainBaseline()
+
+	return r, nil
 }
 
 // Close closes the containerd client.
@@ -115,6 +122,10 @@ func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (s
 		return warm, nil
 	}
 
+	return r.createSandboxInternal(ctx, spec)
+}
+
+func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.SandboxSpec) (string, error) {
 	// 2. Resolve or build dependency layer
 	baseImg, err := r.layerMgr.ResolveBaseImage(ctx, spec.BaseImage)
 	if err != nil {
@@ -157,11 +168,34 @@ func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (s
 		return "", fmt.Errorf("failed to allocate IP: %w", err)
 	}
 
-	// 5. Store metadata in warm pool for later return
-	r.warmPool.Register(containerID, spec.BaseImage)
-
-	slog.Info("sandbox created", "container_id", containerID, "image", spec.BaseImage)
+	slog.Info("sandbox created (cache miss)", "container_id", containerID, "image", spec.BaseImage)
 	return containerID, nil
+}
+
+// MaintainBaseline periodically ensures a baseline of warm containers.
+func (r *Runtime) MaintainBaseline() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		r.warmPool.mu.RLock()
+		nodeCount := len(r.warmPool.available["node:18-alpine"])
+		r.warmPool.mu.RUnlock()
+
+		if nodeCount < 2 {
+			ctx := context.Background()
+			_ = r.warmPool.PreWarm(ctx, "node:18-alpine", 512*1024*1024, func() (string, error) {
+				spec := domain.SandboxSpec{
+					ID:          uuid.New(),
+					BaseImage:   "node:18-alpine",
+					MemoryLimit: 512 * 1024 * 1024,
+					CPULimit:    500,
+				}
+				// Use internal to avoid pulling from the warm pool we're trying to populate
+				return r.createSandboxInternal(ctx, spec)
+			})
+		}
+	}
 }
 
 // StartSandbox starts a container and its task.
