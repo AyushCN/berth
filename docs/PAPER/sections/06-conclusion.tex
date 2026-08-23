@@ -1,0 +1,5 @@
+\section{Conclusion}
+
+In this paper, we introduced Berth, an orchestrator designed to eliminate the primary productivity bottleneck of Ephemeral Development Environments: cold-start latency. By adopting a decoupled architecture and integrating a static prediction pipeline, Berth preemptively provisions the correct runtime environment with near-perfect accuracy. 
+
+Our evaluation confirmed that predicting and pre-warming containers based on repository metadata achieves a significant reduction in provisioning time compared to traditional reactive approaches. Future work will explore dynamic prediction algorithms using neural networks and closer integration with eBPF-based networking (e.g., Cilium) for enhanced multi-tenant security.

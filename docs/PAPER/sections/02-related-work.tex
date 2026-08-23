@@ -1,0 +1,7 @@
+\section{Related Work}
+
+\subsection{Cloud-Based Development Environments}
+Commercial platforms like Gitpod and GitHub Codespaces use containerized workspaces mapped to remote IDEs (e.g., VS Code Server). These platforms generally require developers to define a \texttt{devcontainer.json} configuration file. Without this file, the platforms rely on bulky, universal images that contain runtimes for multiple languages, leading to bloated containers and slower pull times.
+
+\subsection{Serverless Cold Start Optimization}
+Cold starts have been extensively studied in serverless computing (e.g., AWS Lambda, OpenWhisk). Techniques such as pre-warming, snapshotting (e.g., Firecracker microVMs), and predictive scheduling have proven highly effective. Berth adapts these serverless optimization strategies specifically for the heavier, stateful workloads of persistent development environments.

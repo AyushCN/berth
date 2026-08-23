@@ -1,0 +1,8 @@
+\section{Implementation}
+
+Berth is implemented in Go for high concurrency and robust interaction with system resources. The architecture uses PostgreSQL as the primary datastore and Redis for ephemeral pub/sub (e.g., terminal output streaming).
+
+\subsection{Worker Provisioning Loop}
+Upon claiming a sandbox task, the worker performs a host-level shallow clone of the target repository. This directory is then analyzed by the Prediction Service via a local HTTP POST request. Once the optimal base image is returned, the worker instructs \texttt{containerd} to spin up a new container under the \texttt{gVisor} runsc sandbox, bind-mounting the host workspace into the container.
+
+Finally, the worker uses the containerd \texttt{Exec} API to synchronously run the predicted dependency installation command (e.g., \texttt{npm install}) before marking the sandbox as \texttt{RUNNING}.

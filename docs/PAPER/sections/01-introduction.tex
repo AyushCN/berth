@@ -1,0 +1,14 @@
+\section{Introduction}
+
+The rise of cloud-based ephemeral development environments (EDEs) such as GitHub Codespaces, Gitpod, and CodeSandbox has fundamentally altered modern software engineering workflows. By shifting the computation, storage, and dependency management of a developer workspace from the local machine to the cloud, EDEs guarantee consistency across teams and eliminate the "works on my machine" anti-pattern.
+
+However, the primary drawback of this paradigm is the cold-start latency incurred during environment provisioning. When a developer requests a new sandbox, the system must typically pull a base image, clone the target repository, and execute language-specific dependency installations (e.g., \texttt{npm install} or \texttt{pip install}). This sequential pipeline can take upwards of a minute, introducing frustrating delays.
+
+In this work, we present Berth, a novel EDE orchestrator designed to mitigate cold-start latency. Berth achieves sub-10 second environment provisioning by employing two key techniques: a static prediction service that analyzes repository signatures to preemptively select the optimal runtime, and a dynamic warm pool of heterogeneous containers waiting for immediate assignment. 
+
+This paper makes the following contributions:
+\begin{itemize}
+    \item We design a decoupled control-plane/data-plane architecture for EDE orchestration.
+    \item We implement a static prediction heuristic that achieves high accuracy in identifying required runtime environments.
+    \item We evaluate Berth against a non-predictive baseline, demonstrating a dramatic reduction in provisioning times.
+\end{itemize}

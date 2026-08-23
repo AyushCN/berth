@@ -1,0 +1,12 @@
+\section{Design}
+
+The architecture of Berth is partitioned into two distinct components: a Control Plane and a Data Plane, allowing independent scaling and enhanced security isolation.
+
+\subsection{Control Plane (API)}
+The API handles user authentication (via OAuth), project management, and initial sandbox requests. When a request is received, it inserts a \texttt{PENDING} record into the database, acting as a lightweight task queue.
+
+\subsection{Data Plane (Worker \& Runtime)}
+The Worker daemon securely interfaces with the underlying host's container runtime (\texttt{containerd} backed by \texttt{gVisor}). It asynchronously polls for pending sandboxes, claims them atomically using PostgreSQL's \texttt{FOR UPDATE SKIP LOCKED}, and manages the heavy provisioning lifecycle.
+
+\subsection{Prediction and Pre-warming}
+Instead of relying on a slow universal image, Berth uses a Prediction Service. This lightweight microservice inspects the root of a target repository for signature files (e.g., \texttt{package.json}, \texttt{requirements.txt}) and returns a specific, optimized \texttt{RuntimeProfile}. The worker uses this profile to initialize the appropriate base image and execute dependency installations before exposing the environment to the user.

@@ -1,0 +1,48 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Berth: Optimizing Ephemeral Development Environments with Predictive Provisioning and Warm Pooling\\
+\thanks{Identify applicable funding agency here. If none, delete this.}
+}
+
+\author{\IEEEauthorblockN{Ayush CN}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+}
+
+\maketitle
+
+\begin{abstract}
+Ephemeral development environments (EDEs) allow developers to spawn cloud-based coding environments on demand. However, cold-start latency remains a significant bottleneck, often delaying productivity as repositories are cloned and dependencies installed. In this paper, we introduce Berth, a robust platform that minimizes EDE initialization time through a static prediction service and pre-warmed container pools. By analyzing repository metadata via a zero-dependency ML pipeline, Berth accurately provisions the necessary runtime before user connection. Our evaluation shows that Berth reduces cold-start latency from an average of ~30 seconds to under ~10 seconds compared to baseline provisioning, delivering a near-instant developer experience.
+\end{abstract}
+
+\begin{IEEEkeywords}
+cloud computing, development environments, containers, prediction, cold start
+\end{IEEEkeywords}
+
+\input{sections/01-introduction}
+\input{sections/02-related-work}
+\input{sections/03-design}
+\input{sections/04-implementation}
+\input{sections/05-evaluation}
+\input{sections/06-conclusion}
+
+\bibliographystyle{IEEEtran}
+% \bibliography{references}
+
+\end{document}
