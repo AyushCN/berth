@@ -20,6 +20,7 @@ import (
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
 	"github.com/AyushCN/berth/internal/usecase"
+	"github.com/AyushCN/berth/internal/domain"
 )
 
 func main() {
@@ -59,18 +60,19 @@ func main() {
 	defer redis.Close()
 
 	// containerd runtime
-	var runtime *containerd.Runtime
+	var runtime domain.ContainerRuntime
 	if os.Getenv("MOCK_CONTAINERD") == "1" {
 		slog.Warn("MOCK_CONTAINERD=1: skipping real containerd init for frontend test")
 		runtime = nil
 	} else {
 		var err error
-		runtime, err = containerd.NewRuntime(os.Getenv("CONTAINERD_SOCK"))
+		r, err := containerd.NewRuntime(os.Getenv("CONTAINERD_SOCK"))
 		if err != nil {
 			slog.Error("failed to init container runtime", "error", err)
 			os.Exit(1)
 		}
-		defer runtime.Close()
+		defer r.Close()
+		runtime = r
 	}
 
 	// NATS
