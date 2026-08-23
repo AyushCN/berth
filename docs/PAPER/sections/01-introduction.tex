@@ -4,7 +4,7 @@ The rise of cloud-based ephemeral development environments (EDEs) such as GitHub
 
 However, the primary drawback of this paradigm is the cold-start latency incurred during environment provisioning. When a developer requests a new sandbox, the system must typically pull a base image, clone the target repository, and execute language-specific dependency installations (e.g., \texttt{npm install} or \texttt{pip install}). This sequential pipeline can take upwards of a minute, introducing frustrating delays.
 
-In this work, we present Berth, a novel EDE orchestrator designed to mitigate cold-start latency. Berth achieves sub-10 second environment provisioning by employing two key techniques: a static prediction service that analyzes repository signatures to preemptively select the optimal runtime, and a dynamic warm pool of heterogeneous containers waiting for immediate assignment. 
+In this work, we present Berth, a novel EDE orchestrator designed to mitigate cold-start latency. Berth achieves sub-10 second environment provisioning by employing two key techniques: a static prediction service that analyzes repository signatures to preemptively select the optimal runtime, and a dynamic warm pool of heterogeneous containers waiting for immediate assignment. Our evaluation demonstrates that Berth drops the median (p50) provisioning time from 30.3s to 9.0s, and the p95 latency from 57.7s to 13.2s, compared to traditional non-predictive baseline deployments. 
 
 This paper makes the following contributions:
 \begin{itemize}
