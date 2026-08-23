@@ -43,7 +43,16 @@ func (uc *SandboxUsecase) CreateEnvironment(ctx context.Context, uid uuid.UUID, 
 	}
 
 	go func(id uuid.UUID, spec domain.SandboxSpec) {
-		bgCtx := context.Background()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("sandbox creation panicked", "recover", r)
+				_ = uc.repo.UpdateState(context.Background(), id, domain.StateFailed)
+			}
+		}()
+		
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
 		var containerID string
 		if uc.runtime != nil {
 			cid, err := uc.runtime.CreateSandbox(bgCtx, spec)
