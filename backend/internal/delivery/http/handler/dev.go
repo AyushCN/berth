@@ -7,7 +7,7 @@ import (
     "time"
 )
 
-func DevLogin(jwtSecret string) gin.HandlerFunc {
+func DevLogin(jwtSecret string, env string) gin.HandlerFunc {
     return func(c *gin.Context) {
         claims := jwt.MapClaims{
             "userId": "00000000-0000-0000-0000-000000000001",
@@ -15,7 +15,8 @@ func DevLogin(jwtSecret string) gin.HandlerFunc {
         }
         token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
         tokenString, _ := token.SignedString([]byte(jwtSecret))
-        c.SetCookie("berth_token", tokenString, 86400, "/", "", false, true)
+		secure := env == "production"
+        c.SetCookie("berth_token", tokenString, 86400, "/", "", secure, true)
         c.JSON(http.StatusOK, gin.H{"token": tokenString})
     }
 }

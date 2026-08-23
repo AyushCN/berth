@@ -41,3 +41,41 @@ func RateLimit() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RateLimitUser applies a stricter rate limit per user bucket for authenticated routes.
+func RateLimitUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client := infradis.Client()
+		if client == nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "rate limiter unavailable"})
+			return
+		}
+
+		userID, exists := c.Get("userId")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		key := fmt.Sprintf("ratelimit:user:%s", userID)
+		ctx := context.Background()
+
+		count, err := client.Incr(ctx, key).Result()
+		if err != nil {
+			slog.Error("redis rate limit error", "error", err)
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "rate limiter unavailable"})
+			return
+		}
+
+		if count == 1 {
+			client.Expire(ctx, key, time.Minute)
+		}
+
+		if count > 30 {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
+			return
+		}
+
+		c.Next()
+	}
+}

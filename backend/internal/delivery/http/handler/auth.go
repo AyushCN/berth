@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/AyushCN/berth/internal/infrastructure/github"
+	"github.com/google/uuid"
 	"github.com/AyushCN/berth/internal/usecase"
 )
 
@@ -19,16 +19,6 @@ func NewAuthHandler(uc *usecase.AuthUsecase) *AuthHandler {
 
 // GithubLogin initiates the OAuth flow.
 func (h *AuthHandler) GithubLogin(c *gin.Context) {
-	verifier, _, _ := github.GeneratePKCE()
-	state := h.authUC.GenerateState()
-
-	// Store verifier in cookie (secure, httpOnly)
-	c.SetCookie("pkce_verifier", verifier, 600, "/", "", true, true)
-	c.SetCookie("oauth_state", state, 600, "/", "", true, true)
-
-	// Build authorize URL
-	// Need oauthClient in handler... this needs refactoring
-	// For now, redirect to frontend which handles OAuth
 	c.JSON(http.StatusOK, gin.H{
 		"message": "use /api/auth/github/authorize for redirect",
 	})
@@ -36,8 +26,17 @@ func (h *AuthHandler) GithubLogin(c *gin.Context) {
 
 // GithubAuthorize redirects to GitHub OAuth.
 func (h *AuthHandler) GithubAuthorize(c *gin.Context) {
-	// This requires oauthClient access - we'll wire it differently
-	c.Redirect(http.StatusTemporaryRedirect, "https://github.com/login/oauth/authorize")
+	url, state, verifier, err := h.authUC.GenerateAuthorizeURL()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate authorize url"})
+		return
+	}
+
+	// Store verifier in cookie (secure, httpOnly)
+	c.SetCookie("pkce_verifier", verifier, 600, "/", "", true, true)
+	c.SetCookie("oauth_state", state, 600, "/", "", true, true)
+
+	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
 // GithubCallback handles the OAuth callback.
@@ -74,11 +73,23 @@ func (h *AuthHandler) GithubCallback(c *gin.Context) {
 
 // GetMe returns the current authenticated user.
 func (h *AuthHandler) GetMe(c *gin.Context) {
-	userID, exists := c.Get("userId")
+	userIDStr, exists := c.Get("userId")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
 		return
 	}
-	// Parse UUID and fetch user
-	c.JSON(http.StatusOK, gin.H{"user_id": userID})
+	
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	user, err := h.authUC.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }

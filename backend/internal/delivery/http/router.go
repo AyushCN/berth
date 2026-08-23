@@ -33,6 +33,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 		// Authenticated routes
 		authenticated := api.Group("")
 		authenticated.Use(middleware.Auth(cfg.JWTSecret))
+		authenticated.Use(middleware.RateLimitUser())
 		{
 			authenticated.GET("/user/me", deps.AuthHandler.GetMe)
 
@@ -51,10 +52,11 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 		}
 	}
 
-	api.GET("/auth/dev-login", handler.DevLogin(cfg.JWTSecret))
+	api.GET("/auth/dev-login", handler.DevLogin(cfg.JWTSecret, cfg.Env))
 
 	// Protected routes (auth via query param or cookie)
 	ws := r.Group("/ws")
+	ws.Use(middleware.WSAuth(cfg.JWTSecret))
 	{
 		ws.GET("/sandbox/:id", deps.WSHandler.HandleSandboxWS)
 		ws.GET("/file/:id", deps.WSHandler.HandleFileSyncWS)
