@@ -1,6 +1,7 @@
 package containerd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -340,11 +341,39 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", fmt.Errorf("failed to create exec process: %w", err)
 	}
 
+	// 1. Non-blocking FIFO opens via goroutines to avoid deadlocks
+	var stdoutBuf, stderrBuf bytes.Buffer
+	errCh := make(chan error, 2)
+	
+	// Start draining stdout
+	go func() {
+		f, err := os.OpenFile(filepath.Join(fifoDir, "stdout"), os.O_RDONLY, 0)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer f.Close()
+		_, err = io.Copy(&stdoutBuf, f)
+		errCh <- err
+	}()
+	
+	// Start draining stderr
+	go func() {
+		f, err := os.OpenFile(filepath.Join(fifoDir, "stderr"), os.O_RDONLY, 0)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer f.Close()
+		_, err = io.Copy(&stderrBuf, f)
+		errCh <- err
+	}()
+
 	if err := process.Start(ctx); err != nil {
 		return "", fmt.Errorf("failed to start exec: %w", err)
 	}
 
-	// Wait for completion
+	// Wait for process completion
 	statusC, err := process.Wait(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to wait for exec: %w", err)
@@ -359,16 +388,26 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", ctx.Err()
 	}
 
+	// 2. Drain stdout/stderr before proceeding (wait for goroutines)
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			slog.Warn("exec fifo read error", "error", err)
+		}
+	}
+
 	// Delete the process
 	if _, err := process.Delete(ctx); err != nil {
 		slog.Warn("exec process delete failed", "error", err)
 	}
 
+	// Clean up FIFOs
+	_ = os.RemoveAll(fifoDir)
+
 	if status != 0 {
-		return "", fmt.Errorf("exec exited with code %d", status)
+		return stderrBuf.String(), fmt.Errorf("exec exited with code %d: %s", status, stderrBuf.String())
 	}
 
-	return "", nil // TODO: capture stdout from FIFO
+	return stdoutBuf.String(), nil
 }
 
 // GetLogs retrieves logs from a sandbox.
