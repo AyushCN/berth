@@ -10,6 +10,7 @@ import (
 	"github.com/AyushCN/berth/internal/config"
 	"github.com/AyushCN/berth/internal/infrastructure/containerd"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
+	"github.com/AyushCN/berth/internal/infrastructure/ml"
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
 	"github.com/AyushCN/berth/internal/worker"
@@ -58,10 +59,13 @@ func main() {
 	}
 	defer runtime.Close()
 
+	// Prediction service client
+	predictor := ml.NewClient(cfg.PredictionAddr)
+
 	queries := repository.New(db.Pool())
 	sandboxRepo := repository.NewSandboxRepository(queries)
 
-	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime)
+	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, predictor)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -73,5 +77,5 @@ func main() {
 	<-quit
 
 	slog.Info("worker shutting down gracefully...")
-	cancel() // Stop the worker polling loops
+	cancel()
 }

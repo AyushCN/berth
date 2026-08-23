@@ -136,17 +136,30 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 	// 3. Create OCI spec with security hardening
 	containerID := spec.ID.String()
 
+	// Build OCI opts
+	ociOpts := []oci.SpecOpts{
+		withLinuxNamespaces(),
+		withCgroupLimits(spec.MemoryLimit, spec.CPULimit),
+		withDroppedCapabilities(),
+		withSeccomp(),
+		withReadonlyRootfs(),
+	}
+
+	// Bind mount workspace if provided
+	if spec.WorkspaceDir != "" {
+		ociOpts = append(ociOpts, withWorkspaceMount(spec.WorkspaceDir, spec.WorkDir))
+	}
+
+	// Set main process command if provided
+	if len(spec.Cmd) > 0 {
+		ociOpts = append(ociOpts, withProcessArgs(spec.Cmd...))
+	}
+
 	opts := []client.NewContainerOpts{
 		client.WithImage(baseImg),
 		client.WithNewSnapshot(containerID+"-snap", baseImg),
 		client.WithRuntime(gvisorRuntime, nil),
-		client.WithNewSpec(
-			withLinuxNamespaces(),
-			withCgroupLimits(spec.MemoryLimit, spec.CPULimit),
-			withDroppedCapabilities(),
-			withSeccomp(),
-			withReadonlyRootfs(),
-		),
+		client.WithNewSpec(ociOpts...),
 	}
 
 	container, err := r.client.NewContainer(ctx, containerID, opts...)
@@ -498,6 +511,28 @@ func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath stri
 }
 
 // --- OCI spec options ---
+
+func withWorkspaceMount(hostDir, containerDir string) oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		s.Mounts = append(s.Mounts, specs.Mount{
+			Destination: containerDir,
+			Type:        "bind",
+			Source:      hostDir,
+			Options:     []string{"rbind", "rw"},
+		})
+		return nil
+	}
+}
+
+func withProcessArgs(args ...string) oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Process == nil {
+			s.Process = &specs.Process{}
+		}
+		s.Process.Args = args
+		return nil
+	}
+}
 
 func withLinuxNamespaces() oci.SpecOpts {
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {

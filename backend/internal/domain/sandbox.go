@@ -101,12 +101,14 @@ type ContainerRuntime interface {
 
 // SandboxSpec is the specification passed to the container runtime.
 type SandboxSpec struct {
-	ID          uuid.UUID
-	BaseImage   string
-	WorkDir     string
-	Env         map[string]string
-	MemoryLimit int64 // bytes
-	CPULimit    int64 // milli-cores
-	DiskLimit   int64 // bytes
-	NetworkID   string
+	ID           uuid.UUID
+	BaseImage    string
+	WorkDir      string
+	WorkspaceDir string // Host directory to bind-mount into container
+	Cmd          []string // Container main process (keep-alive for dev envs)
+	Env          map[string]string
+	MemoryLimit  int64 // bytes
+	CPULimit     int64 // milli-cores
+	DiskLimit    int64 // bytes
+	NetworkID    string
 }

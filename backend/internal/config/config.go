@@ -55,7 +55,7 @@ func Load() (*Config, error) {
 		JWTSecret:          jwtSecret,
 		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
-		PredictionAddr:     getEnv("PREDICTION_ADDR", "localhost:50051"),
+		PredictionAddr:     getEnv("PREDICTION_ADDR", "localhost:50052"),
 		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
 	}, nil
 }
