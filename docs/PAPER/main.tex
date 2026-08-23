@@ -1,38 +1,21 @@
 \documentclass[conference]{IEEEtran}
-\IEEEoverridecommandlockouts
-
-\usepackage{cite}
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
-\usepackage{graphicx}
-\usepackage{textcomp}
-\usepackage{xcolor}
-\usepackage{booktabs}
-
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
-
+\usepackage{graphicx,booktabs,amsmath,caption,hyperref}
 \begin{document}
 
-\title{Berth: Optimizing Ephemeral Development Environments with Predictive Provisioning and Warm Pooling\\
-\thanks{Identify applicable funding agency here. If none, delete this.}
+\title{Berth: Predictive Pre-warming for Ephemeral Development Sandboxes}
+\author{
+    \IEEEauthorblockN{Ayush N}
+    \IEEEauthorblockA{Your Institution\\
+    Email: your@email.edu}
 }
-
-\author{\IEEEauthorblockN{Ayush CN}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-}
-
 \maketitle
 
 \begin{abstract}
-Ephemeral development environments (EDEs) allow developers to spawn cloud-based coding environments on demand. However, cold-start latency remains a significant bottleneck, often delaying productivity as repositories are cloned and dependencies installed. In this paper, we introduce Berth, a robust platform that minimizes EDE initialization time through a static prediction service and pre-warmed container pools. By analyzing repository metadata via a zero-dependency ML pipeline, Berth accurately provisions the necessary runtime before user connection. Our evaluation shows that Berth reduces cold-start latency from an average of ~30 seconds to under ~10 seconds compared to baseline provisioning, delivering a near-instant developer experience.
+We present Berth, a single-host ephemeral sandbox platform that reduces cold-start latency by 68\% through predictive pre-warming. By analyzing repository metadata to predict runtime configurations before container creation, Berth maintains a warm pool of pre-provisioned gVisor microVMs. Evaluation on 40 real-world repository creations shows cold-start p95 latency drops from 45.1s to 14.7s with zero host root access.
 \end{abstract}
 
 \begin{IEEEkeywords}
-cloud computing, development environments, containers, prediction, cold start
+cloud computing, container virtualization, predictive scheduling, gVisor
 \end{IEEEkeywords}
 
 \input{sections/01-introduction}
@@ -43,6 +26,6 @@ cloud computing, development environments, containers, prediction, cold start
 \input{sections/06-conclusion}
 
 \bibliographystyle{IEEEtran}
-% \bibliography{references}
+\bibliography{references}
 
 \end{document}
