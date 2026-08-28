@@ -46,3 +46,12 @@ berth_sandbox
 backend/backend
 backend/api
 cookies.txt
+
+# ML / Python
+ml/venv/
+ml/__pycache__/
+ml/models/*.onnx
+ml/models/*.json
+ml/models/*.joblib
+docs/EDEBench/dataset/*.parquet
+docs/EDEBench/dataset/repos/

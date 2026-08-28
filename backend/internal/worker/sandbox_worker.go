@@ -2,10 +2,13 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/AyushCN/berth/internal/domain"
@@ -42,16 +45,28 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 }
 
 func (w *SandboxWorker) processPending(ctx context.Context) {
-	// 1. Atomically claim a PENDING sandbox
 	sandbox, err := w.repo.PopPendingSandbox(ctx)
 	if err != nil {
-		// pgx.ErrNoRows or other error
 		return
 	}
 
 	slog.Info("processing pending sandbox", "sandbox_id", sandbox.ID, "git_url", sandbox.GitURL)
 
-	// 2. Prepare workspace directory
+	// Validate Git URL before any filesystem or network operation
+	if err := validateGitURL(sandbox.GitURL); err != nil {
+		slog.Error("invalid git url", "sandbox_id", sandbox.ID, "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+
+	// Validate branch name (prevent flag injection)
+	if strings.HasPrefix(sandbox.GitBranch, "-") {
+		slog.Error("invalid git branch", "sandbox_id", sandbox.ID, "branch", sandbox.GitBranch)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+
+	// Prepare workspace directory
 	home, _ := os.UserHomeDir()
 	workspaceDir := filepath.Join(home, ".local", "state", "berth", "workspaces", sandbox.ID.String())
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
@@ -60,7 +75,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 
-	// 3. Clone repository
+	// Clone repository
 	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -71,7 +86,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 
-	// 4. Predict runtime profile
+	// Predict runtime profile
 	profile, err := w.ml.Predict(bgCtx, sandbox.GitURL, sandbox.GitBranch)
 	if err != nil {
 		slog.Warn("prediction failed, using fallback", "error", err)
@@ -86,7 +101,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 	}
 
-	// 5. Create container with bind mount and keep-alive command
+	// Create container with bind mount and keep-alive command
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,
@@ -108,25 +123,22 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		slog.Error("worker failed to update container id", "sandbox_id", sandbox.ID, "error", err)
 	}
 
-	// 6. Start container
 	if err := w.runtime.StartSandbox(bgCtx, cid); err != nil {
 		slog.Error("worker failed to start container", "sandbox_id", sandbox.ID, "error", err)
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 		return
 	}
 
-	// 7. Install dependencies inside container
+	// Install dependencies inside container
 	if profile.InstallCmd != "" {
 		installArgs := []string{"sh", "-c", "cd /app && " + profile.InstallCmd}
 		if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
 			slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
-			// Don't fail the sandbox; let user fix via terminal
 		} else {
 			slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out)
 		}
 	}
 
-	// 8. Mark RUNNING
 	if err := w.repo.UpdateState(bgCtx, sandbox.ID, domain.StateRunning); err != nil {
 		slog.Error("worker failed to set RUNNING state", "sandbox_id", sandbox.ID, "error", err)
 		return
@@ -138,4 +150,24 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		"language", profile.Language,
 		"base_image", profile.BaseImage,
 	)
+}
+
+func validateGitURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("only https scheme allowed, got %s", u.Scheme)
+	}
+	if u.Host != "github.com" {
+		return fmt.Errorf("only github.com allowed, got %s", u.Host)
+	}
+	if strings.Contains(u.Path, "..") {
+		return fmt.Errorf("path traversal detected")
+	}
+	if strings.HasPrefix(u.Path, "-") {
+		return fmt.Errorf("path looks like a flag")
+	}
+	return nil
 }

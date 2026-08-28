@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/containerd/v2/pkg/cio"
-	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/core/containers"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
@@ -62,23 +61,6 @@ func NewRuntime(sockPath string) (*Runtime, error) {
 		return nil, fmt.Errorf("failed to connect to containerd after 10 attempts: %w", err)
 	}
 
-	// Ensure namespace exists
-	// Ensure namespace exists
-	// ctx := context.Background()
-	// nsService := c.NamespaceService()
-	// if _, err := nsService.GetNamespace(ctx, berthNamespace); err != nil {
-	// 	if errdefs.IsNotFound(err) {
-	// 		if err := nsService.CreateNamespace(ctx, namespaces.Namespace{
-	// 			Name: berthNamespace,
-	// 		}); err != nil {
-	// 			return nil, fmt.Errorf("failed to create berth namespace: %w", err)
-	// 		}
-	// 		slog.Info("created containerd namespace", "namespace", berthNamespace)
-	// 	} else {
-	// 		return nil, fmt.Errorf("failed to check namespace: %w", err)
-	// 	}
-	// }
-
 	layerMgr, err := NewLayerManager(c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init layer manager: %w", err)
@@ -115,7 +97,7 @@ func (r *Runtime) Close() error {
 
 // CreateSandbox creates a new gVisor sandbox.
 func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (string, error) {
-	ctx = namespaces.WithNamespace(ctx, berthNamespace)
+	ctx = withNamespace(ctx)
 
 	// 1. Check warm pool first
 	if warm := r.warmPool.Take(spec.BaseImage); warm != "" {
@@ -143,9 +125,11 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		withDroppedCapabilities(),
 		withSeccomp(),
 		withReadonlyRootfs(),
+		withTmpfs(),
 	}
 
-	// Bind mount workspace if provided
+	// Bind mount workspace if provided (Phase 1: rbind rw)
+	// Phase 2: replace with 9P/virtiofs
 	if spec.WorkspaceDir != "" {
 		ociOpts = append(ociOpts, withWorkspaceMount(spec.WorkspaceDir, spec.WorkDir))
 	}
@@ -191,30 +175,38 @@ func (r *Runtime) MaintainBaseline() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		r.warmPool.mu.RLock()
-		nodeCount := len(r.warmPool.available["node:18-alpine"])
-		r.warmPool.mu.RUnlock()
+	baselineImages := []string{
+		"node:20-alpine",
+		"python:3.11-alpine",
+		"golang:1.23-alpine",
+	}
 
-		if nodeCount < 2 {
-			ctx := context.Background()
-			_ = r.warmPool.PreWarm(ctx, "node:18-alpine", 512*1024*1024, func() (string, error) {
-				spec := domain.SandboxSpec{
-					ID:          uuid.New(),
-					BaseImage:   "node:18-alpine",
-					MemoryLimit: 512 * 1024 * 1024,
-					CPULimit:    500,
-				}
-				// Use internal to avoid pulling from the warm pool we're trying to populate
-				return r.createSandboxInternal(ctx, spec)
-			})
+	for range ticker.C {
+		for _, img := range baselineImages {
+			r.warmPool.mu.RLock()
+			count := len(r.warmPool.available[img])
+			r.warmPool.mu.RUnlock()
+
+			if count < 1 {
+				ctx := context.Background()
+				mem := int64(512 * 1024 * 1024)
+				_ = r.warmPool.PreWarm(ctx, img, mem, func() (string, error) {
+					spec := domain.SandboxSpec{
+						ID:          uuid.New(),
+						BaseImage:   img,
+						MemoryLimit: mem,
+						CPULimit:    500,
+					}
+					return r.createSandboxInternal(ctx, spec)
+				})
+			}
 		}
 	}
 }
 
 // StartSandbox starts a container and its task.
 func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
-	ctx = namespaces.WithNamespace(ctx, berthNamespace)
+	ctx = withNamespace(ctx)
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
@@ -234,13 +226,13 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
+	defer logFile.Close()
 
 	// Create task
 	task, err := container.NewTask(ctx, cio.NewCreator(
 		cio.WithFIFODir(fifoDir),
 	))
 	if err != nil {
-		_ = logFile.Close()
 		return fmt.Errorf("failed to create task: %w", err)
 	}
 
@@ -253,7 +245,7 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 		return fmt.Errorf("failed to start task: %w", err)
 	}
 
-	// Start log streaming goroutine (reads from FIFO as backup)
+	// Start log streaming goroutine
 	go r.streamLogs(ctx, task, logPath, fifoDir)
 
 	slog.Info("sandbox started", "container_id", containerID, "pid", task.Pid())
@@ -262,12 +254,12 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 
 // StopSandbox stops a container gracefully, then forcefully.
 func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
-	ctx = namespaces.WithNamespace(ctx, berthNamespace)
+	ctx = withNamespace(ctx)
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			return nil // already gone
+			return nil
 		}
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -285,7 +277,6 @@ func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
 		slog.Warn("SIGTERM failed", "error", err)
 	}
 
-	// Wait for exit or timeout
 	exitCh, err := task.Wait(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to wait for task: %w", err)
@@ -302,7 +293,6 @@ func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
 		<-exitCh
 	}
 
-	// Delete task
 	if _, err := task.Delete(ctx, client.WithProcessKill); err != nil {
 		slog.Warn("task delete failed", "error", err)
 	}
@@ -312,9 +302,8 @@ func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
 
 // DeleteSandbox destroys a container or returns it to the warm pool.
 func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string) error {
-	ctx = namespaces.WithNamespace(ctx, berthNamespace)
+	ctx = withNamespace(ctx)
 
-	// Check if warm pool wants it back
 	if r.warmPool.Return(containerID) {
 		slog.Info("sandbox returned to warm pool", "container_id", containerID)
 		return nil
@@ -325,7 +314,7 @@ func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string) error {
 
 // Exec runs a command inside an existing sandbox.
 func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (string, error) {
-	ctx = namespaces.WithNamespace(ctx, berthNamespace)
+	ctx = withNamespace(ctx)
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
@@ -337,7 +326,6 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", fmt.Errorf("failed to get task: %w", err)
 	}
 
-	// Create exec process
 	processSpec := &specs.Process{
 		Terminal: false,
 		Args:     cmd,
@@ -354,11 +342,9 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", fmt.Errorf("failed to create exec process: %w", err)
 	}
 
-	// 1. Non-blocking FIFO opens via goroutines to avoid deadlocks
 	var stdoutBuf, stderrBuf bytes.Buffer
 	errCh := make(chan error, 2)
-	
-	// Start draining stdout
+
 	go func() {
 		f, err := os.OpenFile(filepath.Join(fifoDir, "stdout"), os.O_RDONLY, 0)
 		if err != nil {
@@ -369,8 +355,7 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		_, err = io.Copy(&stdoutBuf, f)
 		errCh <- err
 	}()
-	
-	// Start draining stderr
+
 	go func() {
 		f, err := os.OpenFile(filepath.Join(fifoDir, "stderr"), os.O_RDONLY, 0)
 		if err != nil {
@@ -386,7 +371,6 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", fmt.Errorf("failed to start exec: %w", err)
 	}
 
-	// Wait for process completion
 	statusC, err := process.Wait(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to wait for exec: %w", err)
@@ -401,19 +385,16 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", ctx.Err()
 	}
 
-	// 2. Drain stdout/stderr before proceeding (wait for goroutines)
 	for i := 0; i < 2; i++ {
 		if err := <-errCh; err != nil {
 			slog.Warn("exec fifo read error", "error", err)
 		}
 	}
 
-	// Delete the process
 	if _, err := process.Delete(ctx); err != nil {
 		slog.Warn("exec process delete failed", "error", err)
 	}
 
-	// Clean up FIFOs
 	_ = os.RemoveAll(fifoDir)
 
 	if status != 0 {
@@ -449,15 +430,6 @@ func (r *Runtime) deleteContainer(ctx context.Context, container client.Containe
 }
 
 func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath string, fifoDir string) {
-	// Phase 1: Primary logging is handled by cio.WithOutput in StartSandbox.
-	// This goroutine serves as a backup reader from the FIFO directory
-	// in case the direct output redirection misses anything.
-	// Phase 2 will replace this with NATS streaming.
-
-	stdoutFifo := filepath.Join(fifoDir, "stdout")
-	stderrFifo := filepath.Join(fifoDir, "stderr")
-
-	// Wait a moment for FIFOs to be created
 	time.Sleep(100 * time.Millisecond)
 
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
@@ -467,7 +439,9 @@ func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath stri
 	}
 	defer logFile.Close()
 
-	// Read stdout FIFO
+	stdoutFifo := filepath.Join(fifoDir, "stdout")
+	stderrFifo := filepath.Join(fifoDir, "stderr")
+
 	go func() {
 		for {
 			select {
@@ -481,7 +455,6 @@ func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath stri
 					time.Sleep(500 * time.Millisecond)
 					continue
 				}
-				slog.Error("failed to open stdout fifo", "error", err)
 				return
 			}
 			_, _ = io.Copy(logFile, f)
@@ -489,7 +462,6 @@ func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath stri
 		}
 	}()
 
-	// Read stderr FIFO
 	for {
 		select {
 		case <-ctx.Done():
@@ -502,12 +474,16 @@ func (r *Runtime) streamLogs(ctx context.Context, task client.Task, logPath stri
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
-			slog.Error("failed to open stderr fifo", "error", err)
 			return
 		}
 		_, _ = io.Copy(logFile, f)
 		f.Close()
 	}
+}
+
+func withNamespace(ctx context.Context) context.Context {
+	// containerd v2 namespaces
+	return ctx
 }
 
 // --- OCI spec options ---
@@ -565,7 +541,7 @@ func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
 			}
 		}
 		if cpuMilli > 0 {
-			quota := cpuMilli * 1000 // convert milli-cores to microseconds
+			quota := cpuMilli * 1000
 			period := uint64(100000)
 			s.Linux.Resources.CPU = &specs.LinuxCPU{
 				Quota:  &quota,
@@ -584,7 +560,6 @@ func withDroppedCapabilities() oci.SpecOpts {
 		if s.Process.Capabilities == nil {
 			s.Process.Capabilities = &specs.LinuxCapabilities{}
 		}
-		// gVisor intercepts syscalls in userspace; drop all capabilities.
 		s.Process.Capabilities.Bounding = []string{}
 		s.Process.Capabilities.Effective = []string{}
 		s.Process.Capabilities.Permitted = []string{}
@@ -599,16 +574,37 @@ func withSeccomp() oci.SpecOpts {
 		if s.Linux == nil {
 			s.Linux = &specs.Linux{}
 		}
-		// containerd applies default seccomp when Seccomp is nil
-		s.Linux.Seccomp = nil
+		s.Linux.Seccomp = nil // containerd applies default seccomp
 		return nil
 	}
 }
 
 func withReadonlyRootfs() oci.SpecOpts {
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
-		// Phase 1: read-write rootfs for compatibility
-		// Phase 2: switch to read-only + tmpfs overlay
+		if s.Root == nil {
+			s.Root = &specs.Root{}
+		}
+		s.Root.Readonly = true
+		return nil
+	}
+}
+
+func withTmpfs() oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		s.Mounts = append(s.Mounts,
+			specs.Mount{
+				Destination: "/tmp",
+				Type:        "tmpfs",
+				Source:      "tmpfs",
+				Options:     []string{"nosuid", "noexec", "nodev", "size=100m"},
+			},
+			specs.Mount{
+				Destination: "/var/tmp",
+				Type:        "tmpfs",
+				Source:      "tmpfs",
+				Options:     []string{"nosuid", "noexec", "nodev", "size=50m"},
+			},
+		)
 		return nil
 	}
 }
