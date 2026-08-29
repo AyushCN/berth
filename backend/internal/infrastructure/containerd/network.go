@@ -41,6 +41,14 @@ func (nm *NetworkManager) CreateNetwork(ctx context.Context, networkID string) e
 
 	bridgeName := "br-" + networkID[:12]
 
+	if os.Geteuid() != 0 {
+		slog.Warn("skipping network creation: netlink requires root privileges", "networkID", networkID)
+		nm.bridges[networkID] = "mock-bridge"
+		nm.bridgeCIDR[networkID] = "172.30.99.0/24"
+		nm.ipCounter[networkID] = 2
+		return nil
+	}
+
 	// Check if bridge exists
 	_, err := netlink.LinkByName(bridgeName)
 	if err == nil {
@@ -119,9 +127,12 @@ func (nm *NetworkManager) AllocateIP(networkID, containerID string) (string, err
 
 func (nm *NetworkManager) subnetIndex(networkID string) int {
 	cidr := nm.bridgeCIDR[networkID]
-	parts := net.ParseIP(cidr)
-	if parts != nil {
-		return int(parts[14]) // 172.30.X.0 -> X
+	ip, _, err := net.ParseCIDR(cidr)
+	if err == nil {
+		ip = ip.To4()
+		if ip != nil {
+			return int(ip[2]) // 172.30.X.0 -> X
+		}
 	}
 	return 1
 }

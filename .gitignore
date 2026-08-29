@@ -55,3 +55,14 @@ ml/models/*.json
 ml/models/*.joblib
 docs/EDEBench/dataset/*.parquet
 docs/EDEBench/dataset/repos/
+
+# Scratch files and executables
+backend/bench
+backend/worker
+backend/bench-results.*
+backend/*.bin
+backend/test*.go
+=14.0.0
+backend/scripts/
+backend/gen_opts.go
+BERTH_FULL_SPEC.md

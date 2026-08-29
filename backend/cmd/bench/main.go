@@ -199,7 +199,7 @@ func createAndWait(client *http.Client, cfg Config, iter int) Result {
 	start := time.Now()
 
 	// 1. POST /api/environments
-	reqBody := fmt.Sprintf(`{"name":"%s","git_url":"https://github.com/github/hello-world","git_branch":"main"}`, name)
+	reqBody := fmt.Sprintf(`{"name":"%s","git_url":"https://github.com/octocat/Hello-World","git_branch":"master"}`, name)
 	req, _ := http.NewRequestWithContext(ctx, "POST", cfg.APIBase+"/api/environments", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 

@@ -92,7 +92,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		slog.Warn("prediction failed, using fallback", "error", err)
 		profile = &domain.RuntimeProfile{
 			Language:    "node",
-			BaseImage:   "node:20-alpine",
+			BaseImage:   "docker.io/library/node:20-alpine",
 			InstallCmd:  "npm install",
 			StartCmd:    "npm run dev",
 			ExposedPort: 3000,

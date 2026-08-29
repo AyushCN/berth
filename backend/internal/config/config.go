@@ -59,7 +59,7 @@ func Load() (*Config, error) {
 		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
-		PredictionAddr:     getEnv("PREDICTION_ADDR", "localhost:50052"),
+		PredictionAddr:     getEnv("PREDICTION_ADDR", "http://localhost:50052"),
 		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
 	}
 

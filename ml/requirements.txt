@@ -7,3 +7,4 @@ skl2onnx>=1.16.0
 grpcio>=1.59.0
 grpcio-tools>=1.59.0
 protobuf>=4.24.0
+pyarrow>=14.0.0

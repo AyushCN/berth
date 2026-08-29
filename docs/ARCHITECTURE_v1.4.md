@@ -42,7 +42,7 @@ graph TD
     API -.->|Writes PENDING state| PostgreSQL
     
     Worker -.->|Polls PENDING state| PostgreSQL
-    Worker -->|containerd / runsc| EnvA
+    Worker -->|containerd / runc.v2| EnvA
 ```
 
 ## Environment Lifecycle
@@ -69,4 +69,4 @@ stateDiagram-v2
 | API auth | JWT + Cookies | Unauthorized platform access |
 | Control Plane | Unprivileged | RCE in the API cannot access container runtimes |
 | Tenant network | CNI per org | Inter-tenant network sniffing |
-| Container | **gVisor (runsc)** | Kernel exploits, direct host filesystem access |
+| Container | **runc (v2)** | Filesystem isolation (temporarily downgraded from gVisor/runsc for rootless support) |

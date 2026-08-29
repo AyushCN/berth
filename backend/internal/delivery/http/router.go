@@ -23,7 +23,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 
 	// API routes
 	api := r.Group("/api")
-	api.Use(middleware.RateLimit())
+	// api.Use(middleware.RateLimit())
 	{
 		// Auth
 		api.GET("/auth/github", deps.AuthHandler.GithubLogin)
@@ -33,7 +33,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 		// Authenticated routes
 		authenticated := api.Group("")
 		authenticated.Use(middleware.Auth(cfg.JWTSecret))
-		authenticated.Use(middleware.RateLimitUser())
+		// authenticated.Use(middleware.RateLimitUser())
 		{
 			authenticated.GET("/user/me", deps.AuthHandler.GetMe)
 

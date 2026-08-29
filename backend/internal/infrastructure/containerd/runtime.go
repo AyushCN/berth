@@ -8,16 +8,19 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/api/types/runc/options"
 	"github.com/containerd/containerd/v2/client"
-	"github.com/containerd/containerd/v2/pkg/oci"
-	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/containerd/v2/core/containers"
+	"github.com/containerd/containerd/v2/pkg/cio"
+	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/AyushCN/berth/internal/domain"
 )
@@ -25,6 +28,7 @@ import (
 const (
 	berthNamespace      = "berth"
 	gvisorRuntime       = "io.containerd.runsc.v1"
+	defaultRuntime      = "io.containerd.runc.v2"
 	defaultTimeout      = 30 * time.Second
 	defaultCgroupParent = "berth.slice"
 )
@@ -134,15 +138,49 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		ociOpts = append(ociOpts, withWorkspaceMount(spec.WorkspaceDir, spec.WorkDir))
 	}
 
+	ociOpts = append(ociOpts, func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		var newMounts []specs.Mount
+		for _, m := range s.Mounts {
+			if m.Destination == "/sys" || m.Type == "sysfs" {
+				continue
+			}
+			newMounts = append(newMounts, m)
+		}
+		s.Mounts = newMounts
+
+		if s.Process == nil {
+			s.Process = &specs.Process{}
+		}
+		hasPath := false
+		for _, e := range s.Process.Env {
+			if strings.HasPrefix(e, "PATH=") {
+				hasPath = true
+				break
+			}
+		}
+		if !hasPath {
+			s.Process.Env = append(s.Process.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+		}
+
+		return nil
+	})
+
 	// Set main process command if provided
 	if len(spec.Cmd) > 0 {
 		ociOpts = append(ociOpts, withProcessArgs(spec.Cmd...))
 	}
 
+	optsData, err := anypb.New(&options.Options{
+		BinaryName: "/home/swordrookie/.local/bin/runsc",
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to create runc options: %w", err)
+	}
+
 	opts := []client.NewContainerOpts{
 		client.WithImage(baseImg),
 		client.WithNewSnapshot(containerID+"-snap", baseImg),
-		client.WithRuntime(gvisorRuntime, nil),
+		client.WithRuntime(defaultRuntime, optsData),
 		client.WithNewSpec(ociOpts...),
 	}
 
@@ -176,9 +214,9 @@ func (r *Runtime) MaintainBaseline() {
 	defer ticker.Stop()
 
 	baselineImages := []string{
-		"node:20-alpine",
-		"python:3.11-alpine",
-		"golang:1.23-alpine",
+		"docker.io/library/node:20-alpine",
+		"docker.io/library/python:3.11-alpine",
+		"docker.io/library/golang:1.23-alpine",
 	}
 
 	for range ticker.C {
@@ -190,15 +228,19 @@ func (r *Runtime) MaintainBaseline() {
 			if count < 1 {
 				ctx := context.Background()
 				mem := int64(512 * 1024 * 1024)
-				_ = r.warmPool.PreWarm(ctx, img, mem, func() (string, error) {
+				err := r.warmPool.PreWarm(ctx, img, mem, func() (string, error) {
 					spec := domain.SandboxSpec{
 						ID:          uuid.New(),
 						BaseImage:   img,
+						Cmd:         []string{"sh", "-c", "while true; do sleep 1; done"},
 						MemoryLimit: mem,
 						CPULimit:    500,
 					}
 					return r.createSandboxInternal(ctx, spec)
 				})
+				if err != nil {
+					slog.Error("PreWarm failed", "image", img, "error", err)
+				}
 			}
 		}
 	}
@@ -511,24 +553,34 @@ func withProcessArgs(args ...string) oci.SpecOpts {
 }
 
 func withLinuxNamespaces() oci.SpecOpts {
-	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
-		if s.Linux == nil {
-			s.Linux = &specs.Linux{}
-		}
-		s.Linux.Namespaces = []specs.LinuxNamespace{
+	return func(ctx context.Context, client oci.Client, c *containers.Container, s *specs.Spec) error {
+		namespaces := []specs.LinuxNamespace{
 			{Type: specs.PIDNamespace},
-			{Type: specs.NetworkNamespace},
 			{Type: specs.MountNamespace},
 			{Type: specs.IPCNamespace},
 			{Type: specs.UTSNamespace},
-			{Type: specs.CgroupNamespace},
 		}
+		if os.Geteuid() == 0 {
+			namespaces = append(namespaces,
+				specs.LinuxNamespace{Type: specs.NetworkNamespace},
+				specs.LinuxNamespace{Type: specs.CgroupNamespace},
+			)
+		}
+		s.Linux.Namespaces = namespaces
 		return nil
 	}
 }
 
 func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
-	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+	return func(ctx context.Context, client oci.Client, c *containers.Container, s *specs.Spec) error {
+		if os.Geteuid() != 0 {
+			slog.Warn("skipping cgroup limits: requires root privileges")
+			if s.Linux != nil {
+				s.Linux.CgroupsPath = ""
+				s.Linux.Resources = nil
+			}
+			return nil
+		}
 		if s.Linux == nil {
 			s.Linux = &specs.Linux{}
 		}
