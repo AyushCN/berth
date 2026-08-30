@@ -3,7 +3,6 @@ module github.com/AyushCN/berth
 go 1.24.0
 
 require (
-	github.com/containerd/containerd v1.7.23
 	github.com/containerd/containerd/api v1.11.1
 	github.com/containerd/containerd/v2 v2.0.0
 	github.com/containerd/errdefs v1.0.0
@@ -64,6 +63,7 @@ require (
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
