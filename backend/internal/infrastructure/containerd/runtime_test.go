@@ -37,7 +37,7 @@ func TestRuntimeLifecycle(t *testing.T) {
 		sockPath = "/run/containerd/containerd.sock"
 	}
 
-	rt, err := NewRuntime(sockPath)
+	rt, err := NewRuntime(sockPath, "runc")
 	if err != nil {
 		t.Skipf("skipping test, failed to create runtime (likely permission denied or no daemon): %v", err)
 	}

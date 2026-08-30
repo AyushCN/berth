@@ -252,13 +252,7 @@ export default function LoginPage() {
           <p className="text-base text-gray-400 opacity-70 tracking-wide">Initializing core modules</p>
         </main>
 
-        {/* Footer strings */}
-        <footer className="z-10 w-full px-8 py-8 flex flex-col items-center justify-center absolute bottom-0 opacity-80">
-          <div className="w-full max-w-lg border-t border-berth-900/50 pt-4 flex justify-between items-center px-4">
-            <span className="font-mono text-berth-500/70 terminal-text text-xs md:text-sm">ESTABLISHING SECURE CONNECTION // NODE: ALPHA-7</span>
-            <span className="font-mono text-berth-600 hidden md:block text-sm">SYS.VER.4.5.2</span>
-          </div>
-        </footer>
+        {/* Removed Footer */}
       </div>
     );
   }

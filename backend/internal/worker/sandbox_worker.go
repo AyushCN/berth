@@ -79,7 +79,13 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	cloneCmd := exec.CommandContext(bgCtx, "git", "clone", "--depth", "1", "-b", sandbox.GitBranch, sandbox.GitURL, workspaceDir)
+	cloneArgs := []string{"clone", "--depth", "1"}
+	if sandbox.GitBranch != "" {
+		cloneArgs = append(cloneArgs, "-b", sandbox.GitBranch)
+	}
+	cloneArgs = append(cloneArgs, sandbox.GitURL, workspaceDir)
+
+	cloneCmd := exec.CommandContext(bgCtx, "git", cloneArgs...)
 	if out, err := cloneCmd.CombinedOutput(); err != nil {
 		slog.Error("git clone failed", "error", err, "output", string(out))
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)

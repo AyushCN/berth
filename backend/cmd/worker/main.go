@@ -52,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	runtime, err := containerd.NewRuntime(cfg.ContainerdSocket)
+	runtime, err := containerd.NewRuntime(cfg.ContainerdSocket, cfg.Runtime)
 	if err != nil {
 		slog.Error("failed to init container runtime", "error", err)
 		os.Exit(1)

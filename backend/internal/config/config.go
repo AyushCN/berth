@@ -20,6 +20,7 @@ type Config struct {
 	PredictionAddr     string // gRPC address for Python prediction service
 	ContainerdSocket   string
 	WorkspaceDir       string
+	Runtime            string // "runsc" or "runc"
 }
 
 // Load reads configuration from environment variables.
@@ -61,6 +62,7 @@ func Load() (*Config, error) {
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
 		PredictionAddr:     getEnv("PREDICTION_ADDR", "http://localhost:50052"),
 		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
+		Runtime:            getEnv("BERTH_RUNTIME", "runc"),
 	}
 
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")

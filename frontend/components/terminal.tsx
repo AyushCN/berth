@@ -25,26 +25,45 @@ export function Terminal({ envId }: { envId: string }) {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
-    fitAddon.fit();
+    
+    // Defer initial fit to ensure layout is complete
+    setTimeout(() => {
+      try {
+        if (terminalRef.current && terminalRef.current.clientHeight > 0) {
+          fitAddon.fit();
+        }
+      } catch (e) {}
+    }, 10);
 
     term.writeln('\x1b[1;34mBerth Terminal\x1b[0m');
     term.writeln('Connecting to sandbox...');
 
     // Phase 3: WebSocket connection to backend
-    // const ws = new WebSocket(`ws://localhost:8080/ws/sandbox/${envId}`);
-    // ws.onmessage = (e) => term.write(e.data);
-    // term.onData((data) => ws.send(data));
+    const wsUrl = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:8080';
+    const ws = new WebSocket(`${wsUrl}/ws/sandbox/${envId}`);
+    ws.onmessage = (e) => term.write(e.data);
+    term.onData((data) => ws.send(data));
 
     xtermRef.current = term;
 
-    const handleResize = () => fitAddon.fit();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        try {
+          if (terminalRef.current && terminalRef.current.clientHeight > 0) {
+            fitAddon.fit();
+          }
+        } catch (e) {}
+      });
+    });
+    
+    resizeObserver.observe(terminalRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+      ws.close();
       term.dispose();
     };
   }, [envId]);
 
-  return <div ref={terminalRef} className="h-full w-full" />;
+  return <div ref={terminalRef} className="h-full w-full overflow-hidden" />;
 }

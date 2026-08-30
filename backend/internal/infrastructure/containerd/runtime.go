@@ -38,12 +38,13 @@ type Runtime struct {
 	client   *client.Client
 	sockPath string
 	layerMgr *LayerManager
-	netMgr   *NetworkManager
-	warmPool *WarmPool
+	netMgr      *NetworkManager
+	warmPool    *WarmPool
+	runtimeType string
 }
 
 // NewRuntime creates a new containerd-backed runtime.
-func NewRuntime(sockPath string) (*Runtime, error) {
+func NewRuntime(sockPath string, runtimeType string) (*Runtime, error) {
 	if sockPath == "" {
 		sockPath = "/run/containerd/containerd.sock"
 		if os.Getenv("CONTAINERD_SOCK") != "" {
@@ -76,10 +77,11 @@ func NewRuntime(sockPath string) (*Runtime, error) {
 	}
 
 	r := &Runtime{
-		client:   c,
-		sockPath: sockPath,
-		layerMgr: layerMgr,
-		netMgr:   netMgr,
+		client:      c,
+		sockPath:    sockPath,
+		layerMgr:    layerMgr,
+		netMgr:      netMgr,
+		runtimeType: runtimeType,
 	}
 
 	r.warmPool = NewWarmPool(8*1024*1024*1024, func(ctx context.Context, id string) error {
@@ -170,17 +172,24 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		ociOpts = append(ociOpts, withProcessArgs(spec.Cmd...))
 	}
 
-	optsData, err := anypb.New(&options.Options{
-		BinaryName: "/home/swordrookie/.local/bin/runsc",
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to create runc options: %w", err)
+	rt := defaultRuntime
+	var optsData *anypb.Any
+
+	if r.runtimeType == "runsc" {
+		rt = gvisorRuntime
+		// runsc shim does not accept runc options format. Pass nil.
+		optsData = nil
+	} else {
+		optsData, err = anypb.New(&options.Options{})
+		if err != nil {
+			return "", fmt.Errorf("failed to create runc options: %w", err)
+		}
 	}
 
 	opts := []client.NewContainerOpts{
 		client.WithImage(baseImg),
 		client.WithNewSnapshot(containerID+"-snap", baseImg),
-		client.WithRuntime(defaultRuntime, optsData),
+		client.WithRuntime(rt, optsData),
 		client.WithNewSpec(ociOpts...),
 	}
 

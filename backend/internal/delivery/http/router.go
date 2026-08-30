@@ -49,6 +49,16 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			authenticated.GET("/environments/:id/files", deps.FileHandler.ListFiles)
 			authenticated.GET("/environments/:id/files/content", deps.FileHandler.GetFileContent)
 			authenticated.PUT("/environments/:id/files/content", deps.FileHandler.UpdateFileContent)
+
+			// Git
+			authenticated.GET("/environments/:id/git/status", deps.GitHandler.Status)
+			authenticated.GET("/environments/:id/git/branches", deps.GitHandler.ListBranches)
+			authenticated.POST("/environments/:id/git/branch", deps.GitHandler.CreateBranch)
+			authenticated.POST("/environments/:id/git/checkout", deps.GitHandler.Checkout)
+			authenticated.POST("/environments/:id/git/pull", deps.GitHandler.Pull)
+			authenticated.POST("/environments/:id/git/commit", deps.GitHandler.Commit)
+			authenticated.POST("/environments/:id/git/push", deps.GitHandler.Push)
+			authenticated.GET("/environments/:id/git/log", deps.GitHandler.Log)
 		}
 	}
 
@@ -71,4 +81,5 @@ type Dependencies struct {
 	SandboxHandler *handler.SandboxHandler
 	FileHandler    *handler.FileHandler
 	WSHandler      *handler.WSHandler
+	GitHandler     *handler.GitHandler
 }

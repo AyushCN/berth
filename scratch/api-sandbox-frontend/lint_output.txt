@@ -1,0 +1,89 @@
+
+> api-sandbox@0.1.0 lint
+> eslint
+
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/(main)/environments/[id]/page.tsx
+    12:15  warning  'Check' is defined but never used                                                                                   @typescript-eslint/no-unused-vars
+    12:79  warning  'DownloadCloud' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+   187:14  warning  'e' is defined but never used                                                                                       @typescript-eslint/no-unused-vars
+   207:10  warning  'isDockerLogsOpen' is assigned a value but never used                                                               @typescript-eslint/no-unused-vars
+   207:28  warning  'setIsDockerLogsOpen' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+   255:16  warning  'err' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   292:6   warning  React Hook useEffect has a missing dependency: 'fetchDockerLogs'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   338:13  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   385:53  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   393:13  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   423:15  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   484:13  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   515:13  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   553:15  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   554:19  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   580:32  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   599:6   warning  React Hook useEffect has a missing dependency: 'env.logs'. Either include it or remove the dependency array         react-hooks/exhaustive-deps
+   605:38  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   611:27  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   617:6   warning  React Hook useEffect has a missing dependency: 'env.logs'. Either include it or remove the dependency array         react-hooks/exhaustive-deps
+   627:13  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   648:13  warning  'token' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   657:30  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   658:30  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   919:54  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   921:67  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+  1138:51  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+  1226:43  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+  1226:84  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/(main)/profile/page.tsx
+    8:41  warning  'MessageSquare' is defined but never used    @typescript-eslint/no-unused-vars
+  155:13  warning  'res' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  224:9   warning  'router' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/(main)/projects/page.tsx
+  91:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/(main)/upload/page.tsx
+   10:10  warning  'Code' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   52:18  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/(main)/upload/page.tsx:52:18
+  50 |   const { data: projects, isLoading: isProjectsLoading } = useSWR("/api/projects", (url) => fetchWithAuth(url));
+  51 |
+> 52 |   const gitUrl = watch("gitUrl");
+     |                  ^^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  53 |   const projectId = watch("projectId");
+  54 |
+  55 |   // Auto-select first project when projects load  react-hooks/incompatible-library
+   80:42  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+   87:16  warning  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-unused-vars
+  162:36  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/layout.tsx
+   3:8   warning  'Link' is defined but never used                                                                                                                                 @typescript-eslint/no-unused-vars
+   6:10  warning  'LogoutButton' is defined but never used                                                                                                                         @typescript-eslint/no-unused-vars
+  21:9   warning  A font-display parameter is missing (adding `&display=optional` is recommended). See: https://nextjs.org/docs/messages/google-font-display                       @next/next/google-font-display
+  21:9   warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/login/page.tsx
+  128:11  warning  'router' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  130:19  warning  'setEmail' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  131:22  warning  'setPassword' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  132:12  warning  'error' is assigned a value but never used        @typescript-eslint/no-unused-vars
+  133:12  warning  'loading' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  136:11  warning  'handleLogin' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/app/register/page.tsx
+  142:12  warning  'showPassword' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  142:26  warning  'setShowPassword' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  145:12  warning  'isSubmitting' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  173:11  warning  'strength' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  174:11  warning  'strengthLabels' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  176:11  warning  'handleSubmit' is assigned a value but never used     @typescript-eslint/no-unused-vars
+
+/home/swordrookie/projects/api_sandbox_links/api-sandbox/frontend/lib/auth.tsx
+  58:14  warning  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 55 problems (16 errors, 39 warnings)
+

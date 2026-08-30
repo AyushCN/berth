@@ -48,3 +48,18 @@ WHERE id = (
     LIMIT 1
 ) 
 RETURNING *;
+
+-- name: UpdateSandboxGitTracking :exec
+UPDATE sandboxes 
+SET has_uncommitted_changes = $2, last_modified_at = NOW(), modified_by_user_id = $3, commit_hash = $4, updated_at = NOW() 
+WHERE id = $1;
+
+-- name: CreateSandboxActivity :one
+INSERT INTO sandbox_activities (sandbox_id, activity_type, data, user_id)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: CreateSandboxChange :one
+INSERT INTO sandbox_changes (sandbox_id, file_path, change_type, user_id, diff, committed_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;

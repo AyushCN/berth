@@ -33,20 +33,24 @@ const (
 
 // Sandbox is the core aggregate root for an ephemeral dev environment.
 type Sandbox struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	OwnerID     uuid.UUID
-	Name        string
-	GitURL      string
-	GitBranch   string
-	State       SandboxState
-	Profile     *RuntimeProfile
-	ContainerID *string // containerd container ID
-	PublicURL   *string
-	Port        *int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	ExpiresAt   *time.Time
+	ID          uuid.UUID       `json:"id"`
+	ProjectID   uuid.UUID       `json:"project_id"`
+	OwnerID     uuid.UUID       `json:"owner_id"`
+	Name        string          `json:"name"`
+	GitURL      string          `json:"git_url"`
+	GitBranch   string          `json:"git_branch"`
+	State       SandboxState    `json:"state"`
+	Profile     *RuntimeProfile `json:"profile,omitempty"`
+	ContainerID *string         `json:"container_id,omitempty"`
+	PublicURL             *string         `json:"public_url,omitempty"`
+	Port                  *int            `json:"port,omitempty"`
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
+	ExpiresAt             *time.Time      `json:"expires_at,omitempty"`
+	HasUncommittedChanges bool            `json:"has_uncommitted_changes"`
+	LastModifiedAt        *time.Time      `json:"last_modified_at,omitempty"`
+	ModifiedByUserID      *uuid.UUID      `json:"modified_by_user_id,omitempty"`
+	CommitHash            *string         `json:"commit_hash,omitempty"`
 }
 
 // IsActive returns true if the sandbox is running or building.
@@ -80,6 +84,8 @@ type SandboxRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	PopPendingSandbox(ctx context.Context) (*Sandbox, error)
+	UpdateGitTracking(ctx context.Context, id uuid.UUID, hasChanges bool, modifiedBy *uuid.UUID, commitHash *string) error
+	LogActivity(ctx context.Context, sandboxID uuid.UUID, userID uuid.UUID, activityType string, data []byte) error
 }
 
 // PredictionService defines the interface for the ML prediction microservice.

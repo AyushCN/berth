@@ -40,11 +40,24 @@ export const api = {
       fetchAPI(`/api/environments/${id}/exec`, { method: 'POST', body: JSON.stringify({ command }) }),
     logs: (id: string) => fetchAPI(`/api/environments/${id}/logs`),
   },
+  git: {
+    status: (id: string) => fetchAPI(`/api/environments/${id}/git/status`),
+    branches: (id: string) => fetchAPI(`/api/environments/${id}/git/branches`),
+    createBranch: (id: string, branch: string) => fetchAPI(`/api/environments/${id}/git/branch`, { method: 'POST', body: JSON.stringify({ branch }) }),
+    checkout: (id: string, branch: string, force?: boolean) => fetchAPI(`/api/environments/${id}/git/checkout`, { method: 'POST', body: JSON.stringify({ branch, force }) }),
+    pull: (id: string) => fetchAPI(`/api/environments/${id}/git/pull`, { method: 'POST' }),
+    commit: (id: string, message: string) => fetchAPI(`/api/environments/${id}/git/commit`, { method: 'POST', body: JSON.stringify({ message }) }),
+    push: (id: string) => fetchAPI(`/api/environments/${id}/git/push`, { method: 'POST' }),
+    log: (id: string) => fetchAPI(`/api/environments/${id}/git/log`),
+  },
   files: {
     list: (id: string, path: string = '.') =>
       fetchAPI(`/api/environments/${id}/files?path=${encodeURIComponent(path)}`),
-    getContent: (id: string, path: string) =>
-      fetchAPI(`/api/environments/${id}/files/content?path=${encodeURIComponent(path)}`),
+    getContent: async (id: string, path: string) => {
+      const res = await fetch(`${API_BASE}/api/environments/${id}/files/content?path=${encodeURIComponent(path)}`, { credentials: 'include' });
+      if (!res.ok) throw new Error("Failed to fetch file content");
+      return res.text();
+    },
     updateContent: (id: string, path: string, content: string) =>
       fetchAPI(`/api/environments/${id}/files/content?path=${encodeURIComponent(path)}`, {
         method: 'PUT',

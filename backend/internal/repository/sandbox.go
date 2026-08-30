@@ -101,6 +101,33 @@ func (r *SandboxRepository) PopPendingSandbox(ctx context.Context) (*domain.Sand
 	return toDomainSandbox(s), nil
 }
 
+func (r *SandboxRepository) UpdateGitTracking(ctx context.Context, id uuid.UUID, hasChanges bool, modifiedBy *uuid.UUID, commitHash *string) error {
+	var modifiedByUUID pgtype.UUID
+	if modifiedBy != nil {
+		modifiedByUUID = pgtype.UUID{Bytes: *modifiedBy, Valid: true}
+	}
+	var commitHashStr pgtype.Text
+	if commitHash != nil {
+		commitHashStr = pgtype.Text{String: *commitHash, Valid: true}
+	}
+	return r.queries.UpdateSandboxGitTracking(ctx, UpdateSandboxGitTrackingParams{
+		ID:                    id,
+		HasUncommittedChanges: pgtype.Bool{Bool: hasChanges, Valid: true},
+		ModifiedByUserID:      modifiedByUUID,
+		CommitHash:            commitHashStr,
+	})
+}
+
+func (r *SandboxRepository) LogActivity(ctx context.Context, sandboxID uuid.UUID, userID uuid.UUID, activityType string, data []byte) error {
+	_, err := r.queries.CreateSandboxActivity(ctx, CreateSandboxActivityParams{
+		SandboxID:    pgtype.UUID{Bytes: sandboxID, Valid: true},
+		ActivityType: activityType,
+		Data:         data,
+		UserID:       pgtype.UUID{Bytes: userID, Valid: true},
+	})
+	return err
+}
+
 func toDomainSandbox(s Sandbox) *domain.Sandbox {
 	sb := &domain.Sandbox{
 		ID:        s.ID,
@@ -117,6 +144,20 @@ func toDomainSandbox(s Sandbox) *domain.Sandbox {
 	}
 	if s.PublicUrl.Valid {
 		sb.PublicURL = &s.PublicUrl.String
+	}
+	if s.HasUncommittedChanges.Valid {
+		sb.HasUncommittedChanges = s.HasUncommittedChanges.Bool
+	}
+	if s.LastModifiedAt.Valid {
+		sb.LastModifiedAt = &s.LastModifiedAt.Time
+	}
+	if s.ModifiedByUserID.Valid {
+		id := s.ModifiedByUserID.Bytes
+		parsed, _ := uuid.FromBytes(id[:])
+		sb.ModifiedByUserID = &parsed
+	}
+	if s.CommitHash.Valid {
+		sb.CommitHash = &s.CommitHash.String
 	}
 	return sb
 }

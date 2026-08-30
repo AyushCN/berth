@@ -98,6 +98,7 @@ func main() {
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
 	fileUC := usecase.NewFileUsecase(workspaceDir)
+	gitUC := usecase.NewGitUsecase(workspaceDir)
 
 	// Handlers
 	deps := &berthhttp.Dependencies{
@@ -105,6 +106,7 @@ func main() {
 		SandboxHandler: handler.NewSandboxHandler(sandboxUC),
 		FileHandler:    handler.NewFileHandler(fileUC),
 		WSHandler:      handler.NewWSHandler(natsClient),
+		GitHandler:     handler.NewGitHandler(gitUC),
 	}
 
 	// Router
