@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { useEnvStore } from '@/stores/env';
 import { X } from 'lucide-react';
 
-export function CreateEnvironmentModal({ onClose }: { onClose: () => void }) {
+export function CreateEnvironmentModal({ onClose, projectId }: { onClose: () => void, projectId?: string | null }) {
   const [name, setName] = useState('');
   const [gitUrl, setGitUrl] = useState('');
   const [gitBranch, setGitBranch] = useState('main');
@@ -16,7 +16,11 @@ export function CreateEnvironmentModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const env = await api.environments.create({ name, git_url: gitUrl, git_branch: gitBranch });
+      const payload: any = { name, git_url: gitUrl, git_branch: gitBranch };
+      if (projectId) {
+        payload.project_id = projectId;
+      }
+      const env = await api.environments.create(payload);
       addEnvironment(env);
       onClose();
     } catch (err) {

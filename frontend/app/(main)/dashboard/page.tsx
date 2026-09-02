@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Plus,
   GitBranch,
@@ -9,7 +10,10 @@ import {
   XCircle,
   Code,
   ArrowRight,
+  MoreVertical,
+  GitFork,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
 import { useEnvStore } from "@/stores/env";
@@ -60,11 +64,16 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function SandboxesDashboard() {
+import { Suspense } from "react";
+
+function SandboxesDashboardContent() {
   const { user } = useAuthStore();
   const { environments, setEnvironments, isLoading, setLoading } = useEnvStore();
   const [error, setError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("project_id");
+  const [forkingId, setForkingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -72,7 +81,11 @@ export default function SandboxesDashboard() {
     setError(false);
     
     const fetchEnvs = () => {
-      api.environments.list()
+      const fetchPromise = projectId 
+        ? api.projects.sandboxes(projectId)
+        : api.environments.list();
+
+      fetchPromise
         .then((data) => setEnvironments(data.sandboxes || []))
         .catch((err) => {
           console.error(err);
@@ -84,7 +97,27 @@ export default function SandboxesDashboard() {
     fetchEnvs();
     const interval = setInterval(fetchEnvs, 3000);
     return () => clearInterval(interval);
-  }, [user, setEnvironments, setLoading]);
+  }, [user, setEnvironments, setLoading, projectId]);
+
+  const handleFork = async (e: React.MouseEvent, envId: string, envName: string) => {
+    e.preventDefault();
+    if (forkingId) return;
+    setForkingId(envId);
+    try {
+      await api.environments.fork(envId, { name: `${envName} (Fork)` });
+      toast.success("Sandbox forked successfully!");
+      // Refetch
+      const fetchPromise = projectId 
+        ? api.projects.sandboxes(projectId)
+        : api.environments.list();
+      const data = await fetchPromise;
+      setEnvironments(data.sandboxes || []);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to fork sandbox");
+    } finally {
+      setForkingId(null);
+    }
+  };
 
   return (
     <div className="space-y-8 pb-12">
@@ -182,7 +215,17 @@ export default function SandboxesDashboard() {
                       <div className="w-9 h-9 rounded-lg bg-primary-fixed/10 border border-primary-fixed/20 flex items-center justify-center shrink-0">
                         <Box className="w-4 h-4 text-primary-fixed" />
                       </div>
-                      <StatusBadge status={env.state} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={env.state} />
+                        <button
+                          onClick={(e) => handleFork(e, env.id, env.name)}
+                          disabled={forkingId === env.id}
+                          className="p-1 rounded bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface-variant z-20 disabled:opacity-50"
+                          title="Fork Sandbox"
+                        >
+                          <GitFork className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <div className="relative z-10 flex-1 min-w-0">
                       <h3 className="font-bold text-base text-on-surface group-hover:text-primary-fixed transition-colors truncate mb-1.5">
@@ -212,7 +255,15 @@ export default function SandboxesDashboard() {
         )}
       </div>
 
-      {showCreate && <CreateEnvironmentModal onClose={() => setShowCreate(false)} />}
+      {showCreate && <CreateEnvironmentModal onClose={() => setShowCreate(false)} projectId={projectId} />}
     </div>
+  );
+}
+
+export default function SandboxesDashboard() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-white/50 animate-pulse">Loading dashboard...</div>}>
+      <SandboxesDashboardContent />
+    </Suspense>
   );
 }

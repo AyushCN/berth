@@ -63,7 +63,7 @@ func main() {
 	defer redis.Close()
 
 	// Repositories
-	natsClient, err := nats.NewClient("nats://localhost:4222")
+	natsClient, err := nats.NewClient(cfg.NatsURL)
 	if err != nil {
 		slog.Warn("nats not available, continuing without real-time sync", "error", err)
 		natsClient = nil
@@ -84,13 +84,17 @@ func main() {
 	queries := repository.New(db.Pool())
 	userRepo := repository.NewUserRepository(queries)
 	sandboxRepo := repository.NewSandboxRepository(queries)
+	orgRepo := repository.NewOrganizationRepository(queries)
+	projRepo := repository.NewProjectRepository(queries)
 
 	// OAuth client
 	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, "http://localhost:3000/api/auth/github/callback")
 
 	// Usecases
 	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret)
-	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, nil, nil) // runtime and predictor nil in API mode
+	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, nil, natsClient) // runtime and predictor nil in API mode
+	orgUC := usecase.NewOrganizationUsecase(orgRepo)
+	projUC := usecase.NewProjectUsecase(projRepo, orgRepo)
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")
 	if workspaceDir == "" {
 		home, _ := os.UserHomeDir()
@@ -107,6 +111,8 @@ func main() {
 		FileHandler:    handler.NewFileHandler(fileUC),
 		WSHandler:      handler.NewWSHandler(natsClient),
 		GitHandler:     handler.NewGitHandler(gitUC),
+		OrgHandler:     handler.NewOrganizationHandler(orgUC),
+		ProjectHandler: handler.NewProjectHandler(projUC),
 	}
 
 	// Router

@@ -23,6 +23,7 @@ graph TD
         API[Go API - cmd/api]
         PostgreSQL[(PostgreSQL)]
         Redis[(Redis)]
+        NATS[NATS JetStream]
     end
     
     subgraph Data Plane (Privileged)
@@ -40,8 +41,10 @@ graph TD
     API --> PostgreSQL
     API --> Redis
     API -.->|Writes PENDING state| PostgreSQL
+    API -->|Publishes event| NATS
     
-    Worker -.->|Polls PENDING state| PostgreSQL
+    Worker -.->|Subscribes to events| NATS
+    Worker -.->|Polls PENDING (Fallback)| PostgreSQL
     Worker -->|containerd / runc.v2| EnvA
 ```
 

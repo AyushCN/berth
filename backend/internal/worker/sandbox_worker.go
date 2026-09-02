@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -9,34 +10,57 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AyushCN/berth/internal/domain"
+	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
+	natsCore "github.com/nats-io/nats.go"
 )
 
 type SandboxWorker struct {
-	repo    domain.SandboxRepository
-	runtime domain.ContainerRuntime
-	ml      domain.PredictionService
+	repo       domain.SandboxRepository
+	runtime    domain.ContainerRuntime
+	ml         domain.PredictionService
+	natsClient *natsInfra.Client
+	wg         sync.WaitGroup
 }
 
-func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, ml domain.PredictionService) *SandboxWorker {
+func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, ml domain.PredictionService, natsClient *natsInfra.Client) *SandboxWorker {
 	return &SandboxWorker{
-		repo:    repo,
-		runtime: runtime,
-		ml:      ml,
+		repo:       repo,
+		runtime:    runtime,
+		ml:         ml,
+		natsClient: natsClient,
 	}
 }
 
 func (w *SandboxWorker) Start(ctx context.Context) {
-	slog.Info("sandbox worker started, polling for PENDING sandboxes")
-	ticker := time.NewTicker(2 * time.Second)
+	slog.Info("sandbox worker started, connecting to NATS")
+
+	if w.natsClient != nil {
+		_, err := w.natsClient.Subscribe("berth.sandbox.create", "worker-group", func(msg *natsCore.Msg) {
+			msg.Ack()
+			// trigger the pending sandbox processor
+			w.processPending(ctx)
+		})
+		if err != nil {
+			slog.Error("failed to subscribe to NATS", "error", err)
+		} else {
+			slog.Info("subscribed to berth.sandbox.create events")
+		}
+	}
+
+	// 10s fallback polling
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("sandbox worker shutting down")
+			slog.Info("sandbox worker shutting down, waiting for active jobs to finish")
+			w.wg.Wait()
+			slog.Info("sandbox worker shutdown complete")
 			return
 		case <-ticker.C:
 			w.processPending(ctx)
@@ -45,12 +69,17 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 }
 
 func (w *SandboxWorker) processPending(ctx context.Context) {
+	w.wg.Add(1)
+	defer w.wg.Done()
+
+	dbPopStart := time.Now()
 	sandbox, err := w.repo.PopPendingSandbox(ctx)
 	if err != nil {
 		return
 	}
+	dbPopDuration := time.Since(dbPopStart)
 
-	slog.Info("processing pending sandbox", "sandbox_id", sandbox.ID, "git_url", sandbox.GitURL)
+	slog.Info("processing pending sandbox", "sandbox_id", sandbox.ID, "git_url", sandbox.GitURL, "db_pop_duration", dbPopDuration)
 
 	// Validate Git URL before any filesystem or network operation
 	if err := validateGitURL(sandbox.GitURL); err != nil {
@@ -69,30 +98,56 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	// Prepare workspace directory
 	home, _ := os.UserHomeDir()
 	workspaceDir := filepath.Join(home, ".local", "state", "berth", "workspaces", sandbox.ID.String())
+	
+	success := false
+	var cid string
+	defer func() {
+		if !success {
+			_ = os.RemoveAll(workspaceDir)
+			if cid != "" {
+				// Fire and forget cleanup
+				go func(id string) {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancel()
+					_ = w.runtime.DeleteSandbox(ctx, id)
+				}(cid)
+			}
+		}
+	}()
+
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 		slog.Error("failed to create workspace dir", "error", err)
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 		return
 	}
 
-	// Clone repository
+	// Clone repository in background
 	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	cloneArgs := []string{"clone", "--depth", "1"}
-	if sandbox.GitBranch != "" {
-		cloneArgs = append(cloneArgs, "-b", sandbox.GitBranch)
-	}
-	cloneArgs = append(cloneArgs, sandbox.GitURL, workspaceDir)
+	cloneDone := make(chan error, 1)
+	var cloneDuration time.Duration
 
-	cloneCmd := exec.CommandContext(bgCtx, "git", cloneArgs...)
-	if out, err := cloneCmd.CombinedOutput(); err != nil {
-		slog.Error("git clone failed", "error", err, "output", string(out))
-		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
-		return
-	}
+	go func() {
+		cloneStart := time.Now()
+		cloneArgs := []string{"clone", "--depth", "1"}
+		if sandbox.GitBranch != "" {
+			cloneArgs = append(cloneArgs, "-b", sandbox.GitBranch)
+		}
+		cloneArgs = append(cloneArgs, sandbox.GitURL, workspaceDir)
 
-	// Predict runtime profile
+		cloneCmd := exec.CommandContext(bgCtx, "git", cloneArgs...)
+		var err error
+		if out, cmdErr := cloneCmd.CombinedOutput(); cmdErr != nil {
+			slog.Error("git clone failed", "error", cmdErr, "output", string(out))
+			err = cmdErr
+		}
+		cloneDuration = time.Since(cloneStart)
+		cloneDone <- err
+	}()
+
+	// Predict runtime profile while clone is starting
+	predictStart := time.Now()
 	profile, err := w.ml.Predict(bgCtx, sandbox.GitURL, sandbox.GitBranch)
 	if err != nil {
 		slog.Warn("prediction failed, using fallback", "error", err)
@@ -106,8 +161,10 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 			Confidence:  0.0,
 		}
 	}
+	predictDuration := time.Since(predictStart)
 
 	// Create container with bind mount and keep-alive command
+	// We can do this before clone finishes because the workspaceDir already exists!
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,
@@ -118,30 +175,87 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		CPULimit:     1000,
 	}
 
-	cid, err := w.runtime.CreateSandbox(bgCtx, spec)
-	if err != nil {
-		slog.Error("worker failed to create container", "sandbox_id", sandbox.ID, "error", err)
+	createStart := time.Now()
+	var errCreate error
+	cid, errCreate = w.runtime.CreateSandbox(bgCtx, spec)
+	if errCreate != nil {
+		slog.Error("worker failed to create container", "sandbox_id", sandbox.ID, "error", errCreate)
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 		return
 	}
+	createDuration := time.Since(createStart)
 
 	if err := w.repo.UpdateContainerID(bgCtx, sandbox.ID, cid); err != nil {
 		slog.Error("worker failed to update container id", "sandbox_id", sandbox.ID, "error", err)
 	}
 
+	// Wait for clone to finish before proceeding to start and install
+	if cloneErr := <-cloneDone; cloneErr != nil {
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+
+	startStart := time.Now()
 	if err := w.runtime.StartSandbox(bgCtx, cid); err != nil {
 		slog.Error("worker failed to start container", "sandbox_id", sandbox.ID, "error", err)
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 		return
 	}
+	startDuration := time.Since(startStart)
+
+	// Determine lockfile hash for dependency caching
+	var lockfile string
+	var cacheTarget string
+	if _, err := os.Stat(filepath.Join(workspaceDir, "package-lock.json")); err == nil {
+		lockfile = "package-lock.json"
+		cacheTarget = "node_modules"
+	} else if _, err := os.Stat(filepath.Join(workspaceDir, "go.sum")); err == nil {
+		lockfile = "go.sum"
+		cacheTarget = "vendor"
+	}
+
+	var depCachePath string
+	var cacheHit bool
+	if lockfile != "" {
+		if b, err := os.ReadFile(filepath.Join(workspaceDir, lockfile)); err == nil {
+			sum := sha256.Sum256(b)
+			hash := fmt.Sprintf("%x", sum)[:16]
+			depCachePath = filepath.Join(home, ".local", "state", "berth", "cache", "deps", profile.Language, hash)
+			if _, err := os.Stat(depCachePath); err == nil {
+				cacheHit = true
+			}
+		}
+	}
 
 	// Install dependencies inside container
+	var installDuration time.Duration
 	if profile.InstallCmd != "" {
-		installArgs := []string{"sh", "-c", "cd /app && " + profile.InstallCmd}
-		if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
-			slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
+		if cacheHit {
+			slog.Info("dependency cache hit", "sandbox_id", sandbox.ID, "path", depCachePath)
+			// Copy cached dependencies into workspace
+			cmd := exec.Command("cp", "-a", depCachePath+"/.", filepath.Join(workspaceDir, cacheTarget)+"/")
+			_ = os.MkdirAll(filepath.Join(workspaceDir, cacheTarget), 0755)
+			if err := cmd.Run(); err != nil {
+				slog.Warn("failed to restore dependency cache", "error", err)
+			}
 		} else {
-			slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out)
+			installStart := time.Now()
+			installArgs := []string{"sh", "-c", "cd /app && " + profile.InstallCmd}
+			if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
+				slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
+			} else {
+				installDuration = time.Since(installStart)
+				slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out, "install_duration", installDuration)
+				
+				// Save to cache
+				if depCachePath != "" {
+					_ = os.MkdirAll(depCachePath, 0755)
+					cmd := exec.Command("cp", "-a", filepath.Join(workspaceDir, cacheTarget)+"/.", depCachePath+"/")
+					if err := cmd.Run(); err != nil {
+						slog.Warn("failed to save dependency cache", "error", err)
+					}
+				}
+			}
 		}
 	}
 
@@ -150,11 +264,22 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 
+	totalDuration := time.Since(dbPopStart)
+	success = true
 	slog.Info("sandbox provisioned successfully",
 		"sandbox_id", sandbox.ID,
 		"container_id", cid,
 		"language", profile.Language,
 		"base_image", profile.BaseImage,
+		"timing_metrics", map[string]any{
+			"db_pop":  dbPopDuration.String(),
+			"clone":   cloneDuration.String(),
+			"predict": predictDuration.String(),
+			"create":  createDuration.String(),
+			"start":   startDuration.String(),
+			"install": installDuration.String(),
+			"total":   totalDuration.String(),
+		},
 	)
 }
 

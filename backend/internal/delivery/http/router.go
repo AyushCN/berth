@@ -37,9 +37,22 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 		{
 			authenticated.GET("/user/me", deps.AuthHandler.GetMe)
 
+			// Organizations
+			authenticated.POST("/orgs", deps.OrgHandler.Create)
+			authenticated.GET("/orgs", deps.OrgHandler.List)
+			authenticated.POST("/orgs/:id/members", deps.OrgHandler.AddMember)
+			authenticated.GET("/orgs/:id/members", deps.OrgHandler.ListMembers)
+
+			// Projects
+			authenticated.POST("/projects", deps.ProjectHandler.Create)
+			authenticated.GET("/projects", deps.ProjectHandler.ListForUser)
+			authenticated.GET("/orgs/:id/projects", deps.ProjectHandler.ListForOrg)
+			authenticated.GET("/projects/:id/sandboxes", deps.ProjectHandler.GetSandboxes)
+
 			// Environments
 			authenticated.GET("/environments", deps.SandboxHandler.ListEnvironments)
 			authenticated.POST("/environments", deps.SandboxHandler.CreateEnvironment)
+			authenticated.POST("/environments/:id/fork", deps.SandboxHandler.ForkEnvironment)
 			authenticated.GET("/environments/:id", deps.SandboxHandler.GetEnvironment)
 			authenticated.DELETE("/environments/:id", deps.SandboxHandler.DeleteEnvironment)
 			authenticated.POST("/environments/:id/exec", deps.SandboxHandler.ExecCommand)
@@ -82,4 +95,6 @@ type Dependencies struct {
 	FileHandler    *handler.FileHandler
 	WSHandler      *handler.WSHandler
 	GitHandler     *handler.GitHandler
+	OrgHandler     *handler.OrganizationHandler
+	ProjectHandler *handler.ProjectHandler
 }

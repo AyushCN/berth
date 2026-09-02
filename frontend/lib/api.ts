@@ -32,8 +32,10 @@ export const api = {
   },
   environments: {
     list: () => fetchAPI('/api/environments'),
-    create: (data: { name: string; git_url: string; git_branch: string }) =>
+    create: (data: { name: string; git_url: string; git_branch: string; project_id?: string }) =>
       fetchAPI('/api/environments', { method: 'POST', body: JSON.stringify(data) }),
+    fork: (id: string, data: { name: string; project_id?: string }) =>
+      fetchAPI(`/api/environments/${id}/fork`, { method: 'POST', body: JSON.stringify(data) }),
     get: (id: string) => fetchAPI(`/api/environments/${id}`),
     delete: (id: string) => fetchAPI(`/api/environments/${id}`, { method: 'DELETE' }),
     exec: (id: string, command: string[]) =>
@@ -65,4 +67,17 @@ export const api = {
         headers: { 'Content-Type': 'application/octet-stream' },
       }),
   },
+  orgs: {
+    list: () => fetchAPI('/api/orgs'),
+    create: (data: { name: string }) => fetchAPI('/api/orgs', { method: 'POST', body: JSON.stringify(data) }),
+    members: (id: string) => fetchAPI(`/api/orgs/${id}/members`),
+    addMember: (id: string, data: { user_id: string; role: string }) => fetchAPI(`/api/orgs/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+  projects: {
+    list: () => fetchAPI('/api/projects'),
+    listForOrg: (orgId: string) => fetchAPI(`/api/orgs/${orgId}/projects`),
+    create: (data: { name: string; description?: string; owner_organization_id: string; is_public: boolean }) =>
+      fetchAPI('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
+    sandboxes: (id: string) => fetchAPI(`/api/projects/${id}/sandboxes`),
+  }
 };

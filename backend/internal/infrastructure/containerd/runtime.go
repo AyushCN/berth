@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -37,10 +38,11 @@ const (
 type Runtime struct {
 	client   *client.Client
 	sockPath string
-	layerMgr *LayerManager
+	layerMgr    *LayerManager
 	netMgr      *NetworkManager
 	warmPool    *WarmPool
 	runtimeType string
+	dirtyContainers sync.Map
 }
 
 // NewRuntime creates a new containerd-backed runtime.
@@ -106,9 +108,11 @@ func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (s
 	ctx = withNamespace(ctx)
 
 	// 1. Check warm pool first
-	if warm := r.warmPool.Take(spec.BaseImage); warm != "" {
+	if warm, reason := r.warmPool.Take(spec.BaseImage); warm != "" {
 		slog.Info("warm pool hit", "container_id", warm)
 		return warm, nil
+	} else {
+		slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage)
 	}
 
 	return r.createSandboxInternal(ctx, spec)
@@ -234,7 +238,7 @@ func (r *Runtime) MaintainBaseline() {
 			count := len(r.warmPool.available[img])
 			r.warmPool.mu.RUnlock()
 
-			if count < 1 {
+			if count < 3 {
 				ctx := context.Background()
 				mem := int64(512 * 1024 * 1024)
 				err := r.warmPool.PreWarm(ctx, img, mem, func() (string, error) {
@@ -355,9 +359,15 @@ func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
 func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string) error {
 	ctx = withNamespace(ctx)
 
-	if r.warmPool.Return(containerID) {
-		slog.Info("sandbox returned to warm pool", "container_id", containerID)
-		return nil
+	_, isDirty := r.dirtyContainers.Load(containerID)
+	if !isDirty {
+		if r.warmPool.Return(containerID) {
+			slog.Info("sandbox returned to warm pool", "container_id", containerID)
+			return nil
+		}
+	} else {
+		slog.Info("sandbox is dirty, not returning to warm pool", "container_id", containerID)
+		r.dirtyContainers.Delete(containerID)
 	}
 
 	return r.StopSandbox(ctx, containerID)
@@ -366,6 +376,9 @@ func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string) error {
 // Exec runs a command inside an existing sandbox.
 func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (string, error) {
 	ctx = withNamespace(ctx)
+
+	// Any exec makes the container dirty and unfit for reuse in the warm pool
+	r.dirtyContainers.Store(containerID, true)
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
@@ -609,6 +622,13 @@ func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
 				Period: &period,
 			}
 		}
+		
+		// Prevent fork bombs
+		pidsLimit := int64(100)
+		s.Linux.Resources.Pids = &specs.LinuxPids{
+			Limit: pidsLimit,
+		}
+
 		return nil
 	}
 }

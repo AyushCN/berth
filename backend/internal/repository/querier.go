@@ -12,20 +12,37 @@ import (
 )
 
 type Querier interface {
+	AddOrganizationMember(ctx context.Context, arg AddOrganizationMemberParams) (OrganizationMember, error)
+	AddProjectCollaborator(ctx context.Context, arg AddProjectCollaboratorParams) (ProjectCollaborator, error)
 	CountSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
+	CreateOrganization(ctx context.Context, name string) (Organization, error)
+	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
 	CreateSandbox(ctx context.Context, arg CreateSandboxParams) (Sandbox, error)
 	CreateSandboxActivity(ctx context.Context, arg CreateSandboxActivityParams) (SandboxActivity, error)
 	CreateSandboxChange(ctx context.Context, arg CreateSandboxChangeParams) (SandboxChange, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteSandbox(ctx context.Context, id uuid.UUID) error
+	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
+	GetOrganizationMember(ctx context.Context, arg GetOrganizationMemberParams) (OrganizationMember, error)
+	GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error)
+	GetProjectCollaborator(ctx context.Context, arg GetProjectCollaboratorParams) (ProjectCollaborator, error)
 	GetSandboxByID(ctx context.Context, id uuid.UUID) (Sandbox, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByGithubID(ctx context.Context, githubID pgtype.Text) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
+	ListOrganizationsForUser(ctx context.Context, userID uuid.UUID) ([]ListOrganizationsForUserRow, error)
+	ListProjectCollaborators(ctx context.Context, projectID uuid.UUID) ([]ListProjectCollaboratorsRow, error)
+	ListProjectsForOrg(ctx context.Context, ownerOrganizationID uuid.UUID) ([]Project, error)
+	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserRow, error)
 	ListSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sandbox, error)
 	ListSandboxesByProject(ctx context.Context, projectID pgtype.UUID) ([]Sandbox, error)
 	PopPendingSandbox(ctx context.Context) (Sandbox, error)
+	RemoveOrganizationMember(ctx context.Context, arg RemoveOrganizationMemberParams) error
+	RemoveProjectCollaborator(ctx context.Context, arg RemoveProjectCollaboratorParams) error
 	UpdateContainerID(ctx context.Context, arg UpdateContainerIDParams) error
+	UpdateOrganizationRole(ctx context.Context, arg UpdateOrganizationRoleParams) error
+	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) error
 	UpdateSandboxContainer(ctx context.Context, arg UpdateSandboxContainerParams) error
 	UpdateSandboxGitTracking(ctx context.Context, arg UpdateSandboxGitTrackingParams) error
 	UpdateSandboxState(ctx context.Context, arg UpdateSandboxStateParams) error

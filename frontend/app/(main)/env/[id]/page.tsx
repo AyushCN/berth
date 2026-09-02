@@ -5,10 +5,15 @@ import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { FileTree } from '@/components/file-tree';
 import { CodeEditor } from '@/components/code-editor';
-import { Terminal } from '@/components/terminal';
 import { GitStatusPanel, CommitHistoryPanel, BranchPicker } from '@/components/GitUI';
 import { useEnvStore } from '@/stores/env';
-import { Box, GitBranch, Clock, RefreshCw, Trash2, ExternalLink, Loader2, Code, TerminalSquare } from 'lucide-react';
+import { TerminalSquare, Box, GitBranch, Clock, RefreshCw, Trash2, ExternalLink, Loader2, Code } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const Terminal = dynamic(() => import('@/components/terminal').then(mod => mod.Terminal), { 
+  ssr: false,
+  loading: () => <div className="p-4 text-gray-500 font-mono text-sm border border-gray-800 rounded bg-gray-900 flex-1 flex items-center justify-center">Loading terminal...</div>
+});
 import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
 
@@ -115,6 +120,16 @@ export default function EnvironmentPage() {
               {env.state === "RUNNING" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]" />}
               {env.state}
             </div>
+            {env.public_url && (
+              <a
+                href={env.public_url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-1.5 rounded-lg border border-berth-500/30 text-berth-400 hover:text-berth-300 hover:bg-berth-500/10 flex items-center gap-1.5 text-xs font-semibold transition-colors"
+              >
+                Open Preview <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
             
             <button
               onClick={handleDelete}

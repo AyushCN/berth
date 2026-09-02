@@ -2,513 +2,313 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { 
+  Terminal, 
+  Code2, 
+  Box, 
+  Cpu, 
+  GitBranch, 
+  ShieldCheck, 
+  Users, 
+  Zap,
+  ArrowRight,
+  ChevronRight,
+  Sparkles
+} from "lucide-react";
 
-// Interactive Mouse Tracking Spotlight Card Component
-const SpotlightCard = ({
+// Modern Glass Card with Gradient Borders
+const GlassCard = ({
   children,
   className = "",
+  delay = 0,
 }: {
   children: React.ReactNode;
   className?: string;
+  delay?: number;
 }) => {
-  const divRef = useRef<HTMLDivElement>(null);
-  const [isFocused, setIsFocused] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [opacity, setOpacity] = useState(0);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!divRef.current || isFocused) return;
-    const div = divRef.current;
-    const rect = div.getBoundingClientRect();
-    setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  };
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    setOpacity(1);
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    setOpacity(0);
-  };
-
   return (
-    <div
-      ref={divRef}
-      onMouseMove={handleMouseMove}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onMouseEnter={() => setOpacity(1)}
-      onMouseLeave={() => setOpacity(0)}
-      className={`relative overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest transition-colors hover:border-primary-container/50 ${className}`}
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.7, delay, type: "spring", bounce: 0.4 }}
+      className={`relative group rounded-3xl p-[1px] overflow-hidden ${className}`}
     >
-      <div
-        className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 z-0"
-        style={{
-          opacity,
-          background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(0,240,255,0.15), transparent 40%)`,
-        }}
-      />
-      <div className="relative z-10 h-full">{children}</div>
+      <div className="absolute inset-0 bg-gradient-to-br from-primary-fixed/40 via-surface-container-high to-primary-fixed/10 opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="relative h-full bg-surface-container-lowest/80 backdrop-blur-2xl rounded-[23px] p-8 flex flex-col border border-white/5">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-fixed/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+        {children}
+      </div>
+    </motion.div>
+  );
+};
+
+// Subtle Animated Background Grid
+const GridBackground = () => {
+  return (
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00f0ff08_1px,transparent_1px),linear-gradient(to_bottom,#00f0ff08_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,#000_70%,transparent_100%)]" />
+      <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[500px] bg-primary-fixed/20 blur-[120px] rounded-full pointer-events-none mix-blend-screen" />
     </div>
   );
 };
 
-// Autonomous Floating Particle Network
-const NetworkBackground = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animationFrameId: number;
-    let particles: {
-      x: number;
-      y: number;
-      vx: number;
-      vy: number;
-      radius: number;
-    }[] = [];
-
-    const initCanvas = () => {
-      canvas.width = canvas.parentElement?.clientWidth || window.innerWidth;
-      canvas.height = canvas.parentElement?.clientHeight || window.innerHeight;
-
-      // Create particles
-      const numParticles = Math.floor((canvas.width * canvas.height) / 15000);
-      particles = [];
-      for (let i = 0; i < numParticles; i++) {
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 1.5, // Random X velocity
-          vy: (Math.random() - 0.5) * 1.5, // Random Y velocity
-          radius: Math.random() * 2 + 1,
-        });
-      }
-    };
-
-    const draw = () => {
-      if (!ctx || !canvas) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Update and draw particles
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-
-        // Bounce off edges
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#00f0ff";
-        ctx.fill();
-
-        // Draw connecting lines
-        for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dx = p.x - p2.x;
-          const dy = p.y - p2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 150) {
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineWidth = 1;
-            // Opacity based on distance
-            ctx.strokeStyle = `rgba(0, 240, 255, ${0.2 - (dist / 150) * 0.2})`;
-            ctx.stroke();
-          }
-        }
-      }
-      animationFrameId = requestAnimationFrame(draw);
-    };
-
-    initCanvas();
-    draw();
-
-    window.addEventListener("resize", initCanvas);
-    return () => {
-      window.removeEventListener("resize", initCanvas);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 w-full h-full pointer-events-none opacity-40 z-0"
-    />
-  );
-};
-
 export default function LandingPage() {
-  useEffect(() => {
-    // Simple visibility observer for fade-in animations
-    const observerOptions = {
-      threshold: 0.1,
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("opacity-100", "translate-y-0");
-          entry.target.classList.remove("opacity-0", "translate-y-10");
-        }
-      });
-    }, observerOptions);
-
-    document.querySelectorAll("section > div").forEach((el) => {
-      el.classList.add(
-        "transition-all",
-        "duration-700",
-        "opacity-0",
-        "translate-y-10",
-      );
-      observer.observe(el);
-    });
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  // Create a double list for seamless marquee loop
-  const logos = [
-    "NODE_MODS",
-    "REACT_CLOUD",
-    "DOCKERLY",
-    "VIRT_CORE",
-    "G_FLOW",
-    "NEXT_GEN",
-    "SYS_ADMIN",
-    "API_FORGE",
-  ];
+  const { scrollYProgress } = useScroll();
+  const yHero = useTransform(scrollYProgress, [0, 1], [0, 300]);
+  const opacityHero = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
   return (
-    <div
-      className="bg-background text-on-surface font-sans min-h-screen selection:bg-primary-container selection:text-on-primary-container"
-      style={{
-        backgroundImage:
-          "linear-gradient(to right, #161616 1px, transparent 1px), linear-gradient(to bottom, #161616 1px, transparent 1px)",
-        backgroundSize: "32px 32px",
-      }}
-    >
-      <style jsx global>{`
-        .primary-glow {
-          box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
-        }
-      `}</style>
+    <div className="min-h-screen bg-[#050505] text-on-surface font-sans selection:bg-primary-fixed/30 selection:text-primary-fixed overflow-hidden relative">
+      <GridBackground />
 
-      {/* Top Navigation Bar */}
-      <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-outline-variant">
-        <div className="flex justify-between items-center px-4 md:px-10 py-4 max-w-[1440px] mx-auto">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-primary tracking-tighter">
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 border-b border-white/10 bg-[#050505]/70 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-fixed to-primary-container flex items-center justify-center shadow-[0_0_20px_rgba(0,240,255,0.3)]">
+              <Code2 className="w-5 h-5 text-on-primary-fixed font-black" />
+            </div>
+            <span className="text-2xl font-black tracking-tighter text-white">
               Berth
             </span>
           </div>
-          <nav className="hidden md:flex items-center gap-8">
-            <a
-              className="text-base text-on-surface-variant hover:text-primary transition-colors duration-200"
-              href="#"
-            >
-              Features
-            </a>
-            <a
-              className="text-base text-on-surface-variant hover:text-primary transition-colors duration-200"
-              href="#"
-            >
-              How it Works
-            </a>
-            <a
-              className="text-base text-on-surface-variant hover:text-primary transition-colors duration-200"
-              href="#"
-            >
-              Pricing
-            </a>
-          </nav>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <Link
               href="/login"
-              className="bg-primary-container text-on-primary-fixed-variant px-6 py-2 rounded-lg font-bold primary-glow active:scale-95 transition-all"
+              className="text-sm font-semibold text-on-surface-variant hover:text-white transition-colors"
             >
-              Login
+              Sign In
+            </Link>
+            <Link
+              href="/login"
+              className="group relative px-6 py-2.5 rounded-full overflow-hidden bg-white text-black font-bold text-sm transition-all hover:scale-105 active:scale-95"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                Get Started <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-primary-fixed to-blue-400 opacity-0 group-hover:opacity-20 transition-opacity" />
             </Link>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="pt-24">
+      <main className="relative z-10 pt-32 pb-24 px-6 max-w-7xl mx-auto">
         {/* Hero Section */}
-        <section className="relative px-4 md:px-10 py-16 md:py-24 max-w-[1440px] mx-auto overflow-hidden">
-          {/* Floating Network Background Element */}
-          <NetworkBackground />
+        <motion.section 
+          style={{ y: yHero, opacity: opacityHero }}
+          className="flex flex-col items-center text-center py-20"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-fixed/10 border border-primary-fixed/20 text-primary-fixed text-sm font-semibold mb-8 backdrop-blur-md"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>The next generation of ephemeral environments</span>
+          </motion.div>
 
-          <div className="relative z-10 flex flex-col items-center text-center max-w-[56rem] mx-auto mt-8">
-            <span className="text-xs font-bold text-primary bg-primary-container/10 px-4 py-1 rounded-full border border-primary/20 mb-6 tracking-widest uppercase shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-              REVOLUTIONIZING BACKEND TESTING
+          <motion.h1 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
+            className="text-6xl md:text-8xl font-black text-white tracking-tighter mb-8 leading-[1.1] max-w-5xl drop-shadow-2xl"
+          >
+            Instant Cloud Workspaces.
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-fixed via-blue-400 to-indigo-500">
+              Zero Configuration.
             </span>
-            <h1 className="text-5xl md:text-6xl font-bold text-primary mb-4 leading-tight tracking-tight">
-              Staging is Dead.
-              <br />
-              Meet Smart Sandboxes.
-            </h1>
-            <p className="text-lg md:text-xl text-on-surface-variant max-w-[42rem] mx-auto mb-8">
-              Give your team, QA, and clients a live, secure, shareable backend
-              environment in seconds — complete with isolated database and
-              realistic data.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-              <Link
-                href="/dashboard"
-                className="bg-primary-container text-on-primary-fixed-variant px-8 py-4 rounded-xl font-bold text-lg primary-glow hover:brightness-110 active:scale-95 transition-all"
-              >
-                Try Demo
-              </Link>
-              <button className="bg-transparent border border-outline-variant text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-surface-container transition-all flex items-center justify-center gap-2">
-                <span className="material-symbols-outlined">play_circle</span>
-                Watch 90s Video
-              </button>
-            </div>
+          </motion.h1>
 
-            {/* Infinite Marquee Logos */}
-            <div className="mt-16 w-full overflow-hidden whitespace-nowrap mask-image-fade">
-              <p className="text-xs font-bold text-on-surface-variant/50 mb-6 tracking-widest uppercase">
-                TRUSTED BY DEVELOPERS AT
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+            className="text-xl md:text-2xl text-on-surface-variant max-w-3xl mb-12 font-medium"
+          >
+            Berth spins up fully isolated, gVisor-secured Web IDEs directly from your Git repositories. Powered by ML to automatically detect your stack.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
+            className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto"
+          >
+            <Link
+              href="/login"
+              className="relative group px-8 py-4 rounded-full bg-primary-fixed text-black font-black text-lg shadow-[0_0_40px_rgba(0,240,255,0.3)] hover:shadow-[0_0_60px_rgba(0,240,255,0.5)] transition-all hover:-translate-y-1"
+            >
+              Start Coding Free
+            </Link>
+            <a
+              href="#features"
+              className="px-8 py-4 rounded-full bg-white/5 border border-white/10 text-white font-bold text-lg hover:bg-white/10 backdrop-blur-md transition-all flex items-center justify-center gap-2"
+            >
+              Explore Features <ChevronRight className="w-5 h-5" />
+            </a>
+          </motion.div>
+        </motion.section>
+
+        {/* Realistic Terminal Preview */}
+        <motion.section
+          initial={{ opacity: 0, y: 60 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.6, type: "spring", bounce: 0.3 }}
+          className="relative max-w-5xl mx-auto mt-12 mb-32"
+        >
+          <div className="absolute -inset-1 bg-gradient-to-r from-primary-fixed via-blue-500 to-indigo-500 rounded-[2rem] blur-2xl opacity-20" />
+          <div className="relative rounded-[2rem] border border-white/10 bg-[#0A0A0B] shadow-2xl overflow-hidden flex flex-col">
+            <div className="h-12 border-b border-white/10 bg-[#121214] flex items-center px-4 gap-4">
+              <div className="flex gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                <div className="w-3 h-3 rounded-full bg-green-500/80" />
+              </div>
+              <div className="text-xs font-mono text-white/40 font-medium">berth / workspace</div>
+            </div>
+            <div className="p-6 font-mono text-sm leading-relaxed text-blue-300">
+              <div className="flex items-center gap-2 text-white/50 mb-2">
+                <span className="text-emerald-400">➜</span>
+                <span className="text-primary-fixed">~</span>
+                <span>git clone https://github.com/user/project.git</span>
+              </div>
+              <div className="text-white/70 mb-4">Cloning into 'project'...</div>
+              
+              <div className="flex items-center gap-2 text-white/50 mb-2">
+                <span className="text-emerald-400">➜</span>
+                <span className="text-primary-fixed">~</span>
+                <span>berth init</span>
+              </div>
+              <div className="text-primary-fixed mb-1 flex items-center gap-2">
+                <Cpu className="w-4 h-4 animate-pulse" /> [ML] Analyzing repository structure...
+              </div>
+              <div className="text-white/70 ml-6 mb-1">Detected Language: Node.js (TypeScript)</div>
+              <div className="text-white/70 ml-6 mb-1">Detected Start Command: npm run dev</div>
+              <div className="text-white/70 ml-6 mb-4">Base Image Selected: node:20-alpine</div>
+
+              <div className="flex items-center gap-2 text-white/50 mb-2">
+                <span className="text-emerald-400">➜</span>
+                <span className="text-primary-fixed">~</span>
+                <span>berth up</span>
+              </div>
+              <div className="text-emerald-400 mb-1 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4" /> [Sandbox] Booting gVisor isolated container...
+              </div>
+              <div className="text-white font-bold ml-6 mt-2">
+                Ready in 1.2s. Live Web IDE started.
+              </div>
+              <div className="text-primary-fixed ml-6 mt-1 animate-pulse">_</div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Feature Grid */}
+        <section id="features" className="py-24">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
+              Powerful By Design.
+            </h2>
+            <p className="text-xl text-on-surface-variant max-w-2xl mx-auto">
+              Everything you need to write, run, and collaborate on code without the overhead of local setup.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <GlassCard delay={0.1}>
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-6 border border-blue-500/20 text-blue-400">
+                <Terminal className="w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">Live Web IDE</h3>
+              <p className="text-on-surface-variant leading-relaxed">
+                Full-featured browser editor with an interactive xterm.js terminal. Edit files, run commands, and see output in real-time.
               </p>
-              <div className="inline-block animate-marquee opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default">
-                {logos.concat(logos).map((logo, i) => (
-                  <span
-                    key={i}
-                    className="font-bold text-2xl tracking-tighter mx-8 inline-block"
-                  >
-                    {logo}
-                  </span>
-                ))}
+            </GlassCard>
+
+            <GlassCard delay={0.2}>
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6 border border-purple-500/20 text-purple-400">
+                <Cpu className="w-6 h-6" />
               </div>
-            </div>
+              <h3 className="text-2xl font-bold text-white mb-3">ML Profiling</h3>
+              <p className="text-on-surface-variant leading-relaxed">
+                Our Python gRPC prediction engine analyzes your Git repository to instantly determine the optimal base image, dependencies, and start commands.
+              </p>
+            </GlassCard>
+
+            <GlassCard delay={0.3}>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-6 border border-emerald-500/20 text-emerald-400">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">gVisor Security</h3>
+              <p className="text-on-surface-variant leading-relaxed">
+                Code execution is strictly isolated. We use containerd and Google's runsc (gVisor) to ensure robust sandboxing for all user workloads.
+              </p>
+            </GlassCard>
+
+            <GlassCard delay={0.4}>
+              <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center mb-6 border border-orange-500/20 text-orange-400">
+                <GitBranch className="w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">Seamless Git Sync</h3>
+              <p className="text-on-surface-variant leading-relaxed">
+                Built-in Git operations. Pull the latest code, switch branches, commit your changes, and push directly from your browser workspace.
+              </p>
+            </GlassCard>
+
+            <GlassCard delay={0.5}>
+              <div className="w-12 h-12 rounded-2xl bg-pink-500/10 flex items-center justify-center mb-6 border border-pink-500/20 text-pink-400">
+                <Users className="w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">Team Collaboration</h3>
+              <p className="text-on-surface-variant leading-relaxed">
+                Create Organizations and Projects. Invite team members and securely share sandboxes with strict Role-Based Access Control.
+              </p>
+            </GlassCard>
+
+            <GlassCard delay={0.6}>
+              <div className="w-12 h-12 rounded-2xl bg-primary-fixed/10 flex items-center justify-center mb-6 border border-primary-fixed/20 text-primary-fixed">
+                <Zap className="w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">Instant Forking</h3>
+              <p className="text-on-surface-variant leading-relaxed">
+                Need to experiment? Fork any running environment in a single click. Test changes safely without disrupting the original workspace.
+              </p>
+            </GlassCard>
           </div>
         </section>
 
-        {/* Problem Section with Spotlight */}
-        <section className="px-4 md:px-10 py-16 md:py-24 bg-surface-container-low border-y border-outline-variant">
-          <div className="max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
-            <SpotlightCard className="p-8 group">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <span className="material-symbols-outlined text-[120px]">
-                  warning
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-error-red mb-6 flex items-center gap-2">
-                <span className="material-symbols-outlined">history</span>
-                The Old Way
-              </h3>
-              <ul className="space-y-4 relative z-10">
-                <li className="flex items-start gap-3 text-base text-on-surface-variant">
-                  <span className="material-symbols-outlined text-error-red mt-0.5">
-                    close
-                  </span>
-                  Shared staging environments causing merge conflicts and data
-                  contamination.
-                </li>
-                <li className="flex items-start gap-3 text-base text-on-surface-variant">
-                  <span className="material-symbols-outlined text-error-red mt-0.5">
-                    close
-                  </span>
-                  Hours spent configuring Docker, DB migrations, and environment
-                  variables.
-                </li>
-                <li className="flex items-start gap-3 text-base text-on-surface-variant">
-                  <span className="material-symbols-outlined text-error-red mt-0.5">
-                    close
-                  </span>
-                  Expensive always-on infrastructure draining your cloud budget.
-                </li>
-              </ul>
-            </SpotlightCard>
-
-            <SpotlightCard className="p-8 group">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <span className="material-symbols-outlined text-[120px] text-primary">
-                  rocket_launch
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-primary mb-6 flex items-center gap-2">
-                <span className="material-symbols-outlined">bolt</span>
-                The New Way
-              </h3>
-              <ul className="space-y-4 relative z-10">
-                <li className="flex items-start gap-3 text-base text-on-primary-fixed">
-                  <span className="material-symbols-outlined text-primary mt-0.5">
-                    check_circle
-                  </span>
-                  <span className="text-on-surface">
-                    Live URLs generated in &lt; 20s for every single feature
-                    branch.
-                  </span>
-                </li>
-                <li className="flex items-start gap-3 text-base text-on-primary-fixed">
-                  <span className="material-symbols-outlined text-primary mt-0.5">
-                    check_circle
-                  </span>
-                  <span className="text-on-surface">
-                    Private, ephemeral database forked from prod with anonymized
-                    data.
-                  </span>
-                </li>
-                <li className="flex items-start gap-3 text-base text-on-primary-fixed">
-                  <span className="material-symbols-outlined text-primary mt-0.5">
-                    check_circle
-                  </span>
-                  <span className="text-on-surface">
-                    Hardened security with gVisor isolation and automatic
-                    hibernation.
-                  </span>
-                </li>
-              </ul>
-            </SpotlightCard>
-          </div>
-        </section>
-
-        {/* Features Grid with Spotlight */}
-        <section className="px-4 md:px-10 py-16 md:py-24 bg-surface-container-lowest">
-          <div className="max-w-[1440px] mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-16 text-on-surface">
-              From Commit to Sandbox in Seconds
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <SpotlightCard className="p-8">
-                <span className="material-symbols-outlined text-primary mb-4 text-3xl">
-                  fork_right
-                </span>
-                <h4 className="text-xl font-bold mb-2 text-on-surface">
-                  Instant Forking
-                </h4>
-                <p className="text-on-surface-variant">
-                  Fork entire environment states in a single click for parallel
-                  testing.
-                </p>
-              </SpotlightCard>
-
-              <SpotlightCard className="p-8">
-                <span className="material-symbols-outlined text-primary mb-4 text-3xl">
-                  account_tree
-                </span>
-                <h4 className="text-xl font-bold mb-2 text-on-surface">
-                  Visual Blueprints
-                </h4>
-                <p className="text-on-surface-variant">
-                  Manage complex microservices via a visual graph interface.
-                </p>
-              </SpotlightCard>
-
-              <SpotlightCard className="p-8">
-                <span className="material-symbols-outlined text-primary mb-4 text-3xl">
-                  psychology
-                </span>
-                <h4 className="text-xl font-bold mb-2 text-on-surface">
-                  AI Smart Setup
-                </h4>
-                <p className="text-on-surface-variant">
-                  Automatically detects ports, env vars, and startup scripts.
-                </p>
-              </SpotlightCard>
-            </div>
-          </div>
-        </section>
-
-        {/* Footer CTA */}
-        <section className="px-4 md:px-10 py-24 text-center">
-          <div className="max-w-[42rem] mx-auto">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              Ready to kill your staging environment?
-            </h2>
-            <p className="text-lg text-on-surface-variant mb-12">
-              Join 5,000+ developers automating their testing workflows with
-              Berth.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                href="/dashboard"
-                className="bg-primary-container text-on-primary-fixed-variant px-8 py-4 rounded-xl font-bold text-lg primary-glow active:scale-95 transition-all"
-              >
-                Go to Dashboard
-              </Link>
-            </div>
-          </div>
+        {/* CTA Section */}
+        <section className="py-32 text-center relative">
+          <div className="absolute inset-0 bg-primary-fixed/5 blur-3xl rounded-full" />
+          <h2 className="text-5xl font-black text-white mb-6 relative z-10 tracking-tight">
+            Ready to dive in?
+          </h2>
+          <p className="text-xl text-on-surface-variant mb-10 max-w-2xl mx-auto relative z-10">
+            Stop fighting with local dependencies. Start coding in a secure, isolated environment in seconds.
+          </p>
+          <Link
+            href="/login"
+            className="relative z-10 inline-flex items-center gap-3 px-10 py-5 rounded-full bg-white text-black font-black text-xl hover:scale-105 active:scale-95 transition-all shadow-2xl"
+          >
+            Create Your First Sandbox <ArrowRight className="w-6 h-6" />
+          </Link>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="w-full py-12 bg-surface-container-lowest border-t border-outline-variant">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 px-4 md:px-10 max-w-[1440px] mx-auto">
-          <div className="col-span-1 lg:col-span-1">
-            <span className="text-lg font-bold text-primary block mb-4">
-              Berth
-            </span>
-            <p className="text-sm text-on-surface-variant">
-              © 2026 Berth. All rights reserved.
-            </p>
+      {/* Minimal Footer */}
+      <footer className="border-t border-white/10 bg-[#050505] relative z-10">
+        <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2 text-white/50 font-semibold">
+            <Code2 className="w-5 h-5" />
+            <span>© 2026 Berth. All rights reserved.</span>
           </div>
-          <div className="flex flex-col gap-2">
-            <h5 className="text-xs font-bold text-white mb-2 uppercase tracking-widest">
-              Product
-            </h5>
-            <a
-              className="text-sm text-on-surface-variant hover:text-primary transition-colors"
-              href="#"
-            >
-              Documentation
-            </a>
-            <a
-              className="text-sm text-on-surface-variant hover:text-primary transition-colors"
-              href="#"
-            >
-              API Reference
-            </a>
-          </div>
-          <div className="flex flex-col gap-2">
-            <h5 className="text-xs font-bold text-white mb-2 uppercase tracking-widest">
-              Company
-            </h5>
-            <Link
-              className="text-sm text-on-surface-variant hover:text-primary transition-colors"
-              href="/privacy"
-            >
-              Privacy
-            </Link>
-            <Link
-              className="text-sm text-on-surface-variant hover:text-primary transition-colors"
-              href="/terms"
-            >
-              Terms
-            </Link>
-          </div>
-          <div className="flex flex-col gap-2">
-            <h5 className="text-xs font-bold text-white mb-2 uppercase tracking-widest">
-              Connect
-            </h5>
-            <a
-              className="text-sm text-on-surface-variant hover:text-primary transition-colors"
-              href="#"
-            >
-              Twitter / X
-            </a>
-            <a
-              className="text-sm text-on-surface-variant hover:text-primary transition-colors"
-              href="#"
-            >
-              GitHub
-            </a>
+          <div className="flex gap-8 text-sm font-medium text-white/40">
+            <a href="#" className="hover:text-white transition-colors">Privacy</a>
+            <a href="#" className="hover:text-white transition-colors">Terms</a>
+            <a href="#" className="hover:text-white transition-colors">GitHub</a>
           </div>
         </div>
       </footer>

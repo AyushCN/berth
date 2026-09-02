@@ -20,6 +20,7 @@ type WarmContainer struct {
 type WarmPool struct {
 	mu              sync.RWMutex
 	available       map[string][]*WarmContainer // BaseImage -> queue
+	active          map[string]*WarmContainer   // ID -> active container (for Return)
 	maxMemoryBytes  int64
 	usedMemoryBytes int64
 	destroyer       func(ctx context.Context, id string) error
@@ -30,6 +31,7 @@ type WarmPool struct {
 func NewWarmPool(maxMem int64, destroyer func(context.Context, string) error) *WarmPool {
 	wp := &WarmPool{
 		available:      make(map[string][]*WarmContainer),
+		active:         make(map[string]*WarmContainer),
 		maxMemoryBytes: maxMem,
 		destroyer:      destroyer,
 		stopReaper:     make(chan struct{}),
@@ -115,26 +117,46 @@ func (wp *WarmPool) evictOne() bool {
 }
 
 // Take removes a container from the warm pool for assignment.
-// Returns empty string if no warm container is available.
-func (wp *WarmPool) Take(baseImage string) string {
+// Returns empty string if no warm container is available, along with a reason.
+func (wp *WarmPool) Take(baseImage string) (string, string) {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
 	queue := wp.available[baseImage]
 	if len(queue) == 0 {
-		return ""
+		total := 0
+		for _, q := range wp.available {
+			total += len(q)
+		}
+		if total == 0 {
+			return "", "pool_empty"
+		}
+		return "", "no_image_match"
 	}
 
 	c := queue[0]
 	wp.available[baseImage] = queue[1:]
+	wp.active[c.ID] = c
 	wp.usedMemoryBytes -= c.MemoryBytes // Memory is now accounted to the active runtime
-	return c.ID
+	return c.ID, ""
 }
 
 // Return attempts to return a stopped container to the warm pool.
 func (wp *WarmPool) Return(containerID string) bool {
-	// In Phase 1, we don't return dirty containers.
-	return false
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
+	c, ok := wp.active[containerID]
+	if !ok {
+		return false
+	}
+
+	delete(wp.active, containerID)
+	wp.available[c.BaseImage] = append(wp.available[c.BaseImage], c)
+	wp.usedMemoryBytes += c.MemoryBytes // Memory is back in the pool
+	
+	slog.Info("container returned to warm pool", "id", containerID, "base_image", c.BaseImage)
+	return true
 }
 
 // startReaper periodically kills containers older than maxAge.

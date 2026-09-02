@@ -10,8 +10,8 @@ Berth is a single-host ephemeral sandbox platform for research on predictive pre
 ┌─────────────────────────────────────────────────────────────┐
 │  UNTRUSTED ZONE   │  GitHub OAuth, User Browser             │
 ├─────────────────────────────────────────────────────────────┤
-│  CONTROL PLANE    │  Envoy API GW → Go API → Temporal       │
-│  (Trusted)        │  PostgreSQL, Redis, NATS, MinIO       │
+│  CONTROL PLANE    │  Envoy API GW → Go API                                │
+│  (Trusted)        │  PostgreSQL, Redis, NATS (Job Orchestration), MinIO   │
 ├─────────────────────────────────────────────────────────────┤
 │  PREDICTION SVC   │  Python gRPC (localhost only)           │
 │  (Semi-Trusted)   │  ONNX Runtime, no network egress         │
@@ -37,8 +37,8 @@ Berth is a single-host ephemeral sandbox platform for research on predictive pre
 2. Frontend POSTs `/api/environments` with `gitUrl`.
 3. API Gateway (Envoy) validates JWT, forwards to Go API.
 4. Go API calls Prediction Service (gRPC) to classify repo.
-5. Orchestrator (Temporal) schedules build workflow.
-6. Worker pulls base image + dependency layer, creates overlayfs.
+5. API publishes a sandbox creation event to NATS JetStream (`berth.sandbox.create`).
+6. Worker pulls job from NATS, provisions the warm container or creates a new one, and restores host-side dependency layer cache.
 7. containerd + runsc starts sandbox with 9P mount for live editing.
 8. File edits flow: Monaco → Yjs → WebSocket → NATS → 9P → sandbox.
 9. Git operations run inside the sandbox via exec (gVisor).

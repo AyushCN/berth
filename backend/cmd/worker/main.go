@@ -11,6 +11,7 @@ import (
 	"github.com/AyushCN/berth/internal/infrastructure/containerd"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
 	"github.com/AyushCN/berth/internal/infrastructure/ml"
+	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
 	"github.com/AyushCN/berth/internal/worker"
@@ -62,10 +63,21 @@ func main() {
 	// Prediction service client
 	predictor := ml.NewClient(cfg.PredictionAddr)
 
+	var natsClient *natsInfra.Client
+	if cfg.NatsURL != "" {
+		nc, err := natsInfra.NewClient(cfg.NatsURL)
+		if err != nil {
+			slog.Error("failed to connect to NATS", "error", err)
+		} else {
+			natsClient = nc
+			defer natsClient.Close()
+		}
+	}
+
 	queries := repository.New(db.Pool())
 	sandboxRepo := repository.NewSandboxRepository(queries)
 
-	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, predictor)
+	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, predictor, natsClient)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

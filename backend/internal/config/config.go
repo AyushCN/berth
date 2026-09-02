@@ -13,6 +13,7 @@ type Config struct {
 	Port               string
 	DatabaseURL        string
 	RedisURL           string
+	NatsURL            string
 	JWTSecret          string
 	GithubClientID     string
 	GithubClientSecret string
@@ -56,6 +57,7 @@ func Load() (*Config, error) {
 		Port:               port,
 		DatabaseURL:        dbURL,
 		RedisURL:           redisURL,
+		NatsURL:            getEnv("NATS_URL", "nats://localhost:4222"),
 		JWTSecret:          jwtSecret,
 		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),

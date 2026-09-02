@@ -59,13 +59,20 @@ func (h *SandboxHandler) CreateEnvironment(c *gin.Context) {
 
 // GetEnvironment returns a single environment.
 func (h *SandboxHandler) GetEnvironment(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	env, err := h.sandboxUC.GetEnvironment(c.Request.Context(), id)
+	env, err := h.sandboxUC.GetEnvironment(c.Request.Context(), uid, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -75,13 +82,20 @@ func (h *SandboxHandler) GetEnvironment(c *gin.Context) {
 
 // DeleteEnvironment destroys an environment.
 func (h *SandboxHandler) DeleteEnvironment(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	if err := h.sandboxUC.DeleteEnvironment(c.Request.Context(), id); err != nil {
+	if err := h.sandboxUC.DeleteEnvironment(c.Request.Context(), uid, id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -90,6 +104,13 @@ func (h *SandboxHandler) DeleteEnvironment(c *gin.Context) {
 
 // ExecCommand runs a command in a sandbox.
 func (h *SandboxHandler) ExecCommand(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
@@ -104,7 +125,7 @@ func (h *SandboxHandler) ExecCommand(c *gin.Context) {
 		return
 	}
 
-	output, err := h.sandboxUC.ExecCommand(c.Request.Context(), id, req.Command)
+	output, err := h.sandboxUC.ExecCommand(c.Request.Context(), uid, id, req.Command)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -114,16 +135,52 @@ func (h *SandboxHandler) ExecCommand(c *gin.Context) {
 
 // GetLogs returns logs for a sandbox.
 func (h *SandboxHandler) GetLogs(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	logs, err := h.sandboxUC.GetLogs(c.Request.Context(), id, 100)
+	logs, err := h.sandboxUC.GetLogs(c.Request.Context(), uid, id, 100)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"logs": logs})
+}
+
+// ForkEnvironment forks an existing sandbox.
+func (h *SandboxHandler) ForkEnvironment(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sandbox id"})
+		return
+	}
+
+	var req usecase.CreateEnvironmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	env, err := h.sandboxUC.ForkEnvironment(c.Request.Context(), uid, id, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, env)
 }

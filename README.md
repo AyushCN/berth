@@ -10,8 +10,10 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 ### What Works Currently
 - Rootless containerd daemon setup
 - gVisor (runsc) runtime integration
-- Container lifecycle (Create/Start/Stop/Exec)
-- Hardened OCI Spec (namespaces, capabilities, seccomp)
+- Fast Container lifecycle (Create/Start/Stop/Exec)
+- Advanced Warm Pool with dependency caching
+- Hardened OCI Spec (namespaces, capabilities, seccomp, cgroups)
+- Event-driven provisioning via NATS
 - Bridge networking scaffold
 
 ### Honest Status
@@ -19,7 +21,7 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 0: Scaffold | ✅ Done | CI, schema, scripts |
-| Phase 1: Isolation | 🟡 Partial | Runtime works, warm pool is stub |
+| Phase 1: Isolation | ✅ Done | Runtime works, warm pool + layer caching fully implemented |
 | Phase 2: Auth + API | 🟡 In Progress | Usecases implemented, handler wiring pending |
 | Phase 3: Frontend | ❌ Not started | No project |
 | Phase 4: Prediction | ❌ Not started | No model |
