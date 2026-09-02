@@ -146,9 +146,17 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		cloneDone <- err
 	}()
 
-	// Predict runtime profile while clone is starting
+	// Wait for clone to finish before predicting
+	if err := <-cloneDone; err != nil {
+		slog.Error("worker failing due to clone error")
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+	slog.Info("git clone completed", "sandbox_id", sandbox.ID, "duration", cloneDuration)
+
+	// Predict runtime profile using the cloned repository
 	predictStart := time.Now()
-	profile, err := w.ml.Predict(bgCtx, sandbox.GitURL, sandbox.GitBranch)
+	profile, err := w.ml.Predict(bgCtx, sandbox.GitURL, sandbox.GitBranch, workspaceDir)
 	if err != nil {
 		slog.Warn("prediction failed, using fallback", "error", err)
 		profile = &domain.RuntimeProfile{
@@ -164,7 +172,6 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	predictDuration := time.Since(predictStart)
 
 	// Create container with bind mount and keep-alive command
-	// We can do this before clone finishes because the workspaceDir already exists!
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,

@@ -29,11 +29,11 @@ func NewClient(baseURL string) *Client {
 }
 
 // Predict analyzes a repository and returns a runtime profile.
-func (c *Client) Predict(ctx context.Context, gitURL string, branch string) (*domain.RuntimeProfile, error) {
+func (c *Client) Predict(ctx context.Context, gitURL string, branch string, localPath string) (*domain.RuntimeProfile, error) {
 	reqBody, _ := json.Marshal(map[string]string{
 		"git_url":    gitURL,
 		"branch":     branch,
-		"local_path": "", // worker fills this in future optimization
+		"local_path": localPath,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/predict", bytes.NewReader(reqBody))

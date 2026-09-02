@@ -91,7 +91,7 @@ type SandboxRepository interface {
 // PredictionService defines the interface for the ML prediction microservice.
 // Implemented by the Python gRPC service client.
 type PredictionService interface {
-	Predict(ctx context.Context, gitURL string, branch string) (*RuntimeProfile, error)
+	Predict(ctx context.Context, gitURL, branch, localPath string) (*RuntimeProfile, error)
 }
 
 // ContainerRuntime defines the interface for containerd/gVisor operations.

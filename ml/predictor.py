@@ -28,8 +28,25 @@ def load_models():
         LABEL_ENCODER = joblib.load(model_dir / "label_encoder.joblib")
         print(f"Loaded models from {model_dir}")
     except Exception as e:
-        print(f"Failed to load models: {e}. Ensure 'python train.py train' was run.")
-        sys.exit(1)
+        print(f"Warning: Failed to load models: {e}. Using rule-based fallback.")
+        LANG_MODEL = None
+        FEATURE_COLS = None
+        LABEL_ENCODER = None
+
+def rule_based_fallback(feats: dict) -> dict:
+    if feats.get("has_package_json"):
+        profile = get_profile_for_language("node")
+    elif feats.get("has_requirements") or feats.get("has_pyproject") or feats.get("file_count_py", 0) > 0:
+        profile = get_profile_for_language("python")
+    elif feats.get("has_go_mod") or feats.get("file_count_go", 0) > 0:
+        profile = get_profile_for_language("go")
+    elif feats.get("has_cargo") or feats.get("file_count_rs", 0) > 0:
+        profile = get_profile_for_language("rust")
+    else:
+        profile = get_profile_for_language("node")
+    
+    profile["confidence"] = 0.5
+    return profile
 
 def extract_features(local_path: str) -> dict:
     """Extract features from a cloned repository."""
@@ -138,6 +155,10 @@ class PredictorHandler(BaseHTTPRequestHandler):
 
         # Extract features
         feats = extract_features(local_path)
+        
+        # Use fallback if models aren't loaded
+        if LANG_MODEL is None or FEATURE_COLS is None:
+            return rule_based_fallback(feats)
         
         # Build DataFrame
         df = pd.DataFrame([feats])
