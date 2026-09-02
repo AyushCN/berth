@@ -19,10 +19,18 @@ type AuthUsecase struct {
 	userRepo      domain.UserRepository
 	oauthProvider domain.OAuthProvider
 	jwtSecret     string
+	orgUC         *OrganizationUsecase
+	projUC        *ProjectUsecase
 }
 
-func NewAuthUsecase(repo domain.UserRepository, provider domain.OAuthProvider, secret string) *AuthUsecase {
-	return &AuthUsecase{userRepo: repo, oauthProvider: provider, jwtSecret: secret}
+func NewAuthUsecase(repo domain.UserRepository, provider domain.OAuthProvider, secret string, orgUC *OrganizationUsecase, projUC *ProjectUsecase) *AuthUsecase {
+	return &AuthUsecase{
+		userRepo:      repo,
+		oauthProvider: provider,
+		jwtSecret:     secret,
+		orgUC:         orgUC,
+		projUC:        projUC,
+	}
 }
 
 func (uc *AuthUsecase) GenerateState() string {
@@ -84,6 +92,17 @@ func (uc *AuthUsecase) ProcessCallback(ctx context.Context, code, verifier strin
 		}
 		if err := uc.userRepo.Create(ctx, user); err != nil {
 			return "", nil, fmt.Errorf("failed to create user: %w", err)
+		}
+
+		// Auto-provision default organization and project for new users
+		orgName := "Personal"
+		if user.Username != "" {
+			orgName = user.Username + "'s Workspace"
+		}
+		org, err := uc.orgUC.Create(ctx, user.ID, orgName)
+		if err == nil {
+			desc := "Default project"
+			_, _ = uc.projUC.Create(ctx, user.ID, org.ID, "My Project", &desc, false)
 		}
 	} else {
 		// Update user token

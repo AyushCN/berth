@@ -10,9 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/AyushCN/berth/internal/config"
 	berthhttp "github.com/AyushCN/berth/internal/delivery/http"
 	"github.com/AyushCN/berth/internal/delivery/http/handler"
+	"github.com/AyushCN/berth/internal/domain"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
 	"github.com/AyushCN/berth/internal/infrastructure/github"
 	"github.com/AyushCN/berth/internal/infrastructure/nats"
@@ -41,19 +44,6 @@ func main() {
 	if cfg.Mode != "api" {
 		slog.Error("api binary requires MODE=api", "mode", cfg.Mode)
 		os.Exit(1)
-	}
-
-	if cfg.Env != "production" {
-		_, err := db.Pool().Exec(context.Background(), `
-			INSERT INTO users (id, email, username, github_id, github_username, avatar_url)
-			VALUES ('00000000-0000-0000-0000-000000000001', 'dev@berth.local', 'dev_user', '0', 'dev_user', '')
-			ON CONFLICT (id) DO NOTHING
-		`)
-		if err != nil {
-			slog.Error("failed to create mock dev user", "error", err)
-		} else {
-			slog.Info("mock dev user initialized")
-		}
 	}
 
 	if err := redis.Init(cfg.RedisURL); err != nil {
@@ -91,10 +81,35 @@ func main() {
 	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, "http://localhost:3000/api/auth/github/callback")
 
 	// Usecases
-	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret)
-	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, nil, natsClient) // runtime and predictor nil in API mode
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
 	projUC := usecase.NewProjectUsecase(projRepo, orgRepo)
+	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, orgUC, projUC)
+	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, nil, natsClient) // runtime and predictor nil in API mode
+
+	if cfg.Env != "production" {
+		devUserID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		_, err := userRepo.GetByID(context.Background(), devUserID)
+		if err != nil {
+			devUser := &domain.User{
+				ID:             devUserID,
+				Email:          "dev@berth.local",
+				Username:       "dev_user",
+				GithubID:       "0",
+				GithubUsername: "dev_user",
+				AvatarURL:      "",
+			}
+			if createErr := userRepo.Create(context.Background(), devUser); createErr != nil {
+				slog.Error("failed to create mock dev user", "error", createErr)
+			} else {
+				slog.Info("mock dev user initialized")
+				org, orgErr := orgUC.Create(context.Background(), devUserID, "dev_user's Workspace")
+				if orgErr == nil {
+					desc := "Default project"
+					_, _ = projUC.Create(context.Background(), devUserID, org.ID, "My Project", &desc, false)
+				}
+			}
+		}
+	}
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")
 	if workspaceDir == "" {
 		home, _ := os.UserHomeDir()
