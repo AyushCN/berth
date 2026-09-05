@@ -86,15 +86,22 @@ func main() {
 	}
 	slog.Info("authenticated via dev-login")
 
+	projectID, err := getProjectID(client, cfg.APIBase)
+	if err != nil {
+		slog.Error("failed to get project id", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("fetched default project", "project_id", projectID)
+
 	// Warmup
 	if cfg.Warmup > 0 {
 		slog.Info("warming up", "count", cfg.Warmup)
-		runPhase(client, cfg, cfg.Warmup, true)
+		runPhase(client, cfg, cfg.Warmup, true, projectID)
 	}
 
 	// Benchmark
 	slog.Info("starting benchmark")
-	results := runPhase(client, cfg, cfg.Iterations, false)
+	results := runPhase(client, cfg, cfg.Iterations, false, projectID)
 
 	// Compute stats
 	summary := computeSummary(results, cfg)
@@ -146,7 +153,29 @@ func authenticate(client *http.Client, base string) error {
 	return nil
 }
 
-func runPhase(client *http.Client, cfg Config, count int, isWarmup bool) []Result {
+func getProjectID(client *http.Client, base string) (string, error) {
+	req, _ := http.NewRequest("GET", base+"/api/projects", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Projects []struct {
+			ID string `json:"id"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+	if len(result.Projects) == 0 {
+		return "", fmt.Errorf("no projects found")
+	}
+	return result.Projects[0].ID, nil
+}
+
+func runPhase(client *http.Client, cfg Config, count int, isWarmup bool, projectID string) []Result {
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, cfg.Concurrency)
 	results := make([]Result, count)
@@ -166,7 +195,7 @@ func runPhase(client *http.Client, cfg Config, count int, isWarmup bool) []Resul
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			r := createAndWait(client, cfg, iter)
+			r := createAndWait(client, cfg, iter, projectID)
 			mu.Lock()
 			results[iter] = r
 			mu.Unlock()
@@ -191,7 +220,7 @@ func runPhase(client *http.Client, cfg Config, count int, isWarmup bool) []Resul
 	return results
 }
 
-func createAndWait(client *http.Client, cfg Config, iter int) Result {
+func createAndWait(client *http.Client, cfg Config, iter int, projectID string) Result {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
@@ -199,7 +228,7 @@ func createAndWait(client *http.Client, cfg Config, iter int) Result {
 	start := time.Now()
 
 	// 1. POST /api/environments
-	reqBody := fmt.Sprintf(`{"name":"%s","git_url":"https://github.com/octocat/Hello-World","git_branch":"master"}`, name)
+	reqBody := fmt.Sprintf(`{"name":"%s","git_url":"https://github.com/octocat/Hello-World","git_branch":"master","project_id":"%s"}`, name, projectID)
 	req, _ := http.NewRequestWithContext(ctx, "POST", cfg.APIBase+"/api/environments", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 

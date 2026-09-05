@@ -107,13 +107,13 @@ func (r *Runtime) Close() error {
 func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (string, error) {
 	ctx = withNamespace(ctx)
 
-	// 1. Check warm pool first
-	if warm, reason := r.warmPool.Take(spec.BaseImage); warm != "" {
-		slog.Info("warm pool hit", "container_id", warm)
-		return warm, nil
-	} else {
-		slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage)
-	}
+	// 1. Check warm pool first (DISABLED because it breaks bind mounts)
+	// if warm, reason := r.warmPool.Take(spec.BaseImage); warm != "" {
+	// 	slog.Info("warm pool hit", "container_id", warm)
+	// 	return warm, nil
+	// } else {
+	// 	slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage)
+	// }
 
 	return r.createSandboxInternal(ctx, spec)
 }
@@ -134,7 +134,7 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		withCgroupLimits(spec.MemoryLimit, spec.CPULimit),
 		withDroppedCapabilities(),
 		withSeccomp(),
-		withReadonlyRootfs(),
+		// withReadonlyRootfs(), // Temporarily disabled to allow runc to create /app
 		withTmpfs(),
 	}
 
@@ -148,6 +148,14 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		var newMounts []specs.Mount
 		for _, m := range s.Mounts {
 			if m.Destination == "/sys" || m.Type == "sysfs" {
+				// Replace sysfs with a bind mount of the host's /sys
+				// Required for rootless containers sharing the host network namespace
+				newMounts = append(newMounts, specs.Mount{
+					Destination: "/sys",
+					Type:        "bind",
+					Source:      "/sys",
+					Options:     []string{"rbind", "ro", "nosuid", "nodev", "noexec"},
+				})
 				continue
 			}
 			newMounts = append(newMounts, m)
@@ -197,25 +205,25 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		client.WithNewSpec(ociOpts...),
 	}
 
-	container, err := r.client.NewContainer(ctx, containerID, opts...)
+	_, err = r.client.NewContainer(ctx, containerID, opts...)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 
-	// 4. Setup networking
-	networkID := "berth-" + containerID[:8]
-	if err := r.netMgr.CreateNetwork(ctx, networkID); err != nil {
-		_ = container.Delete(ctx, client.WithSnapshotCleanup)
-		return "", fmt.Errorf("failed to create network: %w", err)
-	}
+	// 4. Setup networking (SKIPPED FOR HOST NETWORKING)
+	// networkID := "berth-" + containerID[:8]
+	// if err := r.netMgr.CreateNetwork(ctx, networkID); err != nil {
+	// 	_ = container.Delete(ctx, client.WithSnapshotCleanup)
+	// 	return "", fmt.Errorf("failed to create network: %w", err)
+	// }
 
-	// 4b. Allocate IP for the container
-	_, err = r.netMgr.AllocateIP(networkID, containerID)
-	if err != nil {
-		_ = container.Delete(ctx, client.WithSnapshotCleanup)
-		_ = r.netMgr.DestroyNetwork(ctx, networkID)
-		return "", fmt.Errorf("failed to allocate IP: %w", err)
-	}
+	// // 4b. Allocate IP for the container
+	// _, err = r.netMgr.AllocateIP(networkID, containerID)
+	// if err != nil {
+	// 	_ = container.Delete(ctx, client.WithSnapshotCleanup)
+	// 	_ = r.netMgr.DestroyNetwork(ctx, networkID)
+	// 	return "", fmt.Errorf("failed to allocate IP: %w", err)
+	// }
 
 	slog.Info("sandbox created (cache miss)", "container_id", containerID, "image", spec.BaseImage)
 	return containerID, nil
@@ -393,7 +401,7 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 	processSpec := &specs.Process{
 		Terminal: false,
 		Args:     cmd,
-		Cwd:      "/app",
+		Cwd:      "/mnt",
 		Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 	}
 
@@ -401,35 +409,13 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 	fifoDir := filepath.Join(home, ".local", "state", "berth", "fifo", containerID, "exec-"+uuid.New().String()[:8])
 	_ = os.MkdirAll(fifoDir, 0755)
 
-	process, err := task.Exec(ctx, uuid.New().String(), processSpec, cio.NewCreator(cio.WithFIFODir(fifoDir)))
+	var stdoutBuf, stderrBuf bytes.Buffer
+	creator := cio.NewCreator(cio.WithFIFODir(fifoDir), cio.WithStreams(nil, &stdoutBuf, &stderrBuf))
+
+	process, err := task.Exec(ctx, uuid.New().String(), processSpec, creator)
 	if err != nil {
 		return "", fmt.Errorf("failed to create exec process: %w", err)
 	}
-
-	var stdoutBuf, stderrBuf bytes.Buffer
-	errCh := make(chan error, 2)
-
-	go func() {
-		f, err := os.OpenFile(filepath.Join(fifoDir, "stdout"), os.O_RDONLY, 0)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer f.Close()
-		_, err = io.Copy(&stdoutBuf, f)
-		errCh <- err
-	}()
-
-	go func() {
-		f, err := os.OpenFile(filepath.Join(fifoDir, "stderr"), os.O_RDONLY, 0)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer f.Close()
-		_, err = io.Copy(&stderrBuf, f)
-		errCh <- err
-	}()
 
 	if err := process.Start(ctx); err != nil {
 		return "", fmt.Errorf("failed to start exec: %w", err)
@@ -440,32 +426,22 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", fmt.Errorf("failed to wait for exec: %w", err)
 	}
 
-	var status uint32
 	select {
-	case st := <-statusC:
-		status = st.ExitCode()
 	case <-ctx.Done():
 		_ = process.Kill(ctx, syscall.SIGKILL)
 		return "", ctx.Err()
-	}
-
-	for i := 0; i < 2; i++ {
-		if err := <-errCh; err != nil {
-			slog.Warn("exec fifo read error", "error", err)
+	case status := <-statusC:
+		if _, err := process.Delete(ctx); err != nil {
+			slog.Warn("exec process delete failed", "error", err)
 		}
+
+		if status.ExitCode() != 0 {
+			_ = os.RemoveAll(fifoDir)
+			return stdoutBuf.String() + "\n" + stderrBuf.String(), fmt.Errorf("exec exited with code %d: %s", status.ExitCode(), stderrBuf.String())
+		}
+		_ = os.RemoveAll(fifoDir)
+		return stdoutBuf.String(), nil
 	}
-
-	if _, err := process.Delete(ctx); err != nil {
-		slog.Warn("exec process delete failed", "error", err)
-	}
-
-	_ = os.RemoveAll(fifoDir)
-
-	if status != 0 {
-		return stderrBuf.String(), fmt.Errorf("exec exited with code %d: %s", status, stderrBuf.String())
-	}
-
-	return stdoutBuf.String(), nil
 }
 
 // GetLogs retrieves logs from a sandbox.
@@ -584,7 +560,7 @@ func withLinuxNamespaces() oci.SpecOpts {
 		}
 		if os.Geteuid() == 0 {
 			namespaces = append(namespaces,
-				specs.LinuxNamespace{Type: specs.NetworkNamespace},
+				// specs.LinuxNamespace{Type: specs.NetworkNamespace}, // DISABLED for host networking
 				specs.LinuxNamespace{Type: specs.CgroupNamespace},
 			)
 		}

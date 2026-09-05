@@ -16,10 +16,10 @@ Berth is a single-host ephemeral sandbox platform for research on predictive pre
 │  PREDICTION SVC   │  Python gRPC (localhost only)           │
 │  (Semi-Trusted)   │  ONNX Runtime, no network egress         │
 ├─────────────────────────────────────────────────────────────┤
-│  DATA PLANE       │  containerd + gVisor (runsc)          │
+│  DATA PLANE       │  containerd + runc (v2)               │
 │  (Untrusted User  │  Rootless containerd for local dev    │
-│   Code Executes)  │  Per-sandbox overlayfs (using bind mounts for Phase 1)│
-│                   │  Cilium eBPF network policies           │
+│   Code Executes)  │  Per-sandbox overlayfs / bind mounts  │
+│                   │  Host networking (in rootless mode)   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -46,7 +46,7 @@ Berth is a single-host ephemeral sandbox platform for research on predictive pre
 
 ## Network Segmentation
 
-- Each sandbox gets a `/30` subnet.
-- Cilium L3/L4 policies block inter-sandbox traffic.
+- By default, each sandbox gets a `/30` subnet and Cilium L3/L4 policies block inter-sandbox traffic.
+- *(Note: In local rootless dev mode, containers use host networking to bypass restricted user namespaces, so network segmentation and port mapping are not isolated.)*
 - Only the API Gateway can reach the backend.
 - Only the backend can reach the prediction service (localhost:50051).

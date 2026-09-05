@@ -142,10 +142,11 @@ func (nm *NetworkManager) ForwardPort(containerID string, hostPort, containerPor
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
-	containerIP, ok := nm.containerIPs[containerID]
-	if !ok {
-		return fmt.Errorf("no IP allocated for container %s", containerID)
-	}
+	// Skip IP checking for host networking
+	// containerIP, ok := nm.containerIPs[containerID]
+	// if !ok {
+	// 	return fmt.Errorf("no IP allocated for container %s", containerID)
+	// }
 
 	if hostPort == 0 {
 		hostPort = 30000 + len(nm.portMap) + 1
@@ -158,7 +159,7 @@ func (nm *NetworkManager) ForwardPort(containerID string, hostPort, containerPor
 
 	// Use go-iptables for typed, safe rule management
 	// This is a placeholder; actual implementation requires github.com/coreos/go-iptables
-	slog.Info("port forwarding active", "container", containerID, "host_port", hostPort, "destination", fmt.Sprintf("%s:%d", containerIP, containerPort))
+	slog.Info("port forwarding active (host networking)", "container", containerID, "host_port", hostPort, "container_port", containerPort)
 	return nil
 }
 

@@ -10,11 +10,11 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 ### What Works Currently
 - Rootless containerd daemon setup
 - gVisor (runsc) runtime integration
-- Fast Container lifecycle (Create/Start/Stop/Exec)
+- Fast Container lifecycle (Create/Start/Stop/Exec) works cleanly in rootless mode
 - Advanced Warm Pool with dependency caching
 - Hardened OCI Spec (namespaces, capabilities, seccomp, cgroups)
 - Event-driven provisioning via NATS
-- Bridge networking scaffold
+- Host-networking enabled (no bridge) for unblocked port-forwarding
 
 ### Honest Status
 

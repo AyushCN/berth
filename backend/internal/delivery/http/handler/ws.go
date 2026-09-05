@@ -67,7 +67,7 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 	defer conn.Close()
 
 	subject := "sandbox." + sandboxID + ".events"
-	sub, err := h.natsClient.Subscribe(subject, "ws-"+sandboxID, func(msg *nats.Msg) {
+	sub, err := h.natsClient.Subscribe(subject, "", func(msg *nats.Msg) {
 		if err := conn.WriteMessage(websocket.TextMessage, msg.Data); err != nil {
 			slog.Error("websocket write failed", "error", err)
 		}
@@ -116,7 +116,7 @@ func (h *WSHandler) HandleFileSyncWS(c *gin.Context) {
 	defer conn.Close()
 
 	subject := "file." + sandboxID + "." + filePath
-	sub, err := h.natsClient.Subscribe(subject, "file-"+sandboxID, func(msg *nats.Msg) {
+	sub, err := h.natsClient.Subscribe(subject, "", func(msg *nats.Msg) {
 		_ = conn.WriteMessage(websocket.BinaryMessage, msg.Data)
 		_ = msg.Ack()
 	})

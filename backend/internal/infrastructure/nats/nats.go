@@ -63,13 +63,16 @@ func (c *Client) Publish(subject string, data []byte) error {
 	return err
 }
 
-// Subscribe creates a durable consumer subscription.
+// Subscribe creates a consumer subscription. If durable is empty, it creates an ephemeral subscription.
 func (c *Client) Subscribe(subject, durable string, handler nats.MsgHandler) (*nats.Subscription, error) {
-	sub, err := c.js.Subscribe(subject, handler,
-		nats.Durable(durable),
+	opts := []nats.SubOpt{
 		nats.ManualAck(),
 		nats.MaxDeliver(3),
-	)
+	}
+	if durable != "" {
+		opts = append(opts, nats.Durable(durable))
+	}
+	sub, err := c.js.Subscribe(subject, handler, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe: %w", err)
 	}
