@@ -179,6 +179,25 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 		return nil
 	})
 
+	// Force host DNS into the container
+	ociOpts = append(ociOpts, func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		s.Mounts = append(s.Mounts,
+			specs.Mount{
+				Destination: "/etc/resolv.conf",
+				Type:        "bind",
+				Source:      "/etc/resolv.conf",
+				Options:     []string{"rbind", "ro"},
+			},
+			specs.Mount{
+				Destination: "/etc/hosts",
+				Type:        "bind",
+				Source:      "/etc/hosts",
+				Options:     []string{"rbind", "ro"},
+			},
+		)
+		return nil
+	})
+
 	// Set main process command if provided
 	if len(spec.Cmd) > 0 {
 		ociOpts = append(ociOpts, withProcessArgs(spec.Cmd...))
