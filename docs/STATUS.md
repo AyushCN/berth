@@ -12,13 +12,11 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 - **Local Dev Loop:** Rootless containerd setup script (`scripts/setup-rootless.sh`). Runs via standard `runc.v2` (temporarily downgraded from gVisor/runsc due to rootless incompatibility).
 - **Benchmarking:** EDEBench test harness runs to completion against 50 parallel sandboxes.
 - **Database/Redis:** Initialized via Clean Architecture with `sqlc` and `pgxpool`.
-- **API Business Logic (Phase 2):** Fully implemented Usecases for Auth, Sandbox, and File operations.
-
+- **API Business Logic (Phase 2):** Fully implemented Usecases for Auth, Sandbox, and File operations. HTTP handlers are fully wired, tested, and working end-to-end.
 ## 🟡 Partial / Stubbed
-- **API Handlers:** HTTP handlers are scaffolded and DevLogin endpoint works, but end-to-end webhook wiring is pending.
+- **Frontend UI:** Next.js project exists, not fully wired to production API yet.
 
 ## ❌ Missing (Vaporware)
 - **Prediction Service:** No ML models (XGBoost/ONNX), no feature extraction, no Python service.
 - **Real-Time Sync (CRDT):** No Yjs operational transforms, no WebSocket event bus, no Monaco integration.
-- **Frontend UI:** 🟡 Scaffolded. Next.js project exists, not wired to production API yet.
 - **End-to-End Loop:** You cannot currently click a button to clone a repository and instantly run it in a sandbox.

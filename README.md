@@ -22,8 +22,8 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 |-------|--------|-------|
 | Phase 0: Scaffold | ✅ Done | CI, schema, scripts |
 | Phase 1: Isolation | ✅ Done | Runtime works, warm pool + layer caching fully implemented |
-| Phase 2: Auth + API | 🟡 In Progress | Usecases implemented, handler wiring pending |
-| Phase 3: Frontend | ❌ Not started | No project |
+| Phase 2: Auth + API | ✅ Done | Usecases implemented, HTTP handlers fully wired and tested |
+| Phase 3: Frontend | 🟡 Scaffolded | Next.js project exists, not yet wired |
 | Phase 4: Prediction | ❌ Not started | No model |
 | Phase 5: Evaluation | ❌ Not started | No benchmarks |
 
