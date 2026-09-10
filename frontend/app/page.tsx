@@ -60,7 +60,7 @@ export default function LandingPage() {
   const opacityHero = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-on-surface font-sans selection:bg-primary-fixed/30 selection:text-primary-fixed overflow-hidden relative">
+    <div className="min-h-screen text-on-surface font-sans selection:bg-primary-fixed/30 selection:text-primary-fixed overflow-hidden relative">
       <GridBackground />
 
       {/* Navigation */}

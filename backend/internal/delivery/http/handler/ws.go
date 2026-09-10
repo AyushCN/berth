@@ -66,8 +66,10 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	subject := "sandbox." + sandboxID + ".events"
-	sub, err := h.natsClient.Subscribe(subject, "", func(msg *nats.Msg) {
+	outSubject := "sandbox." + sandboxID + ".output"
+	inSubject := "sandbox." + sandboxID + ".input"
+
+	sub, err := h.natsClient.Subscribe(outSubject, "", func(msg *nats.Msg) {
 		if err := conn.WriteMessage(websocket.TextMessage, msg.Data); err != nil {
 			slog.Error("websocket write failed", "error", err)
 		}
@@ -88,7 +90,7 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 			break
 		}
 		if msgType == websocket.TextMessage || msgType == websocket.BinaryMessage {
-			if err := h.natsClient.Publish(subject, data); err != nil {
+			if err := h.natsClient.Publish(inSubject, data); err != nil {
 				slog.Error("nats publish failed", "error", err)
 			}
 		}

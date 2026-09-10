@@ -9,17 +9,17 @@ import (
 
 // User represents a platform user.
 type User struct {
-	ID                   uuid.UUID
-	Email                string
-	Username             string
-	GithubID             string
-	GithubUsername       string
-	GithubTokenEncrypted string
-	AvatarURL            string
-	MaxSandboxes         int
-	MaxBuildsPerHour     int
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	ID                   uuid.UUID `json:"id"`
+	Email                string    `json:"email"`
+	Username             string    `json:"username"`
+	GithubID             string    `json:"github_id"`
+	GithubUsername       string    `json:"github_username"`
+	GithubTokenEncrypted string    `json:"-"`
+	AvatarURL            string    `json:"avatar_url"`
+	MaxSandboxes         int       `json:"max_sandboxes"`
+	MaxBuildsPerHour     int       `json:"max_builds_per_hour"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // UserRepository defines the interface for user persistence.

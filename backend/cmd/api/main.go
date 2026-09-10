@@ -121,7 +121,7 @@ func main() {
 
 	// Handlers
 	deps := &berthhttp.Dependencies{
-		AuthHandler:    handler.NewAuthHandler(authUC),
+		AuthHandler:    handler.NewAuthHandler(authUC, cfg.FrontendURL),
 		SandboxHandler: handler.NewSandboxHandler(sandboxUC),
 		FileHandler:    handler.NewFileHandler(fileUC),
 		WSHandler:      handler.NewWSHandler(natsClient),

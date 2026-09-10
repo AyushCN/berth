@@ -14,7 +14,7 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 - **Database/Redis:** Initialized via Clean Architecture with `sqlc` and `pgxpool`.
 - **API Business Logic (Phase 2):** Fully implemented Usecases for Auth, Sandbox, and File operations. HTTP handlers are fully wired, tested, and working end-to-end.
 ## 🟡 Partial / Stubbed
-- **Frontend UI:** Next.js project exists, not fully wired to production API yet.
+- **Frontend UI:** Next.js project is partially wired. GitHub OAuth flow is functional, Profile page is implemented, and Terminal WebSocket UI is active. File Explorer and Monaco Editor are pending.
 
 ## ❌ Missing (Vaporware)
 - **Prediction Service:** No ML models (XGBoost/ONNX), no feature extraction, no Python service.

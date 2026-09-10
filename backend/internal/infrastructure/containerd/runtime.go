@@ -463,6 +463,85 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 	}
 }
 
+// ExecPTY runs an interactive command inside an existing sandbox.
+func (r *Runtime) ExecPTY(ctx context.Context, containerID string, cmd []string) (io.WriteCloser, io.Reader, func() error, error) {
+	ctx = withNamespace(ctx)
+
+	r.dirtyContainers.Store(containerID, true)
+
+	container, err := r.client.LoadContainer(ctx, containerID)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load container: %w", err)
+	}
+
+	task, err := container.Task(ctx, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get task: %w", err)
+	}
+
+	processSpec := &specs.Process{
+		Terminal: true,
+		Args:     cmd,
+		Cwd:      "/mnt",
+		Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "TERM=xterm", "HOME=/root"},
+	}
+
+	home, _ := os.UserHomeDir()
+	fifoDir := filepath.Join(home, ".local", "state", "berth", "fifo", containerID, "pty-"+uuid.New().String()[:8])
+	_ = os.MkdirAll(fifoDir, 0755)
+
+	// Use io.Pipe for stdin and stdout bridging
+	stdinReader, stdinWriter := io.Pipe()
+	stdoutReader, stdoutWriter := io.Pipe()
+
+	// WithTerminal causes stderr to be merged into stdout
+	creator := cio.NewCreator(cio.WithFIFODir(fifoDir), cio.WithStreams(stdinReader, stdoutWriter, nil), cio.WithTerminal)
+
+	processID := "exec-" + uuid.New().String()[:8]
+	process, err := task.Exec(ctx, processID, processSpec, creator)
+	if err != nil {
+		stdinWriter.Close()
+		stdoutWriter.Close()
+		return nil, nil, nil, fmt.Errorf("failed to create exec process: %w", err)
+	}
+
+	// Wait must be called before Start to avoid missing the exit event
+	statusC, err := process.Wait(context.Background())
+	if err != nil {
+		process.Delete(context.Background())
+		stdinWriter.Close()
+		stdoutWriter.Close()
+		return nil, nil, nil, fmt.Errorf("failed to wait for exec: %w", err)
+	}
+
+	if err := process.Start(ctx); err != nil {
+		process.Delete(context.Background())
+		stdinWriter.Close()
+		stdoutWriter.Close()
+		return nil, nil, nil, fmt.Errorf("failed to start exec: %w", err)
+	}
+
+	waitFunc := func() error {
+		// Clean up when the wait is done
+		defer func() {
+			process.Delete(context.Background())
+			stdoutWriter.Close() // this will trigger EOF on stdoutReader for the bridging goroutine
+			os.RemoveAll(fifoDir)
+		}()
+
+		select {
+		case status := <-statusC:
+			if status.ExitCode() != 0 {
+				return fmt.Errorf("exec exited with code %d", status.ExitCode())
+			}
+			return nil
+		}
+	}
+
+	return stdinWriter, stdoutReader, waitFunc, nil
+}
+
+
 // GetLogs retrieves logs from a sandbox.
 func (r *Runtime) GetLogs(ctx context.Context, containerID string, tail int) (string, error) {
 	home, _ := os.UserHomeDir()

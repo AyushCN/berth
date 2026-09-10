@@ -14,7 +14,7 @@ export function AuthInitializer() {
           setUser(data);
         }
       }).catch((e) => {
-        console.error("Failed to fetch user", e);
+        // Expected if user is not logged in
       }).finally(() => {
         setLoading(false);
       });

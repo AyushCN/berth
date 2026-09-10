@@ -23,7 +23,7 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 | Phase 0: Scaffold | ✅ Done | CI, schema, scripts |
 | Phase 1: Isolation | ✅ Done | Runtime works, warm pool + layer caching fully implemented |
 | Phase 2: Auth + API | ✅ Done | Usecases implemented, HTTP handlers fully wired and tested |
-| Phase 3: Frontend | 🟡 Scaffolded | Next.js project exists, not yet wired |
+| Phase 3: Frontend | 🟡 In Progress | Next.js UI wired with GitHub OAuth, Profile, and Terminal |
 | Phase 4: Prediction | ❌ Not started | No model |
 | Phase 5: Evaluation | ❌ Not started | No benchmarks |
 
@@ -37,7 +37,7 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 | 4 | **Preview access** | ❌ Not started | Reach the running app from your browser |
 | 5 | **File editing** | ❌ Not started | Save file in browser → file lands inside sandbox |
 | 6 | **Git operations** | ❌ Not started | Commit/push from inside sandbox (already scaffolded) |
-| 7 | **Frontend wiring** | ❌ Not started | Next.js UI calling the real API |
+| 7 | **Frontend wiring** | 🟡 Partial | Next.js UI wired for Auth, Profile, and Terminal WebSockets |
 | 8 | **The Prediction Layer**| ❌ Not started | The ML model predicts which repo you'll open next |
 | 9 | **Real-Time Sync**    | ❌ Not started | CRDTs, Monaco editor |
 
@@ -62,6 +62,9 @@ make migrate-up
 # 4. Start backend
 export CONTAINERD_SOCK=$XDG_RUNTIME_DIR/containerd/containerd.sock
 export JWT_SECRET="dev-secret"
+# Add your GitHub OAuth credentials here:
+export GITHUB_CLIENT_ID="your_client_id"
+export GITHUB_CLIENT_SECRET="your_client_secret"
 cd backend && go run ./cmd/api
 ```
 

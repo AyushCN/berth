@@ -3,17 +3,17 @@
 @import "tailwindcss";
 
 @theme {
-  --background: #131313;
+  --background: #050505;
   --foreground: #e5e2e1;
 
-  --color-surface: #131313;
-  --color-surface-dim: #131313;
-  --color-surface-bright: #3a3939;
-  --color-surface-container-lowest: #0e0e0e;
-  --color-surface-container-low: #1c1b1b;
-  --color-surface-container: #201f1f;
-  --color-surface-container-high: #2a2a2a;
-  --color-surface-container-highest: #353534;
+  --color-surface: #050505;
+  --color-surface-dim: #050505;
+  --color-surface-bright: #1c1b1b;
+  --color-surface-container-lowest: #0a0a0a;
+  --color-surface-container-low: #0f0f0f;
+  --color-surface-container: #131313;
+  --color-surface-container-high: #1a1a1a;
+  --color-surface-container-highest: #202020;
   --color-on-surface: #e5e2e1;
   --color-on-surface-variant: #b9cacb;
   --color-inverse-surface: #e5e2e1;

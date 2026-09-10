@@ -10,11 +10,15 @@ import (
 
 // AuthHandler handles authentication HTTP requests.
 type AuthHandler struct {
-	authUC *usecase.AuthUsecase
+	authUC      *usecase.AuthUsecase
+	frontendURL string
 }
 
-func NewAuthHandler(uc *usecase.AuthUsecase) *AuthHandler {
-	return &AuthHandler{authUC: uc}
+func NewAuthHandler(uc *usecase.AuthUsecase, frontendURL string) *AuthHandler {
+	return &AuthHandler{
+		authUC:      uc,
+		frontendURL: frontendURL,
+	}
 }
 
 // GithubLogin initiates the OAuth flow.
@@ -56,7 +60,7 @@ func (h *AuthHandler) GithubCallback(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.authUC.ProcessCallback(c.Request.Context(), code, verifier)
+	token, _, err := h.authUC.ProcessCallback(c.Request.Context(), code, verifier)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -65,10 +69,8 @@ func (h *AuthHandler) GithubCallback(c *gin.Context) {
 	// Set JWT cookie
 	c.SetCookie("berth_token", token, 86400, "/", "", true, true)
 
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-		"user":  user,
-	})
+	// Redirect to frontend dashboard
+	c.Redirect(http.StatusTemporaryRedirect, h.frontendURL+"/dashboard")
 }
 
 // GetMe returns the current authenticated user.

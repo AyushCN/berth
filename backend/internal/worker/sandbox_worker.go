@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -191,7 +192,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 			Language:    "node",
 			BaseImage:   "docker.io/library/node:20-alpine",
 			InstallCmd:  "npm install",
-			StartCmd:    "npm run dev",
+			StartCmd:    "npm start",
 			ExposedPort: 3000,
 			NeedsDB:     false,
 			Confidence:  0.0,
@@ -288,9 +289,23 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 	}
 
+	// Start application in background
+	if profile.StartCmd != "" {
+		startArgs := []string{"sh", "-c", "cd /mnt && " + profile.StartCmd + " > /tmp/app.log 2>&1 &"}
+		if out, err := w.runtime.Exec(bgCtx, cid, startArgs); err != nil {
+			slog.Warn("failed to start application", "error", err, "output", out)
+		} else {
+			slog.Info("application start command issued", "cmd", profile.StartCmd)
+		}
+	}
+
 	if err := w.repo.UpdateState(bgCtx, sandbox.ID, domain.StateRunning); err != nil {
 		slog.Error("worker failed to set RUNNING state", "sandbox_id", sandbox.ID, "error", err)
 		return
+	}
+
+	if w.natsClient != nil {
+		go w.StartInteractiveShell(context.Background(), sandbox.ID.String(), cid)
 	}
 
 	totalDuration := time.Since(dbPopStart)
@@ -331,3 +346,89 @@ func validateGitURL(raw string) error {
 	}
 	return nil
 }
+
+// StartInteractiveShell starts a PTY-backed shell inside the container
+// and bridges I/O to NATS subject sandbox.<id>.input and .output
+func (w *SandboxWorker) StartInteractiveShell(ctx context.Context, sandboxID, containerID string) {
+	inSubject := "sandbox." + sandboxID + ".input"
+	outSubject := "sandbox." + sandboxID + ".output"
+
+	var shellMutex sync.Mutex
+	var shellStarted bool
+	var stdin io.WriteCloser
+
+	// Subscribe to inputs
+	sub, err := w.natsClient.Subscribe(inSubject, "", func(msg *natsCore.Msg) {
+		shellMutex.Lock()
+		defer shellMutex.Unlock()
+
+		if !shellStarted {
+			slog.Info("starting interactive shell lazily", "sandbox_id", sandboxID)
+			in, out, waitFunc, err := w.runtime.ExecPTY(ctx, containerID, []string{"/bin/sh"})
+			if err != nil {
+				slog.Error("failed to start interactive shell", "error", err)
+				msg.Ack()
+				return
+			}
+			stdin = in
+			shellStarted = true
+
+			// Bridge stdout to NATS
+			go func() {
+				buf := make([]byte, 1024)
+				for {
+					n, err := out.Read(buf)
+					if n > 0 {
+						_ = w.natsClient.Publish(outSubject, buf[:n])
+					}
+					if err != nil {
+						slog.Info("shell stdout closed", "sandbox_id", sandboxID)
+						break
+					}
+				}
+			}()
+
+			// Wait for shell exit
+			go func() {
+				if err := waitFunc(); err != nil {
+					slog.Warn("interactive shell exited with error", "error", err)
+				} else {
+					slog.Info("interactive shell exited cleanly", "sandbox_id", sandboxID)
+				}
+
+				shellMutex.Lock()
+				shellStarted = false
+				if stdin != nil {
+					stdin.Close()
+				}
+				shellMutex.Unlock()
+			}()
+		}
+
+		// Forward input to shell
+		if shellStarted && stdin != nil {
+			_, err := stdin.Write(msg.Data)
+			if err != nil {
+				slog.Error("failed to write to shell stdin", "error", err)
+			}
+		}
+
+		msg.Ack()
+	})
+
+	if err != nil {
+		slog.Error("failed to subscribe to terminal events", "error", err)
+		return
+	}
+
+	// Keep subscription alive until context is canceled
+	<-ctx.Done()
+	sub.Unsubscribe()
+
+	shellMutex.Lock()
+	if shellStarted && stdin != nil {
+		stdin.Close()
+	}
+	shellMutex.Unlock()
+}
+
