@@ -27,6 +27,20 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 | Phase 4: Prediction | ❌ Not started | No model |
 | Phase 5: Evaluation | ❌ Not started | No benchmarks |
 
+### Execution Roadmap
+
+| # | Milestone | Status | What it adds |
+|---|---|---|---|
+| 1 | **Boot the existing stack** | ✅ Done | Infra + API + worker running, verified with real HTTP calls |
+| 2 | **Clone-to-sandbox loop** | ❌ Not started | Port api-sandbox's proven flow: POST repo URL → worker clones into container |
+| 3 | **Runtime detection + start** | ❌ Not started | Auto-detect Node/Python/Go, install deps, start the app |
+| 4 | **Preview access** | ❌ Not started | Reach the running app from your browser |
+| 5 | **File editing** | ❌ Not started | Save file in browser → file lands inside sandbox |
+| 6 | **Git operations** | ❌ Not started | Commit/push from inside sandbox (already scaffolded) |
+| 7 | **Frontend wiring** | ❌ Not started | Next.js UI calling the real API |
+| 8 | **The Prediction Layer**| ❌ Not started | The ML model predicts which repo you'll open next |
+| 9 | **Real-Time Sync**    | ❌ Not started | CRDTs, Monaco editor |
+
 ### What Does NOT Exist Yet (Vaporware)
 - ❌ Real-time collaborative editing (CRDT sync)
 - ❌ Prediction Service (XGBoost)

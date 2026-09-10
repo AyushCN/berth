@@ -57,6 +57,7 @@ docs/EDEBench/dataset/*.parquet
 docs/EDEBench/dataset/repos/
 
 # Scratch files and executables
+scratch/
 backend/bench
 backend/worker
 backend/bench-results.*
