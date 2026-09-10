@@ -19,4 +19,4 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 ## ❌ Missing (Vaporware)
 - **Prediction Service:** No ML models (XGBoost/ONNX), no feature extraction, no Python service.
 - **Real-Time Sync (CRDT):** No Yjs operational transforms, no WebSocket event bus, no Monaco integration.
-- **End-to-End Loop:** You cannot currently click a button to clone a repository and instantly run it in a sandbox.
+- **File Explorer / Code Editor:** The frontend does not yet support editing files inside the sandbox.
