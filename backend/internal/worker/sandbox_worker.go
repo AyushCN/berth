@@ -83,9 +83,6 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	slog.Info("processing pending sandbox", "sandbox_id", sandbox.ID, "git_url", sandbox.GitURL, "db_pop_duration", dbPopDuration)
 
-	// Set state to BUILDING
-	_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateBuilding)
-
 	// Validate Git URL before any filesystem or network operation
 	if err := validateGitURL(sandbox.GitURL); err != nil {
 		slog.Error("invalid git url", "sandbox_id", sandbox.ID, "error", err)
@@ -230,17 +227,8 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 	createDuration := time.Since(createStart)
-	// Allocate a host port for preview
-	allocatedPort, err := getFreePort()
-	if err != nil {
-		slog.Warn("failed to allocate free port, using fallback", "error", err)
-		allocatedPort = 43100 // fallback
-	}
-	publicURL := fmt.Sprintf("http://localhost:8080/p/%s/", sandbox.ID.String())
-
-	if err := w.repo.UpdateContainerAndURL(context.Background(), sandbox.ID, cid, publicURL, allocatedPort); err != nil {
-		slog.Error("worker failed to update container id and url", "sandbox_id", sandbox.ID, "error", err)
-	}
+	// Wait to assign port until start
+	// allocatedPort was 43100 as fallback but let's just use what's returned from getFreePort
 
 	startStart := time.Now()
 	if err := w.runtime.StartSandbox(bgCtx, cid); err != nil {
@@ -257,12 +245,23 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		installArgs := []string{"sh", "-c", "cd /mnt && " + profile.InstallCmd}
 		if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
 			slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
+			_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+			return
 		} else {
 			installDuration = time.Since(installStart)
 			slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out, "install_duration", installDuration)
 		}
 	}
 	// Start application in background
+	allocatedPort, err := getFreePort()
+	if err != nil {
+		slog.Warn("failed to allocate free port", "error", err)
+		allocatedPort = profile.ExposedPort
+		if allocatedPort == 0 {
+			allocatedPort = 3000
+		}
+	}
+
 	if profile.StartCmd != "" {
 		startArgs := []string{"sh", "-c", fmt.Sprintf("cd /mnt && PORT=%d %s > /tmp/app.log 2>&1 &", allocatedPort, profile.StartCmd)}
 		if out, err := w.runtime.Exec(bgCtx, cid, startArgs); err != nil {
@@ -270,6 +269,11 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		} else {
 			slog.Info("application start command issued", "cmd", profile.StartCmd, "port", allocatedPort)
 		}
+	}
+
+	publicURL := fmt.Sprintf("http://localhost:%d", allocatedPort) // host networking
+	if err := w.repo.UpdateContainerAndURL(context.Background(), sandbox.ID, cid, publicURL, allocatedPort); err != nil {
+		slog.Error("worker failed to update container id and url", "sandbox_id", sandbox.ID, "error", err)
 	}
 
 	if err := w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateRunning); err != nil {
