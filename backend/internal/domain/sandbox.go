@@ -82,6 +82,7 @@ type SandboxRepository interface {
 	ListByProject(ctx context.Context, projectID uuid.UUID) ([]*Sandbox, error)
 	UpdateState(ctx context.Context, id uuid.UUID, state SandboxState) error
 	UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error
+	UpdateContainerAndURL(ctx context.Context, id uuid.UUID, containerID string, publicURL string, port int) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	PopPendingSandbox(ctx context.Context) (*Sandbox, error)
@@ -113,6 +114,7 @@ type SandboxSpec struct {
 	BaseImage    string
 	WorkDir      string
 	WorkspaceDir string // Host directory to bind-mount into container
+	ExtraMounts  map[string]string // HostDir -> ContainerDir
 	Cmd          []string // Container main process (keep-alive for dev envs)
 	Env          map[string]string
 	MemoryLimit  int64 // bytes

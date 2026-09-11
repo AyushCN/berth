@@ -5,7 +5,7 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 ## ✅ Exists and Works
 - **Container Lifecycle:** Fast `CreateSandbox`, `StartSandbox`, `StopSandbox`, `DeleteSandbox`, and `Exec` via containerd v2 API. Rootless execution is fully functional for arbitrary commands (e.g., `npm install`).
 - **Warm Pool:** Fully functional. Tracks container dirty states, deletes dirty containers, and maintains a baseline.
-- **Dependency Caching:** Fast host-side layer caching via lockfile hashing (package-lock.json / go.sum) implemented in worker. Rootless IO pipes and `cio.WithFIFODir` properly route dependency manager logs.
+- **Dependency Caching:** Fast host-side dependency caching via `pnpm` store bind mounting (`ExtraMounts`), greatly accelerating Node dependency installations across concurrent environments.
 - **Job Orchestration:** NATS JetStream implemented for event-driven sandbox assignment with a 10s fallback loop.
 - **OCI Spec Hardening:** PID/Mount namespaces, dropped capabilities, Seccomp profiles, and PIDs cgroup limits.
 - **Networking:** Utilizes **host networking** mapped natively into the rootless containers (via `sysfs` host bind mounts) to ensure completely unimpeded external access and port mapping, completely bypassing previous bridge/netlink errors.

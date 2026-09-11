@@ -93,3 +93,52 @@ func (h *FileHandler) UpdateFileContent(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// CreateFile handles creating files or directories.
+func (h *FileHandler) CreateFile(c *gin.Context) {
+	sandboxID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sandbox id"})
+		return
+	}
+
+	var req struct {
+		Path  string `json:"path" binding:"required"`
+		IsDir bool   `json:"is_dir"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.fileUC.CreateFile(c.Request.Context(), sandboxID, req.Path, req.IsDir); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "created successfully"})
+}
+
+// DeleteFile handles deleting files or directories.
+func (h *FileHandler) DeleteFile(c *gin.Context) {
+	sandboxID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sandbox id"})
+		return
+	}
+
+	var req struct {
+		Path string `json:"path" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.fileUC.DeleteFile(c.Request.Context(), sandboxID, req.Path); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted successfully"})
+}

@@ -41,6 +41,16 @@ export function Terminal({ envId }: { envId: string }) {
     // Phase 3: WebSocket connection to backend
     const wsUrl = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:8080';
     const ws = new WebSocket(`${wsUrl}/ws/sandbox/${envId}`);
+    ws.onopen = () => {
+      term.writeln('\x1b[32mConnected!\x1b[0m');
+    };
+    ws.onclose = () => {
+      term.writeln('\x1b[31mDisconnected from sandbox.\x1b[0m');
+    };
+    ws.onerror = () => {
+      term.writeln('\x1b[31mConnection error.\x1b[0m');
+    };
+
     ws.onmessage = (e) => term.write(e.data);
     term.onData((data) => ws.send(data));
 

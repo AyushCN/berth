@@ -90,6 +90,10 @@ func (uc *SandboxUsecase) GetEnvironment(ctx context.Context, uid uuid.UUID, id 
 	return sandbox, nil
 }
 
+func (uc *SandboxUsecase) GetPreviewEnvironment(ctx context.Context, id uuid.UUID) (*domain.Sandbox, error) {
+	return uc.repo.GetByID(ctx, id)
+}
+
 func (uc *SandboxUsecase) DeleteEnvironment(ctx context.Context, uid uuid.UUID, id uuid.UUID) error {
 	sandbox, err := uc.repo.GetByID(ctx, id)
 	if err != nil {
@@ -110,6 +114,14 @@ func (uc *SandboxUsecase) DeleteEnvironment(ctx context.Context, uid uuid.UUID, 
 			slog.Error("failed to delete container", "error", err)
 		}
 	}
+
+	// Clean up workspace directory
+	home, _ := os.UserHomeDir()
+	workspaceDir := filepath.Join(home, ".local", "state", "berth", "workspaces", id.String())
+	if err := os.RemoveAll(workspaceDir); err != nil {
+		slog.Error("failed to delete workspace dir", "sandbox_id", id, "error", err)
+	}
+
 	return uc.repo.Delete(ctx, id)
 }
 
@@ -212,4 +224,50 @@ func (uc *SandboxUsecase) ForkEnvironment(ctx context.Context, uid uuid.UUID, id
 	}
 
 	return env, nil
+}
+
+func (uc *SandboxUsecase) StopEnvironment(ctx context.Context, uid uuid.UUID, id uuid.UUID) error {
+	sandbox, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if sandbox.OwnerID != uid {
+		if sandbox.ProjectID == uuid.Nil {
+			return fmt.Errorf("unauthorized to stop sandbox")
+		}
+		collab, err := uc.projectRepo.GetCollaborator(ctx, sandbox.ProjectID, uid)
+		if err != nil || collab.Role == domain.ProjectRoleViewer {
+			return fmt.Errorf("unauthorized to stop sandbox")
+		}
+	}
+	if sandbox.ContainerID != nil && uc.runtime != nil {
+		if err := uc.runtime.StopSandbox(ctx, *sandbox.ContainerID); err != nil {
+			slog.Error("failed to stop container", "error", err)
+		}
+	}
+	return uc.repo.UpdateState(ctx, id, domain.StateStopped)
+}
+
+func (uc *SandboxUsecase) RestartEnvironment(ctx context.Context, uid uuid.UUID, id uuid.UUID) error {
+	sandbox, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if sandbox.OwnerID != uid {
+		if sandbox.ProjectID == uuid.Nil {
+			return fmt.Errorf("unauthorized to restart sandbox")
+		}
+		collab, err := uc.projectRepo.GetCollaborator(ctx, sandbox.ProjectID, uid)
+		if err != nil || collab.Role == domain.ProjectRoleViewer {
+			return fmt.Errorf("unauthorized to restart sandbox")
+		}
+	}
+	if sandbox.ContainerID != nil && uc.runtime != nil {
+		if err := uc.runtime.DeleteSandbox(ctx, *sandbox.ContainerID); err != nil {
+			slog.Error("failed to delete container for restart", "error", err)
+		}
+	}
+	// Reset container ID so it picks up a new one
+	_ = uc.repo.UpdateContainerID(ctx, id, "")
+	return uc.repo.UpdateState(ctx, id, domain.StatePending)
 }

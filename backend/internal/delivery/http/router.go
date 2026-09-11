@@ -21,6 +21,10 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 	// Health check (no auth)
 	r.GET("/health", handler.HealthCheck)
 
+	// Preview Proxy (no auth, allows wildcards)
+	r.Any("/p/:id/*path", deps.SandboxHandler.PreviewProxy)
+	r.Any("/p/:id", deps.SandboxHandler.PreviewProxy)
+
 	// API routes
 	api := r.Group("/api")
 	// api.Use(middleware.RateLimit())
@@ -55,6 +59,8 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			authenticated.POST("/environments/:id/fork", deps.SandboxHandler.ForkEnvironment)
 			authenticated.GET("/environments/:id", deps.SandboxHandler.GetEnvironment)
 			authenticated.DELETE("/environments/:id", deps.SandboxHandler.DeleteEnvironment)
+			authenticated.POST("/environments/:id/stop", deps.SandboxHandler.StopEnvironment)
+			authenticated.POST("/environments/:id/restart", deps.SandboxHandler.RestartEnvironment)
 			authenticated.POST("/environments/:id/exec", deps.SandboxHandler.ExecCommand)
 			authenticated.GET("/environments/:id/logs", deps.SandboxHandler.GetLogs)
 
@@ -62,6 +68,8 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			authenticated.GET("/environments/:id/files", deps.FileHandler.ListFiles)
 			authenticated.GET("/environments/:id/files/content", deps.FileHandler.GetFileContent)
 			authenticated.PUT("/environments/:id/files/content", deps.FileHandler.UpdateFileContent)
+			authenticated.POST("/environments/:id/files/create", deps.FileHandler.CreateFile)
+			authenticated.POST("/environments/:id/files/delete", deps.FileHandler.DeleteFile)
 
 			// Git
 			authenticated.GET("/environments/:id/git/status", deps.GitHandler.Status)

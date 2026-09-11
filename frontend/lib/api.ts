@@ -18,7 +18,12 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new APIError(res.status, text);
+    let errMsg = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.error) errMsg = parsed.error;
+    } catch (e) {}
+    throw new APIError(res.status, errMsg);
   }
 
   if (res.status === 204) return null;
@@ -41,6 +46,8 @@ export const api = {
     exec: (id: string, command: string[]) =>
       fetchAPI(`/api/environments/${id}/exec`, { method: 'POST', body: JSON.stringify({ command }) }),
     logs: (id: string) => fetchAPI(`/api/environments/${id}/logs`),
+    stop: (id: string) => fetchAPI(`/api/environments/${id}/stop`, { method: 'POST' }),
+    restart: (id: string) => fetchAPI(`/api/environments/${id}/restart`, { method: 'POST' }),
   },
   git: {
     status: (id: string) => fetchAPI(`/api/environments/${id}/git/status`),
@@ -65,6 +72,16 @@ export const api = {
         method: 'PUT',
         body: content,
         headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    create: (id: string, path: string, is_dir: boolean) =>
+      fetchAPI(`/api/environments/${id}/files/create`, {
+        method: 'POST',
+        body: JSON.stringify({ path, is_dir }),
+      }),
+    delete: (id: string, path: string) =>
+      fetchAPI(`/api/environments/${id}/files/delete`, {
+        method: 'POST',
+        body: JSON.stringify({ path }),
       }),
   },
   orgs: {

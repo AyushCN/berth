@@ -206,7 +206,7 @@ function SandboxesDashboardContent() {
                 transition={{ delay: idx * 0.04, duration: 0.35 }}
               >
                 <Link
-                  href={`/env/${env.id}`}
+                  href={`/${user?.username || 'user'}/${env.id}`}
                   className="block group h-full"
                 >
                   <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 h-full flex flex-col gap-4 transition-all duration-300 hover:border-primary-fixed/40 hover:shadow-[0_0_24px_rgba(0,240,255,0.08)] relative overflow-hidden">

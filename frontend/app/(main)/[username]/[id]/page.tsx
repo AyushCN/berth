@@ -7,12 +7,16 @@ import { FileTree } from '@/components/file-tree';
 import { CodeEditor } from '@/components/code-editor';
 import { GitStatusPanel, CommitHistoryPanel, BranchPicker } from '@/components/GitUI';
 import { useEnvStore } from '@/stores/env';
-import { TerminalSquare, Box, GitBranch, Clock, RefreshCw, Trash2, ExternalLink, Loader2, Code } from 'lucide-react';
+import { TerminalSquare, Box, GitBranch, Clock, RefreshCw, Trash2, ExternalLink, Loader2, Code, Power, Play } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const Terminal = dynamic(() => import('@/components/terminal').then(mod => mod.Terminal), { 
   ssr: false,
   loading: () => <div className="p-4 text-gray-500 font-mono text-sm border border-gray-800 rounded bg-gray-900 flex-1 flex items-center justify-center">Loading terminal...</div>
+});
+const DockerLogs = dynamic(() => import('@/components/docker-logs').then(mod => mod.DockerLogs), { 
+  ssr: false,
+  loading: () => <div className="p-4 text-gray-500 font-mono text-sm border border-gray-800 rounded bg-gray-900 flex-1 flex items-center justify-center">Loading logs...</div>
 });
 import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
@@ -32,9 +36,20 @@ export default function EnvironmentPage() {
   const [env, setEnv] = useState<any>(null);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'terminal' | 'logs'>('terminal');
 
   const fetchEnv = () => {
-    api.environments.get(id).then(setEnv).catch(console.error);
+    api.environments.get(id)
+      .then(setEnv)
+      .catch((err: any) => {
+        if (err.status === 404) {
+          router.push("/dashboard");
+        } else {
+          console.warn(err);
+        }
+      });
   };
 
   useEffect(() => {
@@ -43,6 +58,13 @@ export default function EnvironmentPage() {
     const interval = setInterval(fetchEnv, 3000);
     return () => clearInterval(interval);
   }, [id, selectEnvironment]);
+
+  // Auto-switch to logs tab when environment is BUILDING or FAILED
+  useEffect(() => {
+    if (env?.state === "BUILDING" || env?.state === "FAILED") {
+      setActiveTab("logs");
+    }
+  }, [env?.state]);
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this sandbox? This cannot be undone.")) return;
@@ -54,6 +76,30 @@ export default function EnvironmentPage() {
     } catch (e: any) {
       toast.error(e.message || "Failed to delete sandbox");
       setIsDeleting(false);
+    }
+  };
+
+  const handleStop = async () => {
+    setIsStopping(true);
+    try {
+      await api.environments.stop(id);
+      toast.success("Sandbox stopping...");
+      fetchEnv();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to stop sandbox");
+      setIsStopping(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    setIsRestarting(true);
+    try {
+      await api.environments.restart(id);
+      toast.success("Sandbox restarting...");
+      fetchEnv();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to restart sandbox");
+      setIsRestarting(false);
     }
   };
 
@@ -120,7 +166,7 @@ export default function EnvironmentPage() {
               {env.state === "RUNNING" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]" />}
               {env.state}
             </div>
-            {env.public_url && (
+            {env.state === "RUNNING" && env.public_url && (
               <a
                 href={env.public_url}
                 target="_blank"
@@ -131,6 +177,28 @@ export default function EnvironmentPage() {
               </a>
             )}
             
+            {env.state === "RUNNING" && (
+              <button
+                onClick={handleStop}
+                disabled={isStopping}
+                className="px-4 py-1.5 rounded-lg border border-orange-500/30 bg-orange-500/5 text-orange-400 hover:bg-orange-500/15 flex items-center gap-1.5 transition-colors disabled:opacity-50 text-xs font-semibold"
+              >
+                {isStopping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" />}
+                Stop
+              </button>
+            )}
+
+            {(env.state === "STOPPED" || env.state === "FAILED" || env.state === "RUNNING") && (
+              <button
+                onClick={handleRestart}
+                disabled={isRestarting}
+                className="px-4 py-1.5 rounded-lg border border-blue-500/30 bg-blue-500/5 text-blue-400 hover:bg-blue-500/15 flex items-center gap-1.5 transition-colors disabled:opacity-50 text-xs font-semibold"
+              >
+                {isRestarting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                Restart
+              </button>
+            )}
+
             <button
               onClick={handleDelete}
               disabled={isDeleting}
@@ -154,7 +222,7 @@ export default function EnvironmentPage() {
                 Files
               </div>
               <div className="flex-1 overflow-y-auto p-2">
-                <FileTree envId={id} onSelectFile={setActiveFile} />
+                <FileTree envId={id} selectedPath={activeFile || ''} onSelectFile={setActiveFile} />
               </div>
             </div>
 
@@ -196,12 +264,36 @@ export default function EnvironmentPage() {
 
             {/* Terminal Panel */}
             <div className="h-64 border-t border-outline-variant flex flex-col shrink-0 bg-slate-950">
-              <div className="px-4 py-1.5 bg-slate-900 border-b border-white/5 text-[10px] uppercase tracking-widest font-bold text-white/50 flex items-center gap-2">
-                <TerminalSquare className="w-3.5 h-3.5" />
-                Terminal
+              <div className="bg-slate-900 border-b border-white/5 flex items-center">
+                <button
+                  onClick={() => setActiveTab('terminal')}
+                  className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 border-b-2 transition-colors ${
+                    activeTab === 'terminal' 
+                      ? 'text-primary-fixed border-primary-fixed bg-white/5' 
+                      : 'text-white/50 border-transparent hover:bg-white/5'
+                  }`}
+                >
+                  <TerminalSquare className="w-3.5 h-3.5" />
+                  Terminal
+                </button>
+                <button
+                  onClick={() => setActiveTab('logs')}
+                  className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 border-b-2 transition-colors ${
+                    activeTab === 'logs' 
+                      ? 'text-primary-fixed border-primary-fixed bg-white/5' 
+                      : 'text-white/50 border-transparent hover:bg-white/5'
+                  }`}
+                >
+                  <Box className="w-3.5 h-3.5" />
+                  Build Logs
+                </button>
               </div>
               <div className="flex-1 relative overflow-hidden">
-                <Terminal envId={id} />
+                {activeTab === 'terminal' ? (
+                  <Terminal envId={id} />
+                ) : (
+                  <DockerLogs envId={id} />
+                )}
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -82,6 +83,9 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	slog.Info("processing pending sandbox", "sandbox_id", sandbox.ID, "git_url", sandbox.GitURL, "db_pop_duration", dbPopDuration)
 
+	// Set state to BUILDING
+	_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateBuilding)
+
 	// Validate Git URL before any filesystem or network operation
 	if err := validateGitURL(sandbox.GitURL); err != nil {
 		slog.Error("invalid git url", "sandbox_id", sandbox.ID, "error", err)
@@ -123,7 +127,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	}
 
 	// Clone repository in background
-	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
 	cloneDone := make(chan error, 1)
@@ -191,14 +195,19 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		profile = &domain.RuntimeProfile{
 			Language:    "node",
 			BaseImage:   "docker.io/library/node:20-alpine",
-			InstallCmd:  "npm install",
+			InstallCmd:  "npm install -g pnpm && pnpm config set store-dir /mnt/.pnpm-store && pnpm install",
 			StartCmd:    "npm start",
 			ExposedPort: 3000,
 			NeedsDB:     false,
 			Confidence:  0.0,
 		}
+	} else if profile.Language == "node" {
+		profile.InstallCmd = "npm install -g pnpm && pnpm config set store-dir /mnt/.pnpm-store && pnpm install"
 	}
 	predictDuration := time.Since(predictStart)
+
+	pnpmStoreDir := filepath.Join(home, ".local", "state", "berth", "pnpm-store")
+	os.MkdirAll(pnpmStoreDir, 0755)
 
 	// Create container with bind mount and keep-alive command
 	spec := domain.SandboxSpec{
@@ -206,6 +215,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		BaseImage:    profile.BaseImage,
 		WorkDir:      "/mnt",
 		WorkspaceDir: workspaceDir,
+		ExtraMounts:  map[string]string{pnpmStoreDir: "/mnt/.pnpm-store"},
 		Cmd:          []string{"sh", "-c", "while true; do sleep 1; done"},
 		MemoryLimit:  512 * 1024 * 1024,
 		CPULimit:     1000,
@@ -220,9 +230,16 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 	createDuration := time.Since(createStart)
+	// Allocate a host port for preview
+	allocatedPort, err := getFreePort()
+	if err != nil {
+		slog.Warn("failed to allocate free port, using fallback", "error", err)
+		allocatedPort = 43100 // fallback
+	}
+	publicURL := fmt.Sprintf("http://localhost:8080/p/%s/", sandbox.ID.String())
 
-	if err := w.repo.UpdateContainerID(bgCtx, sandbox.ID, cid); err != nil {
-		slog.Error("worker failed to update container id", "sandbox_id", sandbox.ID, "error", err)
+	if err := w.repo.UpdateContainerAndURL(context.Background(), sandbox.ID, cid, publicURL, allocatedPort); err != nil {
+		slog.Error("worker failed to update container id and url", "sandbox_id", sandbox.ID, "error", err)
 	}
 
 	startStart := time.Now()
@@ -233,73 +250,29 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	}
 	startDuration := time.Since(startStart)
 
-	// Determine lockfile hash for dependency caching
-	var lockfile string
-	var cacheTarget string
-	if _, err := os.Stat(filepath.Join(workspaceDir, "package-lock.json")); err == nil {
-		lockfile = "package-lock.json"
-		cacheTarget = "node_modules"
-	} else if _, err := os.Stat(filepath.Join(workspaceDir, "go.sum")); err == nil {
-		lockfile = "go.sum"
-		cacheTarget = "vendor"
-	}
-
-	var depCachePath string
-	var cacheHit bool
-	if lockfile != "" {
-		if b, err := os.ReadFile(filepath.Join(workspaceDir, lockfile)); err == nil {
-			sum := sha256.Sum256(b)
-			hash := fmt.Sprintf("%x", sum)[:16]
-			depCachePath = filepath.Join(home, ".local", "state", "berth", "cache", "deps", profile.Language, hash)
-			if _, err := os.Stat(depCachePath); err == nil {
-				cacheHit = true
-			}
-		}
-	}
-
 	// Install dependencies inside container
 	var installDuration time.Duration
 	if profile.InstallCmd != "" {
-		if cacheHit {
-			slog.Info("dependency cache hit", "sandbox_id", sandbox.ID, "path", depCachePath)
-			// Copy cached dependencies into workspace
-			cmd := exec.Command("cp", "-a", depCachePath+"/.", filepath.Join(workspaceDir, cacheTarget)+"/")
-			_ = os.MkdirAll(filepath.Join(workspaceDir, cacheTarget), 0755)
-			if err := cmd.Run(); err != nil {
-				slog.Warn("failed to restore dependency cache", "error", err)
-			}
+		installStart := time.Now()
+		installArgs := []string{"sh", "-c", "cd /mnt && " + profile.InstallCmd}
+		if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
+			slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
 		} else {
-			installStart := time.Now()
-			installArgs := []string{"sh", "-c", "cd /mnt && " + profile.InstallCmd}
-			if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
-				slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
-			} else {
-				installDuration = time.Since(installStart)
-				slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out, "install_duration", installDuration)
-				
-				// Save to cache
-				if depCachePath != "" {
-					_ = os.MkdirAll(depCachePath, 0755)
-					cmd := exec.Command("cp", "-a", filepath.Join(workspaceDir, cacheTarget)+"/.", depCachePath+"/")
-					if err := cmd.Run(); err != nil {
-						slog.Warn("failed to save dependency cache", "error", err)
-					}
-				}
-			}
+			installDuration = time.Since(installStart)
+			slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out, "install_duration", installDuration)
 		}
 	}
-
 	// Start application in background
 	if profile.StartCmd != "" {
-		startArgs := []string{"sh", "-c", "cd /mnt && " + profile.StartCmd + " > /tmp/app.log 2>&1 &"}
+		startArgs := []string{"sh", "-c", fmt.Sprintf("cd /mnt && PORT=%d %s > /tmp/app.log 2>&1 &", allocatedPort, profile.StartCmd)}
 		if out, err := w.runtime.Exec(bgCtx, cid, startArgs); err != nil {
 			slog.Warn("failed to start application", "error", err, "output", out)
 		} else {
-			slog.Info("application start command issued", "cmd", profile.StartCmd)
+			slog.Info("application start command issued", "cmd", profile.StartCmd, "port", allocatedPort)
 		}
 	}
 
-	if err := w.repo.UpdateState(bgCtx, sandbox.ID, domain.StateRunning); err != nil {
+	if err := w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateRunning); err != nil {
 		slog.Error("worker failed to set RUNNING state", "sandbox_id", sandbox.ID, "error", err)
 		return
 	}
@@ -430,5 +403,19 @@ func (w *SandboxWorker) StartInteractiveShell(ctx context.Context, sandboxID, co
 		stdin.Close()
 	}
 	shellMutex.Unlock()
+}
+
+// getFreePort asks the kernel for a free open port that is ready to use
+func getFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
+	}
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 

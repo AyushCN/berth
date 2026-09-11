@@ -85,6 +85,23 @@ func (r *SandboxRepository) UpdateContainerID(ctx context.Context, id uuid.UUID,
 	})
 }
 
+func (r *SandboxRepository) UpdateContainerAndURL(ctx context.Context, id uuid.UUID, containerID string, publicURL string, port int) error {
+	var pub pgtype.Text
+	if publicURL != "" {
+		pub = pgtype.Text{String: publicURL, Valid: true}
+	}
+	var runtimePort pgtype.Int4
+	if port > 0 {
+		runtimePort = pgtype.Int4{Int32: int32(port), Valid: true}
+	}
+	return r.queries.UpdateSandboxContainer(ctx, UpdateSandboxContainerParams{
+		ID:          id,
+		ContainerID: pgtype.Text{String: containerID, Valid: true},
+		PublicUrl:   pub,
+		RuntimePort: runtimePort,
+	})
+}
+
 func (r *SandboxRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.queries.DeleteSandbox(ctx, id)
 }
@@ -144,6 +161,10 @@ func toDomainSandbox(s Sandbox) *domain.Sandbox {
 	}
 	if s.PublicUrl.Valid {
 		sb.PublicURL = &s.PublicUrl.String
+	}
+	if s.RuntimePort.Valid {
+		port := int(s.RuntimePort.Int32)
+		sb.Port = &port
 	}
 	if s.HasUncommittedChanges.Valid {
 		sb.HasUncommittedChanges = s.HasUncommittedChanges.Bool

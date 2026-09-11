@@ -92,3 +92,36 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 
 	return os.WriteFile(target, content, 0644)
 }
+
+func (uc *FileUsecase) CreateFile(ctx context.Context, sandboxID uuid.UUID, path string, isDir bool) error {
+	target, err := uc.resolvePath(sandboxID, path)
+	if err != nil {
+		return err
+	}
+
+	if isDir {
+		return os.MkdirAll(target, 0755)
+	}
+
+	dir := filepath.Dir(target)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(target, []byte{}, 0644)
+}
+
+func (uc *FileUsecase) DeleteFile(ctx context.Context, sandboxID uuid.UUID, path string) error {
+	target, err := uc.resolvePath(sandboxID, path)
+	if err != nil {
+		return err
+	}
+	
+	// Prevent deleting the root workspace directory
+	baseDir := uc.getSandboxDir(sandboxID)
+	if target == baseDir || target == filepath.Clean(baseDir) {
+		return fmt.Errorf("cannot delete workspace root")
+	}
+
+	return os.RemoveAll(target)
+}

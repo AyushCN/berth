@@ -116,11 +116,19 @@ export function BranchPicker({
 
   const fetchBranches = async () => {
     setIsLoading(true);
+    const loadBranches = async () => {
+      try {
+        const data = await api.git.branches(envId);
+        setBranches(data.branches || []);
+      } catch (err: any) {
+        if (err.message && (err.message.includes("no rows") || err.message.includes("not running"))) return;
+        console.warn("Failed to load branches", err.message);
+      }
+    };
     try {
-      const data = await api.git.branches(envId);
-      setBranches(data.branches || []);
+      await loadBranches();
     } catch (e) {
-      console.error(e);
+      console.warn(e);
     } finally {
       setIsLoading(false);
     }
@@ -294,7 +302,12 @@ export function GitStatusPanel({ envId }: { envId: string }) {
     }
   };
 
-  if (error) return <div className="text-red-400 text-sm">Failed to load git status</div>;
+  if (error) {
+    if (error.message && (error.message.includes("no rows") || error.message.includes("not running"))) {
+      return <div className="text-white/30 text-xs p-4 text-center">Waiting for sandbox to start...</div>;
+    }
+    return <div className="text-red-400 text-sm p-2">Failed to load git status</div>;
+  }
   if (!status) return <div className="flex items-center justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-white/30" /></div>;
 
   return (
@@ -409,7 +422,11 @@ export function CommitHistoryPanel({ envId }: { envId: string }) {
       )}
 
       {error && (
-        <div className="text-xs text-red-400 p-2">Failed to load commit history.</div>
+        <div className="text-xs text-red-400 p-2">
+          {error.message && (error.message.includes("no rows") || error.message.includes("not running"))
+            ? <span className="text-white/30">Waiting for sandbox to start...</span>
+            : "Failed to load commit history."}
+        </div>
       )}
 
       {!isLoading && !error && (!data?.commits || data.commits.length === 0) && (

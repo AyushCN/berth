@@ -1,5 +1,7 @@
 # Go
 backend/bin/
+backend/tmp/
+backend/berth.db
 backend/coverage.out
 backend/coverage.html
 backend/vendor/

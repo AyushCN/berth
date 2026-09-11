@@ -17,7 +17,7 @@ SELECT * FROM sandboxes WHERE project_id = $1 ORDER BY created_at DESC;
 UPDATE sandboxes SET state = $2, updated_at = NOW() WHERE id = $1;
 
 -- name: UpdateSandboxContainer :exec
-UPDATE sandboxes SET container_id = $2, public_url = $3, updated_at = NOW() WHERE id = $1;
+UPDATE sandboxes SET container_id = $2, public_url = $3, runtime_port = $4, updated_at = NOW() WHERE id = $1;
 
 -- name: DeleteSandbox :exec
 DELETE FROM sandboxes WHERE id = $1;

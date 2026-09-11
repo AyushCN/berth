@@ -381,17 +381,23 @@ func (q *Queries) PopPendingSandbox(ctx context.Context) (Sandbox, error) {
 }
 
 const updateSandboxContainer = `-- name: UpdateSandboxContainer :exec
-UPDATE sandboxes SET container_id = $2, public_url = $3, updated_at = NOW() WHERE id = $1
+UPDATE sandboxes SET container_id = $2, public_url = $3, runtime_port = $4, updated_at = NOW() WHERE id = $1
 `
 
 type UpdateSandboxContainerParams struct {
 	ID          uuid.UUID   `json:"id"`
 	ContainerID pgtype.Text `json:"container_id"`
 	PublicUrl   pgtype.Text `json:"public_url"`
+	RuntimePort pgtype.Int4 `json:"runtime_port"`
 }
 
 func (q *Queries) UpdateSandboxContainer(ctx context.Context, arg UpdateSandboxContainerParams) error {
-	_, err := q.db.Exec(ctx, updateSandboxContainer, arg.ID, arg.ContainerID, arg.PublicUrl)
+	_, err := q.db.Exec(ctx, updateSandboxContainer,
+		arg.ID,
+		arg.ContainerID,
+		arg.PublicUrl,
+		arg.RuntimePort,
+	)
 	return err
 }
 

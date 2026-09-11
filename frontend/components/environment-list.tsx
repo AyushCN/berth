@@ -1,6 +1,8 @@
 import { useRouter } from 'next/navigation';
 import { Play, Trash2, Clock } from 'lucide-react';
 
+import { useAuthStore } from '@/stores/auth';
+
 interface Environment {
   id: string;
   name: string;
@@ -11,6 +13,7 @@ interface Environment {
 
 export function EnvironmentList({ environments }: { environments: Environment[] }) {
   const router = useRouter();
+  const { user } = useAuthStore();
 
   if (environments.length === 0) {
     return (
@@ -26,7 +29,7 @@ export function EnvironmentList({ environments }: { environments: Environment[] 
       {environments.map((env) => (
         <div
           key={env.id}
-          onClick={() => router.push(`/env/${env.id}`)}
+          onClick={() => router.push(`/${user?.username || 'user'}/${env.id}`)}
           className="bg-gray-800 border border-gray-700 rounded-lg p-4 cursor-pointer hover:border-berth-500 transition group"
         >
           <div className="flex items-start justify-between mb-2">

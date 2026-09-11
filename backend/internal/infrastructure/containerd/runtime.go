@@ -143,6 +143,9 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 	if spec.WorkspaceDir != "" {
 		ociOpts = append(ociOpts, withWorkspaceMount(spec.WorkspaceDir, spec.WorkDir))
 	}
+	for hostDir, containerDir := range spec.ExtraMounts {
+		ociOpts = append(ociOpts, withWorkspaceMount(hostDir, containerDir))
+	}
 
 	ociOpts = append(ociOpts, func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		var newMounts []specs.Mount
@@ -700,7 +703,7 @@ func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
 		// Prevent fork bombs
 		pidsLimit := int64(100)
 		s.Linux.Resources.Pids = &specs.LinuxPids{
-			Limit: pidsLimit,
+			Limit: &pidsLimit,
 		}
 
 		return nil

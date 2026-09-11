@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"github.com/joho/godotenv"
 )
 
 // Config holds all application configuration.
@@ -26,6 +27,9 @@ type Config struct {
 
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
+	// Attempt to load .env file; ignore errors if it doesn't exist
+	_ = godotenv.Load()
+
 	mode := os.Getenv("MODE")
 	if mode == "" {
 		mode = "api"
