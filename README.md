@@ -22,8 +22,8 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 |-------|--------|-------|
 | Phase 0: Scaffold | ✅ Done | CI, schema, scripts |
 | Phase 1: Isolation | ✅ Done | Runtime works, warm pool + layer caching fully implemented |
-| Phase 2: Auth + API | ✅ Done | Usecases implemented, HTTP handlers fully wired and tested |
-| Phase 3: Frontend | 🟡 In Progress | Next.js UI wired with GitHub OAuth, Profile, and Terminal |
+| Phase 2: Auth + API | ✅ Done | Usecases implemented, HTTP handlers fully wired and E2E tested |
+| Phase 3: Frontend | 🟡 In Progress | Next.js UI wired with GitHub OAuth, Profile, File Tree, and Terminal |
 | Phase 4: Prediction | 🟡 In Progress | ML model and Python prediction service scaffolded |
 | Phase 5: Evaluation | ✅ Done | EDEBench test harness runs to completion |
 
@@ -35,7 +35,7 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 | 2 | **Clone-to-sandbox loop** | ✅ Done | Clone repo loop: POST repo URL → worker clones into container |
 | 3 | **Runtime detection + start** | ✅ Done | Auto-detect Node/Python/Go, install deps, start the app |
 | 4 | **Preview access** | ✅ Done | App reachable on host networking, DNS inside containers |
-| 5 | **File editing** | ✅ Done | Save file in browser → file lands inside sandbox |
+| 5 | **File editing** | ✅ Done | Save file in browser/API → file lands inside sandbox workspace |
 | 6 | **Git operations** | ❌ Not started | Commit/push from inside sandbox (already scaffolded) |
 | 7 | **Frontend wiring** | 🟡 Partial | Next.js UI wired for Auth, Profile, FileTree, Editor, and WebSockets |
 | 8 | **The Prediction Layer**| 🟡 Partial | ML model and prediction service scaffolded |

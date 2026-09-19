@@ -423,7 +423,7 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 	processSpec := &specs.Process{
 		Terminal: false,
 		Args:     cmd,
-		Cwd:      "/mnt",
+		Cwd:      "/workspace",
 		Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 	}
 
@@ -485,7 +485,7 @@ func (r *Runtime) ExecPTY(ctx context.Context, containerID string, cmd []string)
 	processSpec := &specs.Process{
 		Terminal: true,
 		Args:     cmd,
-		Cwd:      "/mnt",
+		Cwd:      "/workspace",
 		Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "TERM=xterm", "HOME=/root"},
 	}
 

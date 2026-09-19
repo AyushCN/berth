@@ -34,6 +34,9 @@ func (h *WSHandler) upgrader() *websocket.Upgrader {
 	return &websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
 			for _, allowed := range h.allowedOrigins {
 				if origin == allowed {
 					return true

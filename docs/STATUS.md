@@ -12,9 +12,9 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 - **Local Dev Loop:** Rootless containerd setup script (`scripts/setup-rootless.sh`). Runs via standard `runc.v2` (temporarily downgraded from gVisor/runsc due to rootless incompatibility).
 - **Benchmarking:** EDEBench test harness runs to completion against 50 parallel sandboxes.
 - **Database/Redis:** Initialized via Clean Architecture with `sqlc` and `pgxpool`.
-- **API Business Logic (Phase 2):** Fully implemented Usecases for Auth, Sandbox, and File operations. HTTP handlers are fully wired, tested, and working end-to-end.
+- **API Business Logic (Phase 2):** Fully implemented Usecases for Auth, Sandbox, and File operations. HTTP handlers are fully wired, tested, and passing programmatic end-to-end (E2E) validations (including WebSocket integrations, container file persistence, and proxying).
 ## 🟡 Partial / Stubbed
-- **Frontend UI:** Next.js project is partially wired. GitHub OAuth flow is functional, Profile page is implemented, and Terminal WebSocket UI is active. The File Explorer and Monaco Editor components exist and compile correctly, but are not yet wired to a live CRDT backend.
+- **Frontend UI:** Next.js project is partially wired. GitHub OAuth flow is functional, Profile page is implemented, and Terminal WebSocket UI is active. The File Explorer and Monaco Editor components exist and compile correctly, and file editing via the API is fully verified. Connecting the frontend components to the backend is the remaining step.
 - **Prediction Service:** ML model (XGBoost/ONNX) and Python service are scaffolded. Feature extraction integration pending.
 
 ## ☁️ Cloud & Security Readiness

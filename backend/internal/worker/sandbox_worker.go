@@ -207,7 +207,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,
-		WorkDir:      "/mnt",
+		WorkDir:      "/workspace",
 		WorkspaceDir: workspaceDir,
 		Cmd:          []string{"sh", "-c", "while true; do sleep 1; done"},
 		MemoryLimit:  512 * 1024 * 1024,
@@ -238,7 +238,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	var installDuration time.Duration
 	if profile.InstallCmd != "" {
 		installStart := time.Now()
-		installArgs := []string{"sh", "-c", "cd /mnt && " + profile.InstallCmd}
+		installArgs := []string{"sh", "-c", "cd /workspace && " + profile.InstallCmd}
 		slog.Info("executing install command", "sandbox_id", sandbox.ID, "cmd", installArgs)
 		if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
 			slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
@@ -260,7 +260,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	}
 
 	if profile.StartCmd != "" {
-		startArgs := []string{"sh", "-c", fmt.Sprintf("cd /mnt && PORT=%d %s > /tmp/app.log 2>&1 &", allocatedPort, profile.StartCmd)}
+		startArgs := []string{"sh", "-c", fmt.Sprintf("cd /workspace && PORT=%d %s > /tmp/app.log 2>&1 &", allocatedPort, profile.StartCmd)}
 		if out, err := w.runtime.Exec(bgCtx, cid, startArgs); err != nil {
 			slog.Warn("failed to start application", "error", err, "output", out)
 		} else {
