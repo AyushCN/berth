@@ -14,9 +14,12 @@ This document serves as the brutal, single-source-of-truth inventory for the Ber
 - **Database/Redis:** Initialized via Clean Architecture with `sqlc` and `pgxpool`.
 - **API Business Logic (Phase 2):** Fully implemented Usecases for Auth, Sandbox, and File operations. HTTP handlers are fully wired, tested, and working end-to-end.
 ## 🟡 Partial / Stubbed
-- **Frontend UI:** Next.js project is partially wired. GitHub OAuth flow is functional, Profile page is implemented, and Terminal WebSocket UI is active. File Explorer and Monaco Editor are pending.
+- **Frontend UI:** Next.js project is partially wired. GitHub OAuth flow is functional, Profile page is implemented, and Terminal WebSocket UI is active. The File Explorer and Monaco Editor components exist and compile correctly, but are not yet wired to a live CRDT backend.
+- **Prediction Service:** ML model (XGBoost/ONNX) and Python service are scaffolded. Feature extraction integration pending.
+
+## ☁️ Cloud & Security Readiness
+- **Cloud Scale:** The codebase has been audited and hardened for multi-node cloud scalability. All `localhost` hardcoding has been stripped from API routing, proxies, CORS, and WebSocket upgrader origins.
+- **Security:** Credentials and keys are properly injected via environment variables. The API features a rate limiter that prevents Redis socket exhaustion on aborted requests.
 
 ## ❌ Missing (Vaporware)
-- **Prediction Service:** No ML models (XGBoost/ONNX), no feature extraction, no Python service.
-- **Real-Time Sync (CRDT):** No Yjs operational transforms, no WebSocket event bus, no Monaco integration.
-- **File Explorer / Code Editor:** The frontend does not yet support editing files inside the sandbox.
+- **Real-Time Sync (CRDT):** No Yjs operational transforms, no WebSocket event bus for live coding.

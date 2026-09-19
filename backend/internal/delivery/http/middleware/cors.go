@@ -2,10 +2,10 @@ package middleware
 
 import "github.com/gin-gonic/gin"
 
-func CORS() gin.HandlerFunc {
+func CORS(frontendURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		allowed := []string{"http://localhost:3000", "http://localhost:8080"} // TODO: cfg.FrontendURL
+		allowed := []string{frontendURL, "http://localhost:3000"} 
 		
 		allowedOrigin := ""
 		for _, a := range allowed {

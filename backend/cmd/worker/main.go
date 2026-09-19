@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,8 +19,15 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
+	logFile, err := os.OpenFile("/tmp/worker.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err == nil {
+		multiWriter := io.MultiWriter(os.Stdout, logFile)
+		logger := slog.New(slog.NewJSONHandler(multiWriter, nil))
+		slog.SetDefault(logger)
+	} else {
+		logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		slog.SetDefault(logger)
+	}
 
 	if os.Getenv("MODE") == "" {
 		os.Setenv("MODE", "worker")

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import Editor, { useMonaco, OnMount } from '@monaco-editor/react';
 import { api } from '@/lib/api';
 import { Save } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const getLanguageFromPath = (path: string): string => {
   const ext = path.split('.').pop()?.toLowerCase();

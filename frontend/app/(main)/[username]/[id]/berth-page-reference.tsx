@@ -41,7 +41,7 @@ export default function EnvironmentPage() {
 
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-64 bg-gray-800 border-r border-gray-700 overflow-y-auto">
-          <FileTree envId={id} onSelectFile={setActiveFile} />
+          <FileTree envId={id} selectedPath={activeFile || ""} onSelectFile={setActiveFile} />
         </aside>
 
         <main className="flex-1 flex flex-col min-w-0">

@@ -16,7 +16,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger())
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(cfg.FrontendURL))
 
 	// Health check (no auth)
 	r.GET("/health", handler.HealthCheck)

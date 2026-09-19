@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,7 +19,7 @@ func RateLimit() gin.HandlerFunc {
 		}
 
 		key := fmt.Sprintf("rate_limit:%s:%s", c.ClientIP(), c.Request.URL.Path)
-		ctx := context.Background()
+		ctx := c.Request.Context()
 
 		count, err := client.Incr(ctx, key).Result()
 		if err != nil {
@@ -58,7 +57,7 @@ func RateLimitUser() gin.HandlerFunc {
 		}
 
 		key := fmt.Sprintf("ratelimit:user:%s", userID)
-		ctx := context.Background()
+		ctx := c.Request.Context()
 
 		count, err := client.Incr(ctx, key).Result()
 		if err != nil {

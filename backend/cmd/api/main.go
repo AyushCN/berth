@@ -78,7 +78,7 @@ func main() {
 	projRepo := repository.NewProjectRepository(queries)
 
 	// OAuth client
-	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, "http://localhost:3000/api/auth/github/callback")
+	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, cfg.FrontendURL+"/api/auth/github/callback")
 
 	// Usecases
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
@@ -124,7 +124,7 @@ func main() {
 		AuthHandler:    handler.NewAuthHandler(authUC, cfg.FrontendURL),
 		SandboxHandler: handler.NewSandboxHandler(sandboxUC),
 		FileHandler:    handler.NewFileHandler(fileUC),
-		WSHandler:      handler.NewWSHandler(natsClient),
+		WSHandler:      handler.NewWSHandler(natsClient, cfg.FrontendURL),
 		GitHandler:     handler.NewGitHandler(gitUC),
 		OrgHandler:     handler.NewOrganizationHandler(orgUC),
 		ProjectHandler: handler.NewProjectHandler(projUC),

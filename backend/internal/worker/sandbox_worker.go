@@ -192,27 +192,23 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		profile = &domain.RuntimeProfile{
 			Language:    "node",
 			BaseImage:   "docker.io/library/node:20-alpine",
-			InstallCmd:  "npm install -g pnpm && pnpm config set store-dir /mnt/.pnpm-store && pnpm install",
+			InstallCmd:  "npm install",
 			StartCmd:    "npm start",
 			ExposedPort: 3000,
 			NeedsDB:     false,
 			Confidence:  0.0,
 		}
 	} else if profile.Language == "node" {
-		profile.InstallCmd = "npm install -g pnpm && pnpm config set store-dir /mnt/.pnpm-store && pnpm install"
+		profile.InstallCmd = "npm install"
 	}
 	predictDuration := time.Since(predictStart)
 
-	pnpmStoreDir := filepath.Join(home, ".local", "state", "berth", "pnpm-store")
-	os.MkdirAll(pnpmStoreDir, 0755)
-
-	// Create container with bind mount and keep-alive command
+	// Create container with keep-alive command
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,
 		WorkDir:      "/mnt",
 		WorkspaceDir: workspaceDir,
-		ExtraMounts:  map[string]string{pnpmStoreDir: "/mnt/.pnpm-store"},
 		Cmd:          []string{"sh", "-c", "while true; do sleep 1; done"},
 		MemoryLimit:  512 * 1024 * 1024,
 		CPULimit:     1000,
@@ -243,13 +239,14 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	if profile.InstallCmd != "" {
 		installStart := time.Now()
 		installArgs := []string{"sh", "-c", "cd /mnt && " + profile.InstallCmd}
+		slog.Info("executing install command", "sandbox_id", sandbox.ID, "cmd", installArgs)
 		if out, err := w.runtime.Exec(bgCtx, cid, installArgs); err != nil {
 			slog.Error("dependency install failed", "sandbox_id", sandbox.ID, "error", err, "output", out)
 			_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 			return
 		} else {
 			installDuration = time.Since(installStart)
-			slog.Info("dependencies installed", "sandbox_id", sandbox.ID, "output", out, "install_duration", installDuration)
+			slog.Info("dependencies installed successfully", "sandbox_id", sandbox.ID, "install_duration", installDuration)
 		}
 	}
 	// Start application in background
@@ -271,7 +268,11 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 	}
 
-	publicURL := fmt.Sprintf("http://localhost:%d", allocatedPort) // host networking
+	workerHost := os.Getenv("WORKER_PUBLIC_HOST")
+	if workerHost == "" {
+		workerHost = "localhost"
+	}
+	publicURL := fmt.Sprintf("http://%s:%d", workerHost, allocatedPort) // host networking
 	if err := w.repo.UpdateContainerAndURL(context.Background(), sandbox.ID, cid, publicURL, allocatedPort); err != nil {
 		slog.Error("worker failed to update container id and url", "sandbox_id", sandbox.ID, "error", err)
 	}
@@ -411,7 +412,7 @@ func (w *SandboxWorker) StartInteractiveShell(ctx context.Context, sandboxID, co
 
 // getFreePort asks the kernel for a free open port that is ready to use
 func getFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:0")
 	if err != nil {
 		return 0, err
 	}
