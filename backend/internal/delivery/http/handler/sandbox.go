@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"strings"
 
 	"github.com/AyushCN/berth/internal/usecase"
@@ -211,19 +210,8 @@ func (h *SandboxHandler) PreviewProxy(c *gin.Context) {
 
 	// Setup Reverse Proxy
 	director := func(req *http.Request) {
-		if sandbox.PublicURL != nil && *sandbox.PublicURL != "" {
-			u, err := url.Parse(*sandbox.PublicURL)
-			if err == nil {
-				req.URL.Scheme = u.Scheme
-				req.URL.Host = u.Host
-			} else {
-				req.URL.Scheme = "http"
-				req.URL.Host = fmt.Sprintf("127.0.0.1:%d", *sandbox.Port)
-			}
-		} else {
-			req.URL.Scheme = "http"
-			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", *sandbox.Port)
-		}
+		req.URL.Scheme = "http"
+		req.URL.Host = fmt.Sprintf("127.0.0.1:%d", *sandbox.Port)
 		// Strip the `/p/<id>` prefix
 		pathPrefix := fmt.Sprintf("/p/%s", sandboxID)
 		if strings.HasPrefix(req.URL.Path, pathPrefix) {

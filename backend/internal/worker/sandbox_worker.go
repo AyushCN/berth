@@ -268,11 +268,11 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 	}
 
-	workerHost := os.Getenv("WORKER_PUBLIC_HOST")
-	if workerHost == "" {
-		workerHost = "localhost"
+	apiHost := os.Getenv("API_PUBLIC_HOST")
+	if apiHost == "" {
+		apiHost = "http://localhost:8080"
 	}
-	publicURL := fmt.Sprintf("http://%s:%d", workerHost, allocatedPort) // host networking
+	publicURL := fmt.Sprintf("%s/p/%s/", apiHost, sandbox.ID)
 	if err := w.repo.UpdateContainerAndURL(context.Background(), sandbox.ID, cid, publicURL, allocatedPort); err != nil {
 		slog.Error("worker failed to update container id and url", "sandbox_id", sandbox.ID, "error", err)
 	}

@@ -39,8 +39,16 @@ export function Terminal({ envId }: { envId: string }) {
     term.writeln('Connecting to sandbox...');
 
     // Phase 3: WebSocket connection to backend
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(';').shift();
+      return null;
+    };
+    const token = getCookie('berth_token');
+    
     const wsUrl = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:8080';
-    const ws = new WebSocket(`${wsUrl}/ws/sandbox/${envId}`);
+    const ws = new WebSocket(`${wsUrl}/ws/sandbox/${envId}?token=${token || ''}`);
     ws.onopen = () => {
       term.writeln('\x1b[32mConnected!\x1b[0m');
     };

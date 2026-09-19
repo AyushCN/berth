@@ -35,7 +35,7 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 | 2 | **Clone-to-sandbox loop** | ✅ Done | Clone repo loop: POST repo URL → worker clones into container |
 | 3 | **Runtime detection + start** | ✅ Done | Auto-detect Node/Python/Go, install deps, start the app |
 | 4 | **Preview access** | ✅ Done | App reachable on host networking, DNS inside containers |
-| 5 | **File editing** | ❌ Not started | Save file in browser → file lands inside sandbox |
+| 5 | **File editing** | ✅ Done | Save file in browser → file lands inside sandbox |
 | 6 | **Git operations** | ❌ Not started | Commit/push from inside sandbox (already scaffolded) |
 | 7 | **Frontend wiring** | 🟡 Partial | Next.js UI wired for Auth, Profile, FileTree, Editor, and WebSockets |
 | 8 | **The Prediction Layer**| 🟡 Partial | ML model and prediction service scaffolded |
@@ -43,7 +43,6 @@ Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of wh
 
 ### What Does NOT Exist Yet (Vaporware)
 - ❌ Real-time collaborative editing (CRDT sync)
-- ❌ Actual file saving back to the Sandbox via the frontend Code Editor (UI exists but is not wired to backend file API)
 
 ## Quick Start
 
