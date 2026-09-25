@@ -1,4 +1,4 @@
-.PHONY: all build test lint migrate sqlc clean dev
+.PHONY: all build test lint migrate sqlc clean dev up prod
 
 all: sqlc build
 
@@ -13,7 +13,7 @@ lint:
 	cd backend && golangci-lint run ./...
 
 migrate-up:
-	cd backend && migrate -path migrations -database "postgres://berth:berth@localhost:5432/berth?sslmode=disable" up
+	cd backend && migrate -path migrations -database "$${DATABASE_URL:-postgres://berth:berth@localhost:5432/berth?sslmode=disable}" up
 
 migrate-down:
 	cd backend && migrate -path migrations -database "postgres://berth:berth@localhost:5432/berth?sslmode=disable" down
@@ -24,6 +24,12 @@ sqlc:
 dev:
 	cd infra && docker compose up -d
 	@echo "Infrastructure started. Run 'make migrate-up' then 'cd backend && go run ./cmd/api'"
+
+up:
+	cd infra && docker compose up -d --wait
+
+prod:
+	docker compose -f docker-compose.prod.yml up -d --wait
 
 clean:
 	cd infra && docker compose down -v

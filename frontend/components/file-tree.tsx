@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Folder, File, ChevronRight, ChevronDown, Trash2, FolderPlus, FilePlus } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -48,7 +48,7 @@ function FileTreeNode({
     } catch (err: any) {
       // Ignore "no rows in result set" or "sandbox is not running" during pending states
       if (err.message && (err.message.includes("no rows") || err.message.includes("not running"))) return;
-      console.warn("Failed to load directory", err.message);
+      toast.error(err.message || 'Could not load this directory.');
     }
   };
 
@@ -166,11 +166,17 @@ function FileTreeNode({
   );
 }
 
-export function FileTree({ envId, selectedPath, onSelectFile }: { envId: string; selectedPath: string; onSelectFile: (path: string) => void }) {
+export function FileTree({ envId, selectedPath, onSelectFile, enabled = true }: { envId: string; selectedPath: string; onSelectFile: (path: string) => void; enabled?: boolean }) {
   const [rootFiles, setRootFiles] = useState<FileNode[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
-  const loadRoot = () => {
-    api.files.list(envId, '.').then((data) => {
+  const loadRoot = useCallback(async () => {
+    if (!enabled) return;
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const data = await api.files.list(envId, '.');
       const sorted = (data.files || []).sort((a: FileNode, b: FileNode) => {
         if (a.is_dir && !b.is_dir) return -1;
         if (!a.is_dir && b.is_dir) return 1;
@@ -178,28 +184,30 @@ export function FileTree({ envId, selectedPath, onSelectFile }: { envId: string;
       });
       const filtered = sorted.filter((f: FileNode) => !['.git', 'node_modules', '.next', 'dist', '.cache'].includes(f.name));
       setRootFiles(filtered);
-    }).catch((err: any) => {
-      if (err.message && (err.message.includes("no rows") || err.message.includes("not running"))) return;
-      console.warn("Failed to load root", err.message);
-    });
-  };
+    } catch (err: any) {
+      setLoadError(err.message || 'Could not load workspace files.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [enabled, envId]);
 
   useEffect(() => {
-    loadRoot();
-  }, [envId]);
+    setRootFiles([]);
+    if (enabled) void loadRoot();
+  }, [envId, enabled, loadRoot]);
 
   return (
     <div className="h-full overflow-y-auto py-2 flex flex-col w-full bg-[#18181b] border-r border-white/10 group">
       <div className="flex items-center justify-between px-3 py-2">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Explorer</span>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => {
+          <button disabled={!enabled} onClick={() => {
             const name = prompt("Enter name for new file:");
             if (name) api.files.create(envId, name, false).then(loadRoot).catch(e => toast.error(e.message));
           }} className="p-1 text-gray-400 hover:text-white" title="New File at Root">
             <FilePlus size={14} />
           </button>
-          <button onClick={() => {
+          <button disabled={!enabled} onClick={() => {
             const name = prompt("Enter name for new folder:");
             if (name) api.files.create(envId, name, true).then(loadRoot).catch(e => toast.error(e.message));
           }} className="p-1 text-gray-400 hover:text-white" title="New Folder at Root">
@@ -208,6 +216,15 @@ export function FileTree({ envId, selectedPath, onSelectFile }: { envId: string;
         </div>
       </div>
       <div className="flex-1 mt-1">
+        {!enabled && <p className="px-3 py-4 text-xs text-gray-500">Workspace files will appear when setup finishes.</p>}
+        {enabled && isLoading && <p className="px-3 py-4 text-xs text-gray-500">Loading files…</p>}
+        {enabled && loadError && (
+          <div className="px-3 py-3 text-xs text-red-300">
+            <p>{loadError}</p>
+            <button onClick={() => void loadRoot()} className="mt-2 underline underline-offset-2">Retry</button>
+          </div>
+        )}
+        {enabled && !isLoading && !loadError && rootFiles.length === 0 && <p className="px-3 py-4 text-xs text-gray-500">No files found.</p>}
         {rootFiles.map((file) => (
           <FileTreeNode
             key={file.path}

@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
+	"github.com/containerd/typeurl/v2"
 	"github.com/google/uuid"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -36,12 +37,12 @@ const (
 
 // Runtime implements domain.ContainerRuntime using containerd + gVisor.
 type Runtime struct {
-	client   *client.Client
-	sockPath string
-	layerMgr    *LayerManager
-	netMgr      *NetworkManager
-	warmPool    *WarmPool
-	runtimeType string
+	client          *client.Client
+	sockPath        string
+	layerMgr        *LayerManager
+	netMgr          *NetworkManager
+	warmPool        *WarmPool
+	runtimeType     string
 	dirtyContainers sync.Map
 }
 
@@ -107,15 +108,74 @@ func (r *Runtime) Close() error {
 func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (string, error) {
 	ctx = withNamespace(ctx)
 
-	// 1. Check warm pool first (DISABLED because it breaks bind mounts)
-	// if warm, reason := r.warmPool.Take(spec.BaseImage); warm != "" {
-	// 	slog.Info("warm pool hit", "container_id", warm)
-	// 	return warm, nil
-	// } else {
-	// 	slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage)
-	// }
+	if warmID, reason := r.warmPool.Take(spec.BaseImage); warmID != "" {
+		if err := r.prepareWarmContainer(ctx, warmID, spec); err == nil {
+			// The workspace bind mount is sandbox-specific, so this container must
+			// be destroyed when the sandbox is deleted rather than pooled again.
+			r.dirtyContainers.Store(warmID, true)
+			slog.Info("warm pool hit", "container_id", warmID, "base_image", spec.BaseImage)
+			return warmID, nil
+		} else {
+			slog.Warn("warm container preparation failed; falling back to cold create", "container_id", warmID, "error", err)
+			_ = r.warmPool.Forget(warmID)
+			_ = r.StopSandbox(ctx, warmID)
+		}
+	} else {
+		slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage)
+	}
 
+	slog.Info("cold create", "base_image", spec.BaseImage)
 	return r.createSandboxInternal(ctx, spec)
+}
+
+// prepareWarmContainer adds the per-sandbox mounts and limits before containerd
+// creates the task. The warm container has no task yet, so its OCI metadata can
+// still be safely updated here.
+func (r *Runtime) prepareWarmContainer(ctx context.Context, containerID string, spec domain.SandboxSpec) error {
+	container, err := r.client.LoadContainer(ctx, containerID)
+	if err != nil {
+		return err
+	}
+	ociSpec, err := container.Spec(ctx)
+	if err != nil {
+		return err
+	}
+	if spec.WorkspaceDir != "" {
+		ociSpec.Mounts = append(ociSpec.Mounts, specs.Mount{
+			Destination: spec.WorkDir,
+			Type:        "bind",
+			Source:      spec.WorkspaceDir,
+			Options:     []string{"rbind", "rw"},
+		})
+	}
+	for hostDir, containerDir := range spec.ExtraMounts {
+		ociSpec.Mounts = append(ociSpec.Mounts, specs.Mount{
+			Destination: containerDir,
+			Type:        "bind",
+			Source:      hostDir,
+			Options:     []string{"rbind", "rw"},
+		})
+	}
+	if spec.MemoryLimit > 0 && ociSpec.Linux != nil && ociSpec.Linux.Resources != nil {
+		limit := spec.MemoryLimit
+		ociSpec.Linux.Resources.Memory = &specs.LinuxMemory{Limit: &limit}
+	}
+	if spec.CPULimit > 0 && ociSpec.Linux != nil && ociSpec.Linux.Resources != nil {
+		quota := spec.CPULimit * 1000
+		period := uint64(100000)
+		ociSpec.Linux.Resources.CPU = &specs.LinuxCPU{Quota: &quota, Period: &period}
+	}
+	if spec.WorkDir != "" && ociSpec.Process != nil {
+		ociSpec.Process.Cwd = spec.WorkDir
+	}
+	return container.Update(ctx, func(_ context.Context, _ *client.Client, meta *containers.Container) error {
+		encoded, err := typeurl.MarshalAnyToProto(ociSpec)
+		if err != nil {
+			return err
+		}
+		meta.Spec = encoded
+		return nil
+	})
 }
 
 func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.SandboxSpec) (string, error) {
@@ -258,7 +318,7 @@ func (r *Runtime) MaintainBaseline() {
 
 	baselineImages := []string{
 		"docker.io/library/node:20-alpine",
-		"docker.io/library/python:3.11-alpine",
+		"docker.io/library/python:3.11-slim",
 		"docker.io/library/golang:1.23-alpine",
 	}
 
@@ -340,6 +400,8 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 // StopSandbox stops a container gracefully, then forcefully.
 func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
 	ctx = withNamespace(ctx)
+	r.dirtyContainers.Delete(containerID)
+	r.warmPool.Forget(containerID)
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
@@ -544,7 +606,6 @@ func (r *Runtime) ExecPTY(ctx context.Context, containerID string, cmd []string)
 	return stdinWriter, stdoutReader, waitFunc, nil
 }
 
-
 // GetLogs retrieves logs from a sandbox.
 func (r *Runtime) GetLogs(ctx context.Context, containerID string, tail int) (string, error) {
 	home, _ := os.UserHomeDir()
@@ -699,7 +760,7 @@ func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
 				Period: &period,
 			}
 		}
-		
+
 		// Prevent fork bombs
 		pidsLimit := int64(100)
 		s.Linux.Resources.Pids = &specs.LinuxPids{

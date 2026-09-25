@@ -154,8 +154,19 @@ func (wp *WarmPool) Return(containerID string) bool {
 	delete(wp.active, containerID)
 	wp.available[c.BaseImage] = append(wp.available[c.BaseImage], c)
 	wp.usedMemoryBytes += c.MemoryBytes // Memory is back in the pool
-	
+
 	slog.Info("container returned to warm pool", "id", containerID, "base_image", c.BaseImage)
+	return true
+}
+
+// Forget removes a container from pool bookkeeping when it is being destroyed.
+func (wp *WarmPool) Forget(containerID string) bool {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	if _, ok := wp.active[containerID]; !ok {
+		return false
+	}
+	delete(wp.active, containerID)
 	return true
 }
 

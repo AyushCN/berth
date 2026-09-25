@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import Editor, { useMonaco, OnMount } from '@monaco-editor/react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import { api } from '@/lib/api';
 import { Save } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -37,27 +37,27 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
   const [originalContent, setOriginalContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isReloading, setIsReloading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const editorRef = useRef<any>(null);
-  const monaco = useMonaco();
+
+  const loadFile = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const data = await api.files.getContent(envId, filePath);
+      const text = typeof data === 'string' ? data : JSON.stringify(data);
+      setContent(text);
+      setOriginalContent(text);
+    } catch (err: any) {
+      setLoadError(err.message || 'Could not load this file.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [envId, filePath]);
 
   useEffect(() => {
-    setIsLoading(true);
-    api.files.getContent(envId, filePath)
-      .then((data) => {
-        const text = typeof data === 'string' ? data : JSON.stringify(data);
-        setContent(text);
-        setOriginalContent(text);
-      })
-      .catch((err: any) => {
-        if (err.message && (err.message.includes("no rows") || err.message.includes("not running"))) return;
-        toast.error("Failed to load file content");
-        console.warn(err);
-        setContent('// Failed to load file');
-        setOriginalContent('// Failed to load file');
-      })
-      .finally(() => setIsLoading(false));
-  }, [envId, filePath]);
+    void loadFile();
+  }, [loadFile]);
 
   const handleSave = async () => {
     if (!editorRef.current) return;
@@ -66,13 +66,7 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
     try {
       const result = await api.files.updateContent(envId, filePath, value);
       setOriginalContent(value);
-      if (result?.reloadSignaled) {
-        setIsReloading(true);
-        setTimeout(() => setIsReloading(false), 2500);
-        toast.success('Saved — container reloading');
-      } else {
-        toast.success('Saved');
-      }
+      toast.success(result?.reloadSignaled ? 'Saved — container reload signaled' : 'Saved');
     } catch (err: any) {
       toast.error(err.message || 'Failed to save');
       console.warn(err);
@@ -93,6 +87,9 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
   if (isLoading) {
     return <div className="flex items-center justify-center h-full text-white/40">Loading {filePath}...</div>;
   }
+  if (loadError) {
+    return <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-red-300"><p>{loadError}</p><button onClick={() => void loadFile()} className="underline underline-offset-2">Retry</button></div>;
+  }
 
   const language = getLanguageFromPath(filePath);
   const isDirty = content !== originalContent;
@@ -110,17 +107,15 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
           onClick={handleSave}
           disabled={!isDirty || isSaving}
           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-            !isDirty && !isReloading
+            !isDirty
               ? "text-white/30 bg-white/5 cursor-not-allowed" 
-              : isReloading
-                ? "text-blue-400 bg-blue-400/20 animate-pulse"
               : isSaving 
                 ? "text-primary-fixed bg-primary-fixed/20 animate-pulse" 
                 : "text-white bg-primary-fixed hover:bg-primary-fixed/80"
           }`}
         >
           <Save size={14} />
-          {isSaving ? "Saving..." : isReloading ? "Reloading..." : "Save"}
+          {isSaving ? "Saving..." : "Save"}
         </button>
       </div>
       

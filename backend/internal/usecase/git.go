@@ -3,24 +3,38 @@ package usecase
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/AyushCN/berth/internal/domain"
+	"github.com/AyushCN/berth/pkg/crypto"
 	"github.com/google/uuid"
 )
 
 type GitUsecase struct {
 	workspaceDir string
+	userRepo     domain.UserRepository
+	sandboxRepo  domain.SandboxRepository
 }
 
-func NewGitUsecase(dir string) *GitUsecase {
-	return &GitUsecase{workspaceDir: dir}
+func NewGitUsecase(dir string, userRepo domain.UserRepository, sandboxRepo domain.SandboxRepository) *GitUsecase {
+	return &GitUsecase{workspaceDir: dir, userRepo: userRepo, sandboxRepo: sandboxRepo}
 }
 
 func (uc *GitUsecase) getSandboxDir(sandboxID uuid.UUID) string {
 	return filepath.Join(uc.workspaceDir, sandboxID.String())
+}
+
+func (uc *GitUsecase) Authorize(ctx context.Context, sandboxID, userID uuid.UUID) error {
+	sandbox, err := uc.sandboxRepo.GetByID(ctx, sandboxID)
+	if err != nil || sandbox.OwnerID != userID {
+		return fmt.Errorf("sandbox not found")
+	}
+	return nil
 }
 
 func (uc *GitUsecase) runGitCmd(ctx context.Context, sandboxID uuid.UUID, args ...string) (string, error) {
@@ -125,11 +139,6 @@ func (uc *GitUsecase) Pull(ctx context.Context, sandboxID uuid.UUID) error {
 
 func (uc *GitUsecase) CreateBranch(ctx context.Context, sandboxID uuid.UUID, branch string) error {
 	_, err := uc.runGitCmd(ctx, sandboxID, "checkout", "-b", branch)
-	if err != nil {
-		return err
-	}
-	// push to origin
-	_, err = uc.runGitCmd(ctx, sandboxID, "push", "-u", "origin", branch)
 	return err
 }
 
@@ -144,9 +153,22 @@ func (uc *GitUsecase) Commit(ctx context.Context, sandboxID uuid.UUID, message s
 	return err
 }
 
-// Push pushes the current branch to origin.
-// If on a protected branch (main/master), it auto-creates a sandbox branch first.
-func (uc *GitUsecase) Push(ctx context.Context, sandboxID uuid.UUID) (string, error) {
+// Push creates or reuses a per-sandbox branch and authenticates with the owner's OAuth token.
+func (uc *GitUsecase) Push(ctx context.Context, sandboxID, userID uuid.UUID) (string, error) {
+	if err := uc.Authorize(ctx, sandboxID, userID); err != nil {
+		return "", err
+	}
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil || user.GithubTokenEncrypted == "" {
+		return "", fmt.Errorf("GitHub authorization is missing; sign in with GitHub again")
+	}
+	token, err := crypto.Decrypt(user.GithubTokenEncrypted)
+	if err != nil {
+		return "", fmt.Errorf("could not decrypt GitHub authorization; sign in with GitHub again")
+	}
+	if token == "" {
+		return "", fmt.Errorf("GitHub authorization is missing; sign in with GitHub again")
+	}
 	// Get current branch
 	branchOut, err := uc.runGitCmd(ctx, sandboxID, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
@@ -154,21 +176,35 @@ func (uc *GitUsecase) Push(ctx context.Context, sandboxID uuid.UUID) (string, er
 	}
 	currentBranch := strings.TrimSpace(branchOut)
 
-	// Protect main/master — auto-fork to a sandbox branch
-	protectedBranches := map[string]bool{"main": true, "master": true}
-	if protectedBranches[currentBranch] {
-		sandboxBranch := fmt.Sprintf("sandbox/%s", sandboxID.String()[:8])
+	// Push edits on a predictable Berth branch, leaving the source branch intact.
+	sandboxBranch := fmt.Sprintf("berth/%s", sandboxID.String())
+	if currentBranch != sandboxBranch {
 		if _, err := uc.runGitCmd(ctx, sandboxID, "checkout", "-b", sandboxBranch); err != nil {
-			// branch may already exist, just switch to it
-			uc.runGitCmd(ctx, sandboxID, "checkout", sandboxBranch)
+			if _, checkoutErr := uc.runGitCmd(ctx, sandboxID, "checkout", sandboxBranch); checkoutErr != nil {
+				return "", fmt.Errorf("could not create or switch to %s: %w", sandboxBranch, checkoutErr)
+			}
 		}
 		currentBranch = sandboxBranch
 	}
 
-	if _, err := uc.runGitCmd(ctx, sandboxID, "push", "-u", "origin", currentBranch); err != nil {
-		return "", err
+	if _, err := uc.runGitCmdWithToken(ctx, sandboxID, token, "push", "-u", "origin", currentBranch); err != nil {
+		return "", fmt.Errorf("GitHub push failed; verify the OAuth grant has repository contents write access: %w", err)
 	}
 	return currentBranch, nil
+}
+
+func (uc *GitUsecase) runGitCmdWithToken(ctx context.Context, sandboxID uuid.UUID, token string, args ...string) (string, error) {
+	dir := uc.getSandboxDir(sandboxID)
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	encoded := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraheader", "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+encoded)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git push failed: %v, stderr: %s", err, errBuf.String())
+	}
+	return outBuf.String(), nil
 }
 
 type CommitEntry struct {

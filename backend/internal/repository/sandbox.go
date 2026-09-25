@@ -34,6 +34,9 @@ func (r *SandboxRepository) Create(ctx context.Context, s *domain.Sandbox) error
 		s.ID = created.ID
 		s.CreatedAt = created.CreatedAt.Time
 		s.UpdatedAt = created.UpdatedAt.Time
+		if created.ExpiresAt.Valid {
+			s.ExpiresAt = &created.ExpiresAt.Time
+		}
 	}
 	return err
 }
@@ -118,6 +121,31 @@ func (r *SandboxRepository) PopPendingSandbox(ctx context.Context) (*domain.Sand
 	return toDomainSandbox(s), nil
 }
 
+func (r *SandboxRepository) ListExpiredSandboxes(ctx context.Context) ([]*domain.Sandbox, error) {
+	rows, err := r.queries.db.Query(ctx, `SELECT id, owner_id, name, git_url, git_branch, state, container_id, expires_at FROM sandboxes WHERE expires_at <= NOW() AND state NOT IN ('PENDING', 'BUILDING') ORDER BY expires_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var expired []*domain.Sandbox
+	for rows.Next() {
+		var s domain.Sandbox
+		var containerID pgtype.Text
+		var expiresAt pgtype.Timestamptz
+		if err := rows.Scan(&s.ID, &s.OwnerID, &s.Name, &s.GitURL, &s.GitBranch, &s.State, &containerID, &expiresAt); err != nil {
+			return nil, err
+		}
+		if containerID.Valid {
+			s.ContainerID = &containerID.String
+		}
+		if expiresAt.Valid {
+			s.ExpiresAt = &expiresAt.Time
+		}
+		expired = append(expired, &s)
+	}
+	return expired, rows.Err()
+}
+
 func (r *SandboxRepository) UpdateGitTracking(ctx context.Context, id uuid.UUID, hasChanges bool, modifiedBy *uuid.UUID, commitHash *string) error {
 	var modifiedByUUID pgtype.UUID
 	if modifiedBy != nil {
@@ -158,6 +186,9 @@ func toDomainSandbox(s Sandbox) *domain.Sandbox {
 	}
 	if s.ContainerID.Valid {
 		sb.ContainerID = &s.ContainerID.String
+	}
+	if s.ExpiresAt.Valid {
+		sb.ExpiresAt = &s.ExpiresAt.Time
 	}
 	if s.PublicUrl.Valid {
 		sb.PublicURL = &s.PublicUrl.String

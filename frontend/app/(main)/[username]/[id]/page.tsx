@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { FileTree } from '@/components/file-tree';
@@ -23,6 +23,7 @@ import toast from "react-hot-toast";
 
 const statusColors: Record<string, string> = {
   IDLE: "text-gray-400 bg-gray-400/10 border-gray-400/20",
+  PENDING: "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
   BUILDING: "text-blue-400 bg-blue-400/10 border-blue-400/20",
   RUNNING: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
   STOPPED: "text-orange-400 bg-orange-400/10 border-orange-400/20",
@@ -34,30 +35,29 @@ export default function EnvironmentPage() {
   const router = useRouter();
   const { selectEnvironment } = useEnvStore();
   const [env, setEnv] = useState<any>(null);
+  const [loadError, setLoadError] = useState('');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [activeTab, setActiveTab] = useState<'terminal' | 'logs'>('terminal');
 
-  const fetchEnv = () => {
-    api.environments.get(id)
-      .then(setEnv)
-      .catch((err: any) => {
-        if (err.status === 404) {
-          router.push("/dashboard");
-        } else {
-          console.warn(err);
-        }
-      });
-  };
+  const fetchEnv = useCallback(async () => {
+    try {
+      setEnv(await api.environments.get(id));
+      setLoadError('');
+    } catch (err: any) {
+      if (err.status === 404) router.push("/dashboard");
+      else setLoadError(err.message || 'Could not load this sandbox.');
+    }
+  }, [id, router]);
 
   useEffect(() => {
     selectEnvironment(id);
-    fetchEnv();
-    const interval = setInterval(fetchEnv, 3000);
+    void fetchEnv();
+    const interval = setInterval(() => void fetchEnv(), 3000);
     return () => clearInterval(interval);
-  }, [id, selectEnvironment]);
+  }, [id, selectEnvironment, fetchEnv]);
 
   // Auto-switch to logs tab when environment is BUILDING or FAILED
   useEffect(() => {
@@ -84,9 +84,10 @@ export default function EnvironmentPage() {
     try {
       await api.environments.stop(id);
       toast.success("Sandbox stopping...");
-      fetchEnv();
+      void fetchEnv();
     } catch (e: any) {
       toast.error(e.message || "Failed to stop sandbox");
+    } finally {
       setIsStopping(false);
     }
   };
@@ -96,17 +97,19 @@ export default function EnvironmentPage() {
     try {
       await api.environments.restart(id);
       toast.success("Sandbox restarting...");
-      fetchEnv();
+      void fetchEnv();
     } catch (e: any) {
       toast.error(e.message || "Failed to restart sandbox");
+    } finally {
       setIsRestarting(false);
     }
   };
 
   if (!env) {
     return (
-      <div className="flex h-64 items-center justify-center text-white/50 animate-pulse font-medium">
-        Loading workspace...
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-white/50 font-medium">
+        {loadError ? <p className="text-red-300">{loadError}</p> : <p>Loading workspace...</p>}
+        {loadError && <button onClick={() => void fetchEnv()} className="rounded border border-white/15 px-3 py-1.5 text-sm hover:bg-white/5">Retry</button>}
       </div>
     );
   }
@@ -115,6 +118,7 @@ export default function EnvironmentPage() {
     <div className="space-y-4 h-full flex flex-col pb-4">
       {/* Header Card */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl px-6 py-4 shrink-0">
+        {loadError && <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-red-400/20 bg-red-400/5 px-3 py-2 text-xs text-red-300"><span>{loadError}</span><button onClick={() => void fetchEnv()} className="underline underline-offset-2">Retry</button></div>}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           {/* Left: icon + name + meta */}
           <div className="flex items-center gap-4 min-w-0">
@@ -166,9 +170,14 @@ export default function EnvironmentPage() {
               {env.state === "RUNNING" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]" />}
               {env.state}
             </div>
-            {env.state === "RUNNING" && env.public_url && (
+            {env.expires_at && (
+              <span className="text-xs text-on-surface-variant flex items-center gap-1" title={`Expires ${new Date(env.expires_at).toLocaleString()}`}>
+                <Clock className="w-3.5 h-3.5" /> Expires {formatDistanceToNow(new Date(env.expires_at), { addSuffix: true })}
+              </span>
+            )}
+            {env.state === "RUNNING" && (
               <a
-                href={env.public_url}
+                href={env.public_url || `${process.env.NEXT_PUBLIC_API_URL || ''}/p/${id}/`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-4 py-1.5 rounded-lg border border-berth-500/30 text-berth-400 hover:text-berth-300 hover:bg-berth-500/10 flex items-center gap-1.5 text-xs font-semibold transition-colors"
@@ -222,7 +231,7 @@ export default function EnvironmentPage() {
                 Files
               </div>
               <div className="flex-1 overflow-y-auto p-2">
-                <FileTree envId={id} selectedPath={activeFile || ''} onSelectFile={setActiveFile} />
+                <FileTree envId={id} selectedPath={activeFile || ''} onSelectFile={setActiveFile} enabled={env.state === 'RUNNING' || env.state === 'STOPPED'} />
               </div>
             </div>
 
@@ -239,7 +248,7 @@ export default function EnvironmentPage() {
           <div className="flex-1 flex flex-col bg-slate-950/20 min-h-0 min-w-0">
             {/* Editor Workspace */}
             <div className="flex-1 relative flex flex-col overflow-hidden bg-slate-950/90 font-mono min-h-0">
-              {activeFile ? (
+              {activeFile && (env.state === 'RUNNING' || env.state === 'STOPPED') ? (
                 <>
                   <div className="px-4 py-2 bg-slate-950/50 border-b border-white/10 text-xs font-mono text-primary-fixed flex items-center gap-2 shrink-0">
                      <Code className="w-3.5 h-3.5" />
@@ -253,10 +262,10 @@ export default function EnvironmentPage() {
                 <div className="flex-1 flex flex-col items-center justify-center text-center text-white/40">
                   <Code className="w-12 h-12 mb-4 text-white/10" />
                   <h3 className="text-base font-semibold text-white/60 mb-1">
-                    Live Editor Workspace
+                    {env.state === 'RUNNING' || env.state === 'STOPPED' ? 'Workspace Ready' : `Sandbox ${env.state.toLowerCase()}`}
                   </h3>
                   <p className="text-xs max-w-sm text-white/30">
-                    Select a file from the sidebar to view or modify its contents.
+                    {env.state === 'RUNNING' || env.state === 'STOPPED' ? 'Select a file from the sidebar to view or modify its contents.' : 'Files and terminal will be available when setup finishes.'}
                   </p>
                 </div>
               )}
@@ -289,11 +298,11 @@ export default function EnvironmentPage() {
                 </button>
               </div>
               <div className="flex-1 relative overflow-hidden">
-                {activeTab === 'terminal' ? (
+                {activeTab === 'terminal' && env.state === 'RUNNING' ? (
                   <Terminal envId={id} />
-                ) : (
+                ) : activeTab === 'logs' ? (
                   <DockerLogs envId={id} />
-                )}
+                ) : <div className="flex h-full items-center justify-center text-sm text-white/40">Terminal is available when the sandbox is running.</div>}
               </div>
             </div>
           </div>

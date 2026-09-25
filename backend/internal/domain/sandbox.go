@@ -84,6 +84,7 @@ type SandboxRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	PopPendingSandbox(ctx context.Context) (*Sandbox, error)
+	ListExpiredSandboxes(ctx context.Context) ([]*Sandbox, error)
 	UpdateGitTracking(ctx context.Context, id uuid.UUID, hasChanges bool, modifiedBy *uuid.UUID, commitHash *string) error
 	LogActivity(ctx context.Context, sandboxID uuid.UUID, userID uuid.UUID, activityType string, data []byte) error
 }

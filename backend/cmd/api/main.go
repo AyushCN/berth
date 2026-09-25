@@ -109,7 +109,7 @@ func main() {
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
 	fileUC := usecase.NewFileUsecase(workspaceDir, sandboxUC)
-	gitUC := usecase.NewGitUsecase(workspaceDir)
+	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, sandboxRepo)
 
 	// Handlers
 	deps := &berthhttp.Dependencies{

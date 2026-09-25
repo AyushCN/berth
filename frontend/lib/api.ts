@@ -64,7 +64,15 @@ export const api = {
       fetchAPI(`/api/environments/${id}/files?path=${encodeURIComponent(path)}`),
     getContent: async (id: string, path: string) => {
       const res = await fetch(`${API_BASE}/api/environments/${id}/files/content?path=${encodeURIComponent(path)}`, { credentials: 'include' });
-      if (!res.ok) throw new Error("Failed to fetch file content");
+      if (!res.ok) {
+        const text = await res.text();
+        let message = text || `Request failed (${res.status})`;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.error) message = parsed.error;
+        } catch {}
+        throw new APIError(res.status, message);
+      }
       return res.text();
     },
     updateContent: (id: string, path: string, content: string) =>

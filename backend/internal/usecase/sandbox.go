@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -110,15 +111,29 @@ func (uc *SandboxUsecase) DeleteEnvironment(ctx context.Context, uid uuid.UUID, 
 	}
 	if sandbox.ContainerID != nil && uc.runtime != nil {
 		if err := uc.runtime.DeleteSandbox(ctx, *sandbox.ContainerID); err != nil {
-			slog.Error("failed to delete container", "error", err)
+			return fmt.Errorf("failed to delete sandbox container: %w", err)
+		}
+	} else if sandbox.ContainerID != nil {
+		if uc.natsClient == nil {
+			return fmt.Errorf("worker cleanup is unavailable")
+		}
+		payload, _ := json.Marshal(map[string]string{"sandbox_id": id.String(), "container_id": *sandbox.ContainerID})
+		if err := uc.natsClient.Publish("berth.sandbox.delete", payload); err != nil {
+			return fmt.Errorf("failed to request sandbox cleanup: %w", err)
 		}
 	}
 
-	// Clean up workspace directory
-	home, _ := os.UserHomeDir()
-	workspaceDir := filepath.Join(home, ".local", "state", "berth", "workspaces", id.String())
-	if err := os.RemoveAll(workspaceDir); err != nil {
-		slog.Error("failed to delete workspace dir", "sandbox_id", id, "error", err)
+	// When the API has no runtime, the worker owns workspace cleanup.
+	if uc.runtime != nil || sandbox.ContainerID == nil {
+		workspaceRoot := os.Getenv("WORKSPACE_ROOT")
+		if workspaceRoot == "" {
+			home, _ := os.UserHomeDir()
+			workspaceRoot = filepath.Join(home, ".local", "state", "berth", "workspaces")
+		}
+		workspaceDir := filepath.Join(workspaceRoot, id.String())
+		if err := os.RemoveAll(workspaceDir); err != nil {
+			slog.Error("failed to delete workspace dir", "sandbox_id", id, "error", err)
+		}
 	}
 
 	return uc.repo.Delete(ctx, id)
@@ -186,7 +201,7 @@ func (uc *SandboxUsecase) ForkEnvironment(ctx context.Context, uid uuid.UUID, id
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sandbox to fork: %w", err)
 	}
-	
+
 	// Verify user has access to the original sandbox
 	if sandbox.OwnerID != uid {
 		if sandbox.ProjectID == uuid.Nil {
@@ -239,10 +254,23 @@ func (uc *SandboxUsecase) StopEnvironment(ctx context.Context, uid uuid.UUID, id
 			return fmt.Errorf("unauthorized to stop sandbox")
 		}
 	}
+	workerHandlesStop := false
 	if sandbox.ContainerID != nil && uc.runtime != nil {
 		if err := uc.runtime.StopSandbox(ctx, *sandbox.ContainerID); err != nil {
-			slog.Error("failed to stop container", "error", err)
+			return fmt.Errorf("failed to stop sandbox container: %w", err)
 		}
+	} else if sandbox.ContainerID != nil {
+		if uc.natsClient == nil {
+			return fmt.Errorf("worker stop service is unavailable")
+		}
+		payload, _ := json.Marshal(map[string]string{"sandbox_id": id.String(), "container_id": *sandbox.ContainerID})
+		if err := uc.natsClient.Publish("berth.sandbox.stop", payload); err != nil {
+			return fmt.Errorf("failed to request sandbox stop: %w", err)
+		}
+		workerHandlesStop = true
+	}
+	if workerHandlesStop {
+		return nil
 	}
 	return uc.repo.UpdateState(ctx, id, domain.StateStopped)
 }

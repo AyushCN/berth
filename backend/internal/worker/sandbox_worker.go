@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"github.com/AyushCN/berth/internal/analyzer"
 	"github.com/AyushCN/berth/internal/domain"
@@ -18,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type SandboxWorker struct {
@@ -35,6 +38,42 @@ func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRun
 	}
 }
 
+func workspaceRoot() string {
+	if root := os.Getenv("WORKSPACE_ROOT"); root != "" {
+		return root
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "state", "berth", "workspaces")
+}
+
+func (w *SandboxWorker) cleanupExpired(ctx context.Context) {
+	expired, err := w.repo.ListExpiredSandboxes(ctx)
+	if err != nil {
+		slog.Error("failed to list expired sandboxes", "error", err)
+		return
+	}
+	for _, sandbox := range expired {
+		if sandbox.ContainerID != nil {
+			cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			err = w.runtime.DeleteSandbox(cleanupCtx, *sandbox.ContainerID)
+			cancel()
+			if err != nil {
+				slog.Error("failed to remove expired sandbox container", "sandbox_id", sandbox.ID, "error", err)
+				continue
+			}
+		}
+		if err := os.RemoveAll(filepath.Join(workspaceRoot(), sandbox.ID.String())); err != nil {
+			slog.Error("failed to remove expired sandbox workspace", "sandbox_id", sandbox.ID, "error", err)
+			continue
+		}
+		if err := w.repo.Delete(ctx, sandbox.ID); err != nil {
+			slog.Error("failed to delete expired sandbox record", "sandbox_id", sandbox.ID, "error", err)
+			continue
+		}
+		slog.Info("expired sandbox cleaned up", "sandbox_id", sandbox.ID)
+	}
+}
+
 func (w *SandboxWorker) Start(ctx context.Context) {
 	slog.Info("sandbox worker started, connecting to NATS")
 
@@ -49,11 +88,19 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 		} else {
 			slog.Info("subscribed to berth.sandbox.create events")
 		}
+		if _, err := w.natsClient.Subscribe("berth.sandbox.stop", "sandbox-stop-worker", w.handleStopRequest); err != nil {
+			slog.Error("failed to subscribe to sandbox stop events", "error", err)
+		}
+		if _, err := w.natsClient.Subscribe("berth.sandbox.delete", "sandbox-delete-worker", w.handleDeleteRequest); err != nil {
+			slog.Error("failed to subscribe to sandbox delete events", "error", err)
+		}
 	}
 
-	// 10s fallback polling
+	// 10s fallback polling and one-minute expired sandbox cleanup.
 	ticker := time.NewTicker(10 * time.Second)
+	cleanupTicker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+	defer cleanupTicker.Stop()
 
 	for {
 		select {
@@ -64,8 +111,58 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			w.processPending(ctx)
+		case <-cleanupTicker.C:
+			w.cleanupExpired(ctx)
 		}
 	}
+}
+
+type sandboxLifecycleRequest struct {
+	SandboxID   string `json:"sandbox_id"`
+	ContainerID string `json:"container_id"`
+}
+
+func (w *SandboxWorker) handleStopRequest(msg *natsCore.Msg) {
+	var req sandboxLifecycleRequest
+	if err := json.Unmarshal(msg.Data, &req); err != nil {
+		slog.Error("invalid sandbox stop request", "error", err)
+		_ = msg.Term()
+		return
+	}
+	if err := w.runtime.StopSandbox(context.Background(), req.ContainerID); err != nil {
+		slog.Error("failed to stop sandbox requested by API", "sandbox_id", req.SandboxID, "error", err)
+		_ = msg.Nak()
+		return
+	}
+	if id, err := uuid.Parse(req.SandboxID); err == nil {
+		_ = w.repo.UpdateState(context.Background(), id, domain.StateStopped)
+	}
+	_ = msg.Ack()
+}
+
+func (w *SandboxWorker) handleDeleteRequest(msg *natsCore.Msg) {
+	var req sandboxLifecycleRequest
+	if err := json.Unmarshal(msg.Data, &req); err != nil {
+		slog.Error("invalid sandbox delete request", "error", err)
+		_ = msg.Term()
+		return
+	}
+	if req.ContainerID != "" {
+		if err := w.runtime.DeleteSandbox(context.Background(), req.ContainerID); err != nil {
+			slog.Error("failed to delete sandbox requested by API", "sandbox_id", req.SandboxID, "error", err)
+			_ = msg.Nak()
+			return
+		}
+	}
+	if id, err := uuid.Parse(req.SandboxID); err == nil {
+		if err := os.RemoveAll(filepath.Join(workspaceRoot(), id.String())); err != nil {
+			slog.Error("failed to remove sandbox workspace", "sandbox_id", req.SandboxID, "error", err)
+			_ = msg.Nak()
+			return
+		}
+		_ = w.repo.Delete(context.Background(), id)
+	}
+	_ = msg.Ack()
 }
 
 func (w *SandboxWorker) processPending(ctx context.Context) {
@@ -96,8 +193,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	}
 
 	// Prepare workspace directory
-	home, _ := os.UserHomeDir()
-	workspaceDir := filepath.Join(home, ".local", "state", "berth", "workspaces", sandbox.ID.String())
+	workspaceDir := filepath.Join(workspaceRoot(), sandbox.ID.String())
 
 	success := false
 	var cid string

@@ -47,8 +47,9 @@ export function Terminal({ envId }: { envId: string }) {
     };
     const token = getCookie('berth_token');
     
-    const wsUrl = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:8080';
-    const ws = new WebSocket(`${wsUrl}/ws/sandbox/${envId}?token=${token || ''}`);
+    const apiUrl = new URL(process.env.NEXT_PUBLIC_API_URL || window.location.origin, window.location.origin);
+    apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${apiUrl.origin}/ws/sandbox/${envId}?token=${encodeURIComponent(token || '')}`);
     ws.onopen = () => {
       term.writeln('\x1b[32mConnected!\x1b[0m');
     };
@@ -60,7 +61,9 @@ export function Terminal({ envId }: { envId: string }) {
     };
 
     ws.onmessage = (e) => term.write(e.data);
-    term.onData((data) => ws.send(data));
+    const input = term.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(data);
+    });
 
     xtermRef.current = term;
 
@@ -78,6 +81,7 @@ export function Terminal({ envId }: { envId: string }) {
 
     return () => {
       resizeObserver.disconnect();
+      input.dispose();
       ws.close();
       term.dispose();
     };

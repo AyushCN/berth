@@ -8,30 +8,28 @@ Berth is an early-stage, single-host research prototype. Its current rootless de
 
 - Go API and worker provision sandboxes through NATS.
 - The worker clones GitHub repositories and detects Node.js, Python, Go, or Rust from repository files using simple rules.
-- containerd manages sandbox containers; a host-side dependency cache can reduce repeat setup work. Warm-pool reuse is not active in the sandbox creation path yet.
-- File APIs, terminal WebSocket plumbing, GitHub OAuth, and frontend editor/file-tree components are present. Frontend integration is still in progress.
+- containerd manages sandbox containers; exact-image warm containers are reused for Node.js, Python, and Go when available. Host-side dependency caching also reduces repeat setup work.
+- The sandbox UI connects the file tree, editor save, terminal WebSocket, status polling, and preview link to the backend APIs.
+- GitHub OAuth tokens are encrypted at rest and used for owner-authorized pushes to a `berth/<sandbox-id>` branch.
+- Sandboxes receive a 24-hour expiry; the worker periodically removes expired containers and workspaces. Stop/delete requests are sent to the worker over NATS.
 - The local development runtime defaults to `runc`; preview requests are proxied through the API to a host-networked port.
 
 ## Deferred
 
-- Collaborative editing is out of demo scope. OAuth-backed Git push remains incomplete, and the preview/networking path is not multi-tenant safe.
+- Collaborative editing is out of demo scope. The preview/networking path is not multi-tenant safe.
 - Benchmark and paper work is deferred; current checked-in measurements are research artifacts, not a published performance claim.
 
 ## Quick start
 
-The development path currently requires Linux (bare metal or VM), Go, Node.js, Docker Compose, and a separately configured containerd runtime. See `scripts/` and `infra/docker-compose.yml` for setup details. The preview path is for trusted single-host demos; it is not multi-tenant safe.
+The development path requires Linux (bare metal or VM), Go, Node.js, Docker Compose, and a separately configured containerd runtime. Follow [docs/QUICKSTART.md](docs/QUICKSTART.md) for local or single-host setup. The preview path is for trusted single-host use; it is not multi-tenant safe.
 
 ```bash
-bash scripts/setup.sh
-bash scripts/setup-rootless.sh
-make dev
+make up
 make migrate-up
-export CONTAINERD_SOCK="$XDG_RUNTIME_DIR/containerd/containerd.sock"
-export JWT_SECRET="dev-secret"
 cd backend && go run ./cmd/api
 ```
 
-Run the worker separately with `MODE=worker` and the same backend configuration. GitHub OAuth credentials are needed for the OAuth flow; development mode can seed a local user.
+Run the worker separately with `MODE=worker` and the same backend configuration. Required environment variables and production notes are in the quickstart.
 
 ## Project layout
 
