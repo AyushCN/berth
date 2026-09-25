@@ -23,12 +23,11 @@ type SandboxUsecase struct {
 	repo        domain.SandboxRepository
 	projectRepo domain.ProjectRepository
 	runtime     domain.ContainerRuntime
-	ml          domain.PredictionService
 	natsClient  *natsInfra.Client
 }
 
-func NewSandboxUsecase(repo domain.SandboxRepository, projectRepo domain.ProjectRepository, runtime domain.ContainerRuntime, ml domain.PredictionService, natsClient *natsInfra.Client) *SandboxUsecase {
-	return &SandboxUsecase{repo: repo, projectRepo: projectRepo, runtime: runtime, ml: ml, natsClient: natsClient}
+func NewSandboxUsecase(repo domain.SandboxRepository, projectRepo domain.ProjectRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client) *SandboxUsecase {
+	return &SandboxUsecase{repo: repo, projectRepo: projectRepo, runtime: runtime, natsClient: natsClient}
 }
 
 func (uc *SandboxUsecase) ListEnvironments(ctx context.Context, uid uuid.UUID) (any, error) {

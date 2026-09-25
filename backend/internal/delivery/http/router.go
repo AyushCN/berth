@@ -1,10 +1,10 @@
 package http
 
 import (
-	"github.com/gin-gonic/gin"
 	"github.com/AyushCN/berth/internal/config"
 	"github.com/AyushCN/berth/internal/delivery/http/handler"
 	"github.com/AyushCN/berth/internal/delivery/http/middleware"
+	"github.com/gin-gonic/gin"
 )
 
 // NewRouter creates and configures the Gin router.
@@ -90,7 +90,6 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 	ws.Use(middleware.WSAuth(cfg.JWTSecret))
 	{
 		ws.GET("/sandbox/:id", deps.WSHandler.HandleSandboxWS)
-		ws.GET("/file/:id", deps.WSHandler.HandleFileSyncWS)
 	}
 
 	return r

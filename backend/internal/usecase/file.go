@@ -3,7 +3,9 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,10 +14,11 @@ import (
 
 type FileUsecase struct {
 	workspaceDir string
+	sandboxUC    *SandboxUsecase // optional, used to signal reload via Exec
 }
 
-func NewFileUsecase(dir string) *FileUsecase {
-	return &FileUsecase{workspaceDir: dir}
+func NewFileUsecase(dir string, sandboxUC *SandboxUsecase) *FileUsecase {
+	return &FileUsecase{workspaceDir: dir, sandboxUC: sandboxUC}
 }
 
 func (uc *FileUsecase) getSandboxDir(sandboxID uuid.UUID) string {
@@ -79,18 +82,59 @@ func (uc *FileUsecase) GetFileContent(ctx context.Context, sandboxID uuid.UUID, 
 	return os.ReadFile(target)
 }
 
-func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUID, path string, content []byte) error {
+// SaveResult is returned by UpdateFileContent.
+type SaveResult struct {
+	ReloadSignaled bool
+}
+
+func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUID, path string, content []byte) (*SaveResult, error) {
 	target, err := uc.resolvePath(sandboxID, path)
 	if err != nil {
-		return err
-	}
-	
-	dir := filepath.Dir(target)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return nil, err
 	}
 
-	return os.WriteFile(target, content, 0644)
+	dir := filepath.Dir(target)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+
+	if err := os.WriteFile(target, content, 0644); err != nil {
+		return nil, err
+	}
+
+	// Signal a hot-reload by touching the file inside the container via exec
+	reloadSignaled := false
+	if uc.sandboxUC != nil && uc.sandboxUC.runtime != nil {
+		sandbox, err := uc.sandboxUC.repo.GetByID(ctx, sandboxID)
+		if err == nil && sandbox.State == "RUNNING" && sandbox.ContainerID != nil {
+			inContainerPath := "/workspace/" + strings.TrimPrefix(path, "/")
+			touchCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_, touchErr := uc.sandboxUC.runtime.Exec(touchCtx, *sandbox.ContainerID, []string{"touch", inContainerPath})
+			if touchErr == nil {
+				reloadSignaled = true
+			} else {
+				slog.Warn("touch-on-save failed", "sandbox_id", sandboxID, "path", inContainerPath, "err", touchErr)
+			}
+		}
+	}
+
+	// Async: stage file in git and update git tracking in DB
+	sandboxDir := uc.getSandboxDir(sandboxID)
+	go func() {
+		cmd := exec.Command("git", "add", path)
+		cmd.Dir = sandboxDir
+		if err := cmd.Run(); err != nil {
+			slog.Warn("git add failed on save", "sandbox_id", sandboxID, "path", path, "err", err)
+		}
+		if uc.sandboxUC != nil {
+			if err := uc.sandboxUC.repo.UpdateGitTracking(ctx, sandboxID, true, nil, nil); err != nil {
+				slog.Warn("failed to update git tracking", "sandbox_id", sandboxID, "err", err)
+			}
+		}
+	}()
+
+	return &SaveResult{ReloadSignaled: reloadSignaled}, nil
 }
 
 func (uc *FileUsecase) CreateFile(ctx context.Context, sandboxID uuid.UUID, path string, isDir bool) error {

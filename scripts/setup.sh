@@ -60,7 +60,7 @@ fi
 node -v
 
 # Start infrastructure
-echo -e "${YELLOW}Starting infrastructure (Postgres, Redis, NATS, MinIO)...${NC}"
+echo -e "${YELLOW}Starting infrastructure (Postgres, Redis, NATS)...${NC}"
 cd infra
 docker compose up -d --wait
 
@@ -80,8 +80,6 @@ check_port() {
 check_port 5432 "PostgreSQL"
 check_port 6379 "Redis"
 check_port 4222 "NATS"
-check_port 9000 "MinIO"
-
 cd ../backend
 echo -e "${YELLOW}Running sqlc generate...${NC}"
 sqlc generate

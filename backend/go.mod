@@ -14,7 +14,6 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.53.1
-	github.com/open-policy-agent/opa v1.20.2
 	github.com/opencontainers/runtime-spec v1.3.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/shirou/gopsutil/v4 v4.26.8

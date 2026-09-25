@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// RuntimeProfile represents the predicted runtime configuration for a sandbox.
+// RuntimeProfile contains the runtime configuration detected from a repository.
 type RuntimeProfile struct {
 	Language    string // "node", "python", "go", "rust", "other"
 	BaseImage   string // e.g., "node:20-alpine"
@@ -16,8 +16,6 @@ type RuntimeProfile struct {
 	StartCmd    string // e.g., "npm run dev"
 	WorkDir     string // e.g., "/app"
 	ExposedPort int    // e.g., 3000
-	NeedsDB     bool   // whether a sidecar DB is predicted
-	Confidence  float64
 }
 
 // SandboxState represents the lifecycle state of a sandbox.
@@ -34,15 +32,15 @@ const (
 
 // Sandbox is the core aggregate root for an ephemeral dev environment.
 type Sandbox struct {
-	ID          uuid.UUID       `json:"id"`
-	ProjectID   uuid.UUID       `json:"project_id"`
-	OwnerID     uuid.UUID       `json:"owner_id"`
-	Name        string          `json:"name"`
-	GitURL      string          `json:"git_url"`
-	GitBranch   string          `json:"git_branch"`
-	State       SandboxState    `json:"state"`
-	Profile     *RuntimeProfile `json:"profile,omitempty"`
-	ContainerID *string         `json:"container_id,omitempty"`
+	ID                    uuid.UUID       `json:"id"`
+	ProjectID             uuid.UUID       `json:"project_id"`
+	OwnerID               uuid.UUID       `json:"owner_id"`
+	Name                  string          `json:"name"`
+	GitURL                string          `json:"git_url"`
+	GitBranch             string          `json:"git_branch"`
+	State                 SandboxState    `json:"state"`
+	Profile               *RuntimeProfile `json:"profile,omitempty"`
+	ContainerID           *string         `json:"container_id,omitempty"`
 	PublicURL             *string         `json:"public_url,omitempty"`
 	Port                  *int            `json:"port,omitempty"`
 	CreatedAt             time.Time       `json:"created_at"`
@@ -67,8 +65,8 @@ func (s *Sandbox) CanEdit() bool {
 // WarmPoolEntry represents a pre-warmed sandbox waiting for assignment.
 type WarmPoolEntry struct {
 	ID          uuid.UUID
-	ProfileHash string   // hash of RuntimeProfile for matching
-	ContainerID string   // containerd container ID
+	ProfileHash string // hash of RuntimeProfile for matching
+	ContainerID string // containerd container ID
 	CreatedAt   time.Time
 	LastUsedAt  *time.Time
 }
@@ -90,12 +88,6 @@ type SandboxRepository interface {
 	LogActivity(ctx context.Context, sandboxID uuid.UUID, userID uuid.UUID, activityType string, data []byte) error
 }
 
-// PredictionService defines the interface for the ML prediction microservice.
-// Implemented by the Python gRPC service client.
-type PredictionService interface {
-	Predict(ctx context.Context, gitURL, branch, localPath string) (*RuntimeProfile, error)
-}
-
 // ContainerRuntime defines the interface for containerd/gVisor operations.
 // This abstracts containerd so we can mock it in tests.
 type ContainerRuntime interface {
@@ -113,9 +105,9 @@ type SandboxSpec struct {
 	ID           uuid.UUID
 	BaseImage    string
 	WorkDir      string
-	WorkspaceDir string // Host directory to bind-mount into container
+	WorkspaceDir string            // Host directory to bind-mount into container
 	ExtraMounts  map[string]string // HostDir -> ContainerDir
-	Cmd          []string // Container main process (keep-alive for dev envs)
+	Cmd          []string          // Container main process (keep-alive for dev envs)
 	Env          map[string]string
 	MemoryLimit  int64 // bytes
 	CPULimit     int64 // milli-cores

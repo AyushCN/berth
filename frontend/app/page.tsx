@@ -3,15 +3,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { 
-  Terminal, 
-  Code2, 
-  Box, 
-  Cpu, 
-  GitBranch, 
-  ShieldCheck, 
-  Users, 
-  Zap,
+import {
+  Terminal,
+  Code2,
+  Box,
   ArrowRight,
   ChevronRight,
   Sparkles
@@ -107,7 +102,7 @@ export default function LandingPage() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-fixed/10 border border-primary-fixed/20 text-primary-fixed text-sm font-semibold mb-8 backdrop-blur-md"
           >
             <Sparkles className="w-4 h-4" />
-            <span>The next generation of ephemeral environments</span>
+            <span>Single-host sandbox prototype</span>
           </motion.div>
 
           <motion.h1 
@@ -116,10 +111,10 @@ export default function LandingPage() {
             transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
             className="text-6xl md:text-8xl font-black text-white tracking-tighter mb-8 leading-[1.1] max-w-5xl drop-shadow-2xl"
           >
-            Instant Cloud Workspaces.
+            Repository Sandboxes.
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-fixed via-blue-400 to-indigo-500">
-              Zero Configuration.
+              Built for a fast local demo.
             </span>
           </motion.h1>
 
@@ -129,7 +124,7 @@ export default function LandingPage() {
             transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
             className="text-xl md:text-2xl text-on-surface-variant max-w-3xl mb-12 font-medium"
           >
-            Berth spins up fully isolated, gVisor-secured Web IDEs directly from your Git repositories. Powered by ML to automatically detect your stack.
+            Berth clones a public GitHub repository, detects its runtime from project files, and starts it in a containerd-managed workspace. This prototype uses host networking and is intended for trusted, single-host use.
           </motion.p>
 
           <motion.div
@@ -153,7 +148,7 @@ export default function LandingPage() {
           </motion.div>
         </motion.section>
 
-        {/* Realistic Terminal Preview */}
+        {/* Example provisioning flow */}
         <motion.section
           initial={{ opacity: 0, y: 60 }}
           animate={{ opacity: 1, y: 0 }}
@@ -181,10 +176,10 @@ export default function LandingPage() {
               <div className="flex items-center gap-2 text-white/50 mb-2">
                 <span className="text-emerald-400">➜</span>
                 <span className="text-primary-fixed">~</span>
-                <span>berth init</span>
+                <span>berth inspect</span>
               </div>
               <div className="text-primary-fixed mb-1 flex items-center gap-2">
-                <Cpu className="w-4 h-4 animate-pulse" /> [ML] Analyzing repository structure...
+                <Box className="w-4 h-4" /> Detecting runtime from repository files...
               </div>
               <div className="text-white/70 ml-6 mb-1">Detected Language: Node.js (TypeScript)</div>
               <div className="text-white/70 ml-6 mb-1">Detected Start Command: npm run dev</div>
@@ -196,10 +191,10 @@ export default function LandingPage() {
                 <span>berth up</span>
               </div>
               <div className="text-emerald-400 mb-1 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4" /> [Sandbox] Booting gVisor isolated container...
+                <Box className="w-4 h-4" /> Starting container through containerd (runc by default)...
               </div>
-              <div className="text-white font-bold ml-6 mt-2">
-                Ready in 1.2s. Live Web IDE started.
+              <div className="text-white/70 ml-6 mt-2">
+                Preview route: /p/&lt;sandbox-id&gt;/ (single-host demo)
               </div>
               <div className="text-primary-fixed ml-6 mt-1 animate-pulse">_</div>
             </div>
@@ -213,68 +208,38 @@ export default function LandingPage() {
               Powerful By Design.
             </h2>
             <p className="text-xl text-on-surface-variant max-w-2xl mx-auto">
-              Everything you need to write, run, and collaborate on code without the overhead of local setup.
+              The current prototype flow, with clear limits on what is ready.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <GlassCard delay={0.1}>
               <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-6 border border-blue-500/20 text-blue-400">
                 <Terminal className="w-6 h-6" />
               </div>
-              <h3 className="text-2xl font-bold text-white mb-3">Live Web IDE</h3>
+              <h3 className="text-2xl font-bold text-white mb-3">Workspace UI</h3>
               <p className="text-on-surface-variant leading-relaxed">
-                Full-featured browser editor with an interactive xterm.js terminal. Edit files, run commands, and see output in real-time.
-              </p>
-            </GlassCard>
-
-            <GlassCard delay={0.2}>
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6 border border-purple-500/20 text-purple-400">
-                <Cpu className="w-6 h-6" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-3">ML Profiling</h3>
-              <p className="text-on-surface-variant leading-relaxed">
-                Our Python gRPC prediction engine analyzes your Git repository to instantly determine the optimal base image, dependencies, and start commands.
+                The app includes a file tree, Monaco editor, and xterm terminal. Frontend-to-API wiring is still in progress.
               </p>
             </GlassCard>
 
             <GlassCard delay={0.3}>
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-6 border border-emerald-500/20 text-emerald-400">
-                <ShieldCheck className="w-6 h-6" />
+                <Box className="w-6 h-6" />
               </div>
-              <h3 className="text-2xl font-bold text-white mb-3">gVisor Security</h3>
+              <h3 className="text-2xl font-bold text-white mb-3">Containerd Runtime</h3>
               <p className="text-on-surface-variant leading-relaxed">
-                Code execution is strictly isolated. We use containerd and Google's runsc (gVisor) to ensure robust sandboxing for all user workloads.
+                The worker creates containers through containerd. Local development defaults to runc; gVisor is not the default verified configuration.
               </p>
             </GlassCard>
 
             <GlassCard delay={0.4}>
               <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center mb-6 border border-orange-500/20 text-orange-400">
-                <GitBranch className="w-6 h-6" />
+                <Terminal className="w-6 h-6" />
               </div>
-              <h3 className="text-2xl font-bold text-white mb-3">Seamless Git Sync</h3>
+              <h3 className="text-2xl font-bold text-white mb-3">Runtime Detection</h3>
               <p className="text-on-surface-variant leading-relaxed">
-                Built-in Git operations. Pull the latest code, switch branches, commit your changes, and push directly from your browser workspace.
-              </p>
-            </GlassCard>
-
-            <GlassCard delay={0.5}>
-              <div className="w-12 h-12 rounded-2xl bg-pink-500/10 flex items-center justify-center mb-6 border border-pink-500/20 text-pink-400">
-                <Users className="w-6 h-6" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-3">Team Collaboration</h3>
-              <p className="text-on-surface-variant leading-relaxed">
-                Create Organizations and Projects. Invite team members and securely share sandboxes with strict Role-Based Access Control.
-              </p>
-            </GlassCard>
-
-            <GlassCard delay={0.6}>
-              <div className="w-12 h-12 rounded-2xl bg-primary-fixed/10 flex items-center justify-center mb-6 border border-primary-fixed/20 text-primary-fixed">
-                <Zap className="w-6 h-6" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-3">Instant Forking</h3>
-              <p className="text-on-surface-variant leading-relaxed">
-                Need to experiment? Fork any running environment in a single click. Test changes safely without disrupting the original workspace.
+                Simple repository-file rules select setup commands for Node.js, Python, Go, or Rust after cloning.
               </p>
             </GlassCard>
           </div>
@@ -287,7 +252,7 @@ export default function LandingPage() {
             Ready to dive in?
           </h2>
           <p className="text-xl text-on-surface-variant mb-10 max-w-2xl mx-auto relative z-10">
-            Stop fighting with local dependencies. Start coding in a secure, isolated environment in seconds.
+            Try the single-host prototype. It is not intended for untrusted or multi-tenant workloads.
           </p>
           <Link
             href="/login"

@@ -1,52 +1,32 @@
-# Architecture & Trust Boundaries
+# Architecture and Trust Boundaries
 
 ## Overview
 
-Berth is a single-host ephemeral sandbox platform for research on predictive pre-warming and gVisor-based isolation.
+Berth is currently a single-host sandbox prototype. The control plane is a Go API backed by PostgreSQL and NATS. A worker consumes sandbox jobs, clones the repository, detects a runtime from repository files, and asks containerd to create and start a sandbox.
 
-## Trust Boundaries
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  UNTRUSTED ZONE   │  GitHub OAuth, User Browser             │
-├─────────────────────────────────────────────────────────────┤
-│  CONTROL PLANE    │  Envoy API GW → Go API                                │
-│  (Trusted)        │  PostgreSQL, Redis, NATS (Job Orchestration), MinIO   │
-├─────────────────────────────────────────────────────────────┤
-│  PREDICTION SVC   │  Python gRPC (localhost only)           │
-│  (Semi-Trusted)   │  ONNX Runtime, no network egress         │
-├─────────────────────────────────────────────────────────────┤
-│  DATA PLANE       │  containerd + runc (v2)               │
-│  (Untrusted User  │  Rootless containerd for local dev    │
-│   Code Executes)  │  Per-sandbox overlayfs / bind mounts  │
-│                   │  Host networking (in rootless mode)   │
-└─────────────────────────────────────────────────────────────┘
+```text
+Browser → Next.js frontend → Go API → PostgreSQL
+                                  └── NATS → Go worker → containerd → sandbox
 ```
 
-## Key Invariants
+## Current implementation
 
-1. **No host root access.** The backend never mounts `/var/run/docker.sock`.
-2. **No bind mounts from host to sandbox.** Filesystem access is via 9P/virtiofs or overlayfs layers. *(Note: Currently using bind mounts for Phase 1).*
-3. **Prediction service is localhost-only.** It has no external network access.
-4. **All inter-service communication is mTLS** (SPIFFE/SPIRE in production; dev uses self-signed).
-5. **Audit logs are append-only.** Stored in MinIO with object lock.
-6. **Resource Limits (cgroups).** Cgroup limits (PIDs, Memory, CPU) are strictly enforced. *(Note: Explicitly disabled in rootless mode due to permission constraints. Run in privileged mode for evaluation).*
+- Runtime detection happens after cloning and uses file-based rules in `backend/internal/analyzer`.
+- The local configuration defaults to rootless containerd with `runc.v2`; gVisor/runsc is not the default verified path.
+- Workspace files are bind-mounted so API edits can reach the running container.
+- Rootless local networking uses the host network namespace. Preview ports therefore do not have per-sandbox network isolation.
+- NATS carries provisioning and terminal traffic. PostgreSQL stores sandbox and account state.
 
-## Data Flow
+## Security and deployment limits
 
-1. User clicks "Create Sandbox" in Next.js frontend.
-2. Frontend POSTs `/api/environments` with `gitUrl`.
-3. API Gateway (Envoy) validates JWT, forwards to Go API.
-4. Go API calls Prediction Service (gRPC) to classify repo.
-5. API publishes a sandbox creation event to NATS JetStream (`berth.sandbox.create`).
-6. Worker pulls job from NATS, provisions the warm container or creates a new one, and restores host-side dependency layer cache.
-7. containerd + runsc starts sandbox with bind mount for live editing (Phase 1).
-8. File edits flow: Monaco → Yjs → WebSocket → NATS → Bind Mount → sandbox.
-9. Git operations run inside the sandbox via exec (gVisor).
+This setup is intended for development and research on a single host. It does not currently provide network isolation between sandboxes, a dedicated public preview gateway, verified multi-tenant isolation, production mTLS/SPIFFE, Cilium policy enforcement, or a multi-node control plane. Runtime hardening and resource limits are host/runtime dependent. Do not expose this configuration to untrusted users as a production multi-tenant service.
 
-## Network Segmentation
+## Provisioning flow
 
-- By default, each sandbox gets a `/30` subnet and Cilium L3/L4 policies block inter-sandbox traffic.
-- *(Note: In local rootless dev mode, containers use host networking to bypass restricted user namespaces, so network segmentation and port mapping are not isolated.)*
-- Only the API Gateway can reach the backend.
-- Only the backend can reach the prediction service (localhost:50051).
+1. The frontend submits a repository URL to the Go API.
+2. The API stores a pending sandbox and publishes a NATS job.
+3. The worker validates the URL, clones the repository, and detects the runtime from its files.
+4. The worker creates and starts the container, installs dependencies, and starts the detected application command.
+5. The worker records the container and preview port. Current local preview behavior relies on host networking and is not a stable public routing solution.
+
+File editing and terminal components exist, but frontend wiring remains incomplete. OAuth-backed Git push and collaborative editing are outside the demo scope.

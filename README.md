@@ -1,89 +1,49 @@
 # Berth
 
-> Predictive ephemeral sandbox platform with gVisor isolation.
+Ephemeral development sandboxes with containerd, repository-based runtime detection, and dependency caching.
 
-## ⚠️ Current Status: Phase 0–1 Scaffold
+Berth is an early-stage, single-host research prototype. Its current rootless development setup uses `runc.v2` and host networking. gVisor support is not currently the default working configuration, and this setup is not suitable for exposing untrusted workloads as a multi-tenant public service.
 
-This project is currently in early development. It is **NOT complete**.
-Please see [docs/STATUS.md](docs/STATUS.md) for a brutal, honest inventory of what works and what is vaporware.
+## Current capabilities
 
-### What Works Currently
-- Rootless containerd daemon setup
-- gVisor (runsc) runtime integration
-- Fast Container lifecycle (Create/Start/Stop/Exec) works cleanly in rootless mode
-- Advanced Warm Pool with dependency caching
-- Hardened OCI Spec (namespaces, capabilities, seccomp, cgroups)
-- Event-driven provisioning via NATS
-- Host-networking enabled (no bridge) for unblocked port-forwarding
+- Go API and worker provision sandboxes through NATS.
+- The worker clones GitHub repositories and detects Node.js, Python, Go, or Rust from repository files using simple rules.
+- containerd manages sandbox containers; a host-side dependency cache can reduce repeat setup work. Warm-pool reuse is not active in the sandbox creation path yet.
+- File APIs, terminal WebSocket plumbing, GitHub OAuth, and frontend editor/file-tree components are present. Frontend integration is still in progress.
+- The local development runtime defaults to `runc`; preview requests are proxied through the API to a host-networked port.
 
-### Honest Status
+## Deferred
 
-| Phase | Status | Notes |
-|-------|--------|-------|
-| Phase 0: Scaffold | ✅ Done | CI, schema, scripts |
-| Phase 1: Isolation | ✅ Done | Runtime works, warm pool + layer caching fully implemented |
-| Phase 2: Auth + API | ✅ Done | Usecases implemented, HTTP handlers fully wired and E2E tested |
-| Phase 3: Frontend | 🟡 In Progress | Next.js UI wired with GitHub OAuth, Profile, File Tree, and Terminal |
-| Phase 4: Prediction | 🟡 In Progress | ML model and Python prediction service scaffolded |
-| Phase 5: Evaluation | ✅ Done | EDEBench test harness runs to completion |
+- Collaborative editing is out of demo scope. OAuth-backed Git push remains incomplete, and the preview/networking path is not multi-tenant safe.
+- Benchmark and paper work is deferred; current checked-in measurements are research artifacts, not a published performance claim.
 
-### Execution Roadmap
+## Quick start
 
-| # | Milestone | Status | What it adds |
-|---|---|---|---|
-| 1 | **Boot the existing stack** | ✅ Done | Infra + API + worker running, verified with real HTTP calls |
-| 2 | **Clone-to-sandbox loop** | ✅ Done | Clone repo loop: POST repo URL → worker clones into container |
-| 3 | **Runtime detection + start** | ✅ Done | Auto-detect Node/Python/Go, install deps, start the app |
-| 4 | **Preview access** | ✅ Done | App reachable on host networking, DNS inside containers |
-| 5 | **File editing** | ✅ Done | Save file in browser/API → file lands inside sandbox workspace |
-| 6 | **Git operations** | ❌ Not started | Commit/push from inside sandbox (already scaffolded) |
-| 7 | **Frontend wiring** | 🟡 Partial | Next.js UI wired for Auth, Profile, FileTree, Editor, and WebSockets |
-| 8 | **The Prediction Layer**| 🟡 Partial | ML model and prediction service scaffolded |
-| 9 | **Real-Time Sync**    | ❌ Not started | CRDTs |
-
-### What Does NOT Exist Yet (Vaporware)
-- ❌ Real-time collaborative editing (CRDT sync)
-
-## Quick Start
+The development path currently requires Linux (bare metal or VM), Go, Node.js, Docker Compose, and a separately configured containerd runtime. See `scripts/` and `infra/docker-compose.yml` for setup details. The preview path is for trusted single-host demos; it is not multi-tenant safe.
 
 ```bash
-# 1. Setup (installs tools, starts infra)
 bash scripts/setup.sh
 bash scripts/setup-rootless.sh
-
-# 2. Start infrastructure
 make dev
-
-# 3. Run migrations
 make migrate-up
-
-# 4. Start backend
-export CONTAINERD_SOCK=$XDG_RUNTIME_DIR/containerd/containerd.sock
+export CONTAINERD_SOCK="$XDG_RUNTIME_DIR/containerd/containerd.sock"
 export JWT_SECRET="dev-secret"
-# Add your GitHub OAuth credentials here:
-export GITHUB_CLIENT_ID="your_client_id"
-export GITHUB_CLIENT_SECRET="your_client_secret"
 cd backend && go run ./cmd/api
 ```
 
-## Requirements
+Run the worker separately with `MODE=worker` and the same backend configuration. GitHub OAuth credentials are needed for the OAuth flow; development mode can seed a local user.
 
-- Linux (bare metal or VM). macOS is not supported for local gVisor dev.
-- Go 1.23+
-- Node.js 20+
-- Docker + Docker Compose
+## Project layout
 
-## Project Structure
-
+```text
+backend/   Go API, worker, containerd integration, and runtime detector
+frontend/  Next.js interface
+infra/     Local dependency services
+scripts/   Development setup and smoke checks
+docs/      Architecture and current project status
 ```
-berth/
-├── backend/          # Go API + workers (Clean Architecture)
-├── frontend/         # Next.js 15 UI
-├── ml/               # Python prediction service
-├── infra/            # Docker Compose for local dev
-├── scripts/          # Setup and utility scripts
-└── docs/             # Architecture docs + IEEE paper
-```
+
+See [docs/STATUS.md](docs/STATUS.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for current limitations.
 
 ## License
 

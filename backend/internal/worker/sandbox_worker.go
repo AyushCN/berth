@@ -4,6 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/AyushCN/berth/internal/analyzer"
+	"github.com/AyushCN/berth/internal/domain"
+	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
+	natsCore "github.com/nats-io/nats.go"
 	"io"
 	"log/slog"
 	"net"
@@ -14,25 +18,19 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/AyushCN/berth/internal/domain"
-	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
-	natsCore "github.com/nats-io/nats.go"
 )
 
 type SandboxWorker struct {
 	repo       domain.SandboxRepository
 	runtime    domain.ContainerRuntime
-	ml         domain.PredictionService
 	natsClient *natsInfra.Client
 	wg         sync.WaitGroup
 }
 
-func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, ml domain.PredictionService, natsClient *natsInfra.Client) *SandboxWorker {
+func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client) *SandboxWorker {
 	return &SandboxWorker{
 		repo:       repo,
 		runtime:    runtime,
-		ml:         ml,
 		natsClient: natsClient,
 	}
 }
@@ -100,7 +98,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	// Prepare workspace directory
 	home, _ := os.UserHomeDir()
 	workspaceDir := filepath.Join(home, ".local", "state", "berth", "workspaces", sandbox.ID.String())
-	
+
 	success := false
 	var cid string
 	defer func() {
@@ -132,28 +130,28 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	go func() {
 		cloneStart := time.Now()
-		
+
 		branchPart := sandbox.GitBranch
 		if branchPart == "" {
 			branchPart = "HEAD"
 		}
 		hash := sha256.Sum256([]byte(sandbox.GitURL + "@" + branchPart))
 		cacheKey := fmt.Sprintf("%x", hash)[:16]
-		
+
 		home, _ := os.UserHomeDir()
 		cacheDir := filepath.Join(home, ".local", "state", "berth", "cache", "git", cacheKey)
-		
+
 		var err error
 		if _, statErr := os.Stat(cacheDir); os.IsNotExist(statErr) {
 			slog.Info("git cache miss, performing cold clone", "sandbox_id", sandbox.ID)
 			os.MkdirAll(filepath.Dir(cacheDir), 0755)
-			
+
 			cloneArgs := []string{"clone", "--bare", "--depth", "1"}
 			if sandbox.GitBranch != "" {
 				cloneArgs = append(cloneArgs, "-b", sandbox.GitBranch)
 			}
 			cloneArgs = append(cloneArgs, sandbox.GitURL, cacheDir)
-			
+
 			cloneCmd := exec.CommandContext(bgCtx, "git", cloneArgs...)
 			if out, cmdErr := cloneCmd.CombinedOutput(); cmdErr != nil {
 				slog.Error("git cold clone failed", "error", cmdErr, "output", string(out))
@@ -176,7 +174,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		cloneDone <- err
 	}()
 
-	// Wait for clone to finish before predicting
+	// Wait for the repository clone before detecting its runtime.
 	if err := <-cloneDone; err != nil {
 		slog.Error("worker failing due to clone error")
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
@@ -184,24 +182,11 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	}
 	slog.Info("git clone completed", "sandbox_id", sandbox.ID, "duration", cloneDuration)
 
-	// Predict runtime profile using the cloned repository
-	predictStart := time.Now()
-	profile, err := w.ml.Predict(bgCtx, sandbox.GitURL, sandbox.GitBranch, workspaceDir)
-	if err != nil {
-		slog.Warn("prediction failed, using fallback", "error", err)
-		profile = &domain.RuntimeProfile{
-			Language:    "node",
-			BaseImage:   "docker.io/library/node:20-alpine",
-			InstallCmd:  "npm install",
-			StartCmd:    "npm start",
-			ExposedPort: 3000,
-			NeedsDB:     false,
-			Confidence:  0.0,
-		}
-	} else if profile.Language == "node" {
-		profile.InstallCmd = "npm install"
-	}
-	predictDuration := time.Since(predictStart)
+	// Analyze the repository using the rule-based engine
+	analyzeStart := time.Now()
+	profile := analyzer.Analyze(workspaceDir)
+	analyzeDuration := time.Since(analyzeStart)
+	slog.Info("static analysis completed", "sandbox_id", sandbox.ID, "language", profile.Language, "duration", analyzeDuration)
 
 	// Create container with keep-alive command
 	spec := domain.SandboxSpec{
@@ -296,7 +281,6 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		"timing_metrics", map[string]any{
 			"db_pop":  dbPopDuration.String(),
 			"clone":   cloneDuration.String(),
-			"predict": predictDuration.String(),
 			"create":  createDuration.String(),
 			"start":   startDuration.String(),
 			"install": installDuration.String(),
@@ -423,4 +407,3 @@ func getFreePort() (int, error) {
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
-

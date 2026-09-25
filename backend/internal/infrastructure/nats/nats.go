@@ -39,7 +39,7 @@ func NewClient(url string) (*Client, error) {
 	if err != nil {
 		stream, err = js.AddStream(&nats.StreamConfig{
 			Name:     streamName,
-			Subjects: []string{"berth.>", "sandbox.>", "file.>"},
+			Subjects: []string{"berth.>", "sandbox.>"},
 			Storage:  nats.FileStorage,
 			MaxAge:   7 * 24 * time.Hour,
 		})

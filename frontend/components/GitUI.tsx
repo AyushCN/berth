@@ -291,12 +291,17 @@ export function GitStatusPanel({ envId }: { envId: string }) {
     setIsPushing(true);
     try {
       await api.git.commit(envId, msg);
-      await api.git.push(envId);
-      toast.success("Successfully committed and pushed changes");
+      const pushResult = await api.git.push(envId);
+      const pushedBranch = pushResult?.branch;
+      if (pushedBranch && pushedBranch !== status?.branch) {
+        toast.success(`Pushed to new branch: ${pushedBranch} (protected branch auto-forked)`);
+      } else {
+        toast.success('Successfully committed and pushed changes');
+      }
       mutate();
       setIsCommitModalOpen(false);
     } catch (e: any) {
-      toast.error(e.message || "Failed to commit and push");
+      toast.error(e.message || 'Failed to commit and push');
     } finally {
       setIsPushing(false);
     }

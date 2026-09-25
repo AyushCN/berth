@@ -19,16 +19,16 @@ func NewSandboxRepository(q *Queries) *SandboxRepository {
 
 func (r *SandboxRepository) Create(ctx context.Context, s *domain.Sandbox) error {
 	created, err := r.queries.CreateSandbox(ctx, CreateSandboxParams{
-		ProjectID:          pgtype.UUID{},
-		OwnerID:            s.OwnerID,
-		Name:               s.Name,
-		GitUrl:             s.GitURL,
-		GitBranch:          s.GitBranch,
-		State:              string(s.State),
-		RuntimeLanguage:    pgtype.Text{},
-		RuntimeBaseImage:   pgtype.Text{},
-		RuntimePort:        pgtype.Int4{},
-		NeedsDb:            pgtype.Bool{},
+		ProjectID:        pgtype.UUID{},
+		OwnerID:          s.OwnerID,
+		Name:             s.Name,
+		GitUrl:           s.GitURL,
+		GitBranch:        s.GitBranch,
+		State:            string(s.State),
+		RuntimeLanguage:  pgtype.Text{},
+		RuntimeBaseImage: pgtype.Text{},
+		RuntimePort:      pgtype.Int4{},
+		NeedsDb:          pgtype.Bool{},
 	})
 	if err == nil {
 		s.ID = created.ID

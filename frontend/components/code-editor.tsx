@@ -37,6 +37,7 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
   const [originalContent, setOriginalContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const editorRef = useRef<any>(null);
   const monaco = useMonaco();
 
@@ -63,11 +64,17 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
     const value = editorRef.current.getValue();
     setIsSaving(true);
     try {
-      await api.files.updateContent(envId, filePath, value);
-      toast.success("Saved");
+      const result = await api.files.updateContent(envId, filePath, value);
       setOriginalContent(value);
+      if (result?.reloadSignaled) {
+        setIsReloading(true);
+        setTimeout(() => setIsReloading(false), 2500);
+        toast.success('Saved — container reloading');
+      } else {
+        toast.success('Saved');
+      }
     } catch (err: any) {
-      toast.error(err.message || "Failed to save");
+      toast.error(err.message || 'Failed to save');
       console.warn(err);
     } finally {
       setIsSaving(false);
@@ -103,15 +110,17 @@ export function CodeEditor({ envId, filePath }: { envId: string; filePath: strin
           onClick={handleSave}
           disabled={!isDirty || isSaving}
           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-            !isDirty 
+            !isDirty && !isReloading
               ? "text-white/30 bg-white/5 cursor-not-allowed" 
+              : isReloading
+                ? "text-blue-400 bg-blue-400/20 animate-pulse"
               : isSaving 
                 ? "text-primary-fixed bg-primary-fixed/20 animate-pulse" 
                 : "text-white bg-primary-fixed hover:bg-primary-fixed/80"
           }`}
         >
           <Save size={14} />
-          {isSaving ? "Saving..." : "Save"}
+          {isSaving ? "Saving..." : isReloading ? "Reloading..." : "Save"}
         </button>
       </div>
       

@@ -62,14 +62,6 @@ func main() {
 		defer natsClient.Close()
 	}
 
-	// OPA
-	// opaEngine, err := opa.NewEngine()
-	// if err != nil {
-	// 	slog.Error("failed to init opa", "error", err)
-	// 	os.Exit(1)
-	// }
-	// _ = opaEngine
-
 	// Repositories
 	queries := repository.New(db.Pool())
 	userRepo := repository.NewUserRepository(queries)
@@ -84,7 +76,7 @@ func main() {
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
 	projUC := usecase.NewProjectUsecase(projRepo, orgRepo)
 	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, orgUC, projUC)
-	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, nil, natsClient) // runtime and predictor nil in API mode
+	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, natsClient) // runtime nil in API mode
 
 	if cfg.Env != "production" {
 		devUserID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -116,7 +108,7 @@ func main() {
 		workspaceDir = filepath.Join(home, ".local", "state", "berth", "workspaces")
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
-	fileUC := usecase.NewFileUsecase(workspaceDir)
+	fileUC := usecase.NewFileUsecase(workspaceDir, sandboxUC)
 	gitUC := usecase.NewGitUsecase(workspaceDir)
 
 	// Handlers

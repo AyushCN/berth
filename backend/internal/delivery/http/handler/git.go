@@ -48,6 +48,7 @@ func (h *GitHandler) ListBranches(c *gin.Context) {
 
 type CheckoutRequest struct {
 	Branch string `json:"branch" binding:"required"`
+	Force  bool   `json:"force"`
 }
 
 func (h *GitHandler) Checkout(c *gin.Context) {
@@ -63,7 +64,7 @@ func (h *GitHandler) Checkout(c *gin.Context) {
 		return
 	}
 
-	if err := h.gitUC.Checkout(c.Request.Context(), sandboxID, req.Branch); err != nil {
+	if err := h.gitUC.Checkout(c.Request.Context(), sandboxID, req.Branch, req.Force); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -135,11 +136,12 @@ func (h *GitHandler) Push(c *gin.Context) {
 		return
 	}
 
-	if err := h.gitUC.Push(c.Request.Context(), sandboxID); err != nil {
+	pushedBranch, err := h.gitUC.Push(c.Request.Context(), sandboxID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "push successful"})
+	c.JSON(http.StatusOK, gin.H{"message": "push successful", "branch": pushedBranch})
 }
 
 func (h *GitHandler) Log(c *gin.Context) {

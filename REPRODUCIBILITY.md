@@ -1,31 +1,26 @@
-# Reproducing Berth Benchmarks
+# Benchmark Notes
+
+The repository includes a small Go benchmark command at `backend/cmd/bench`. The previous EDEBench dataset and paper materials have been removed/deferred; no current benchmark result should be read as a validated cold-versus-warm comparison or a performance claim.
 
 ## Requirements
-- Linux host with containerd + gVisor installed
-- Go 1.23, Node.js 20, Python 3.11
-- Docker + Docker Compose
 
-## Quick Start
+- Linux host with containerd configured for the runtime under evaluation (`runc` is the local development default; `runsc` requires a separate working setup).
+- Go toolchain matching `backend/go.mod`.
+- Docker Compose for the local PostgreSQL, Redis, and NATS services.
+
+## Local control-plane setup
+
 ```bash
-make dev          # Start Postgres, Redis, NATS, MinIO
-make migrate-up   # Run DB migrations
-make build        # Compile API + Worker binaries
-
-# Terminal 1: Prediction service
-python3 ml/predictor.py 50052
-
-# Terminal 2: Worker
-sudo MODE=worker ./backend/bin/berth-worker
-
-# Terminal 3: API
-MODE=api JWT_SECRET=dev ./backend/bin/berth-api
-
-# Terminal 4: Benchmark
-./backend/bin/bench -c 10 -n 30
+make dev
+make migrate-up
+make build
 ```
 
-## Without Containerd (Frontend/API review only)
-If you are running on macOS, Windows, or a Linux machine without `containerd`/`runsc`, you can run the API in a mock mode to review the control-plane functionality.
+Start the worker and API with the environment settings described in the README. Run `./backend/bin/bench -c 10 -n 30` only against a configured runtime and treat its output as a local measurement until a repeatable methodology and results are documented.
+
+## Control-plane-only review
+
+The API can be run in mock containerd mode for control-plane review on systems without a local containerd runtime:
 
 ```bash
 MOCK_CONTAINERD=1 MODE=api JWT_SECRET=dev go run ./cmd/api

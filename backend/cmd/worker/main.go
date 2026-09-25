@@ -11,7 +11,6 @@ import (
 	"github.com/AyushCN/berth/internal/config"
 	"github.com/AyushCN/berth/internal/infrastructure/containerd"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
-	"github.com/AyushCN/berth/internal/infrastructure/ml"
 	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
@@ -68,9 +67,6 @@ func main() {
 	}
 	defer runtime.Close()
 
-	// Prediction service client
-	predictor := ml.NewClient(cfg.PredictionAddr)
-
 	var natsClient *natsInfra.Client
 	if cfg.NatsURL != "" {
 		nc, err := natsInfra.NewClient(cfg.NatsURL)
@@ -85,7 +81,7 @@ func main() {
 	queries := repository.New(db.Pool())
 	sandboxRepo := repository.NewSandboxRepository(queries)
 
-	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, predictor, natsClient)
+	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, natsClient)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

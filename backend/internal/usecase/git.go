@@ -96,7 +96,13 @@ func (uc *GitUsecase) ListBranches(ctx context.Context, sandboxID uuid.UUID) ([]
 	return branches, nil
 }
 
-func (uc *GitUsecase) Checkout(ctx context.Context, sandboxID uuid.UUID, branch string) error {
+func (uc *GitUsecase) Checkout(ctx context.Context, sandboxID uuid.UUID, branch string, force ...bool) error {
+	forceCheckout := len(force) > 0 && force[0]
+
+	if forceCheckout {
+		// Stash any dirty changes first to allow forced checkout
+		uc.runGitCmd(ctx, sandboxID, "stash", "--include-untracked")
+	}
 	// If it's a remote branch like origin/feat, checkout a local tracking branch
 	if strings.HasPrefix(branch, "origin/") {
 		localBranch := strings.TrimPrefix(branch, "origin/")
@@ -138,9 +144,31 @@ func (uc *GitUsecase) Commit(ctx context.Context, sandboxID uuid.UUID, message s
 	return err
 }
 
-func (uc *GitUsecase) Push(ctx context.Context, sandboxID uuid.UUID) error {
-	_, err := uc.runGitCmd(ctx, sandboxID, "push")
-	return err
+// Push pushes the current branch to origin.
+// If on a protected branch (main/master), it auto-creates a sandbox branch first.
+func (uc *GitUsecase) Push(ctx context.Context, sandboxID uuid.UUID) (string, error) {
+	// Get current branch
+	branchOut, err := uc.runGitCmd(ctx, sandboxID, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	currentBranch := strings.TrimSpace(branchOut)
+
+	// Protect main/master — auto-fork to a sandbox branch
+	protectedBranches := map[string]bool{"main": true, "master": true}
+	if protectedBranches[currentBranch] {
+		sandboxBranch := fmt.Sprintf("sandbox/%s", sandboxID.String()[:8])
+		if _, err := uc.runGitCmd(ctx, sandboxID, "checkout", "-b", sandboxBranch); err != nil {
+			// branch may already exist, just switch to it
+			uc.runGitCmd(ctx, sandboxID, "checkout", sandboxBranch)
+		}
+		currentBranch = sandboxBranch
+	}
+
+	if _, err := uc.runGitCmd(ctx, sandboxID, "push", "-u", "origin", currentBranch); err != nil {
+		return "", err
+	}
+	return currentBranch, nil
 }
 
 type CommitEntry struct {

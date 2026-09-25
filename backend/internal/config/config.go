@@ -2,9 +2,9 @@ package config
 
 import (
 	"fmt"
+	"github.com/joho/godotenv"
 	"os"
 	"path/filepath"
-	"github.com/joho/godotenv"
 )
 
 // Config holds all application configuration.
@@ -19,7 +19,6 @@ type Config struct {
 	GithubClientID     string
 	GithubClientSecret string
 	FrontendURL        string
-	PredictionAddr     string // gRPC address for Python prediction service
 	ContainerdSocket   string
 	WorkspaceDir       string
 	Runtime            string // "runsc" or "runc"
@@ -66,7 +65,6 @@ func Load() (*Config, error) {
 		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
-		PredictionAddr:     getEnv("PREDICTION_ADDR", "http://localhost:50052"),
 		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
 		Runtime:            getEnv("BERTH_RUNTIME", "runc"),
 	}

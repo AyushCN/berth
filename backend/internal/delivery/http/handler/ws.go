@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
+	infranats "github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	infranats "github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/nats-io/nats.go"
 	"log/slog"
 )
@@ -96,47 +96,6 @@ func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
 			if err := h.natsClient.Publish(inSubject, data); err != nil {
 				slog.Error("nats publish failed", "error", err)
 			}
-		}
-	}
-}
-
-// HandleFileSyncWS upgrades to WebSocket and bridges to NATS for file sync.
-func (h *WSHandler) HandleFileSyncWS(c *gin.Context) {
-	if h.natsClient == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "real-time sync unavailable"})
-		return
-	}
-	sandboxID := c.Param("id")
-	filePath := c.Query("path")
-	if filePath == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file path required"})
-		return
-	}
-
-	conn, err := h.upgrader().Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		slog.Error("websocket upgrade failed", "error", err)
-		return
-	}
-	defer conn.Close()
-
-	subject := "file." + sandboxID + "." + filePath
-	sub, err := h.natsClient.Subscribe(subject, "", func(msg *nats.Msg) {
-		_ = conn.WriteMessage(websocket.BinaryMessage, msg.Data)
-		_ = msg.Ack()
-	})
-	if err != nil {
-		return
-	}
-	defer sub.Unsubscribe()
-
-	for {
-		msgType, data, err := conn.ReadMessage()
-		if err != nil {
-			break
-		}
-		if msgType == websocket.BinaryMessage {
-			_ = h.natsClient.Publish(subject, data)
 		}
 	}
 }

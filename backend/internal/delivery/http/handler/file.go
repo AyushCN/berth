@@ -87,11 +87,15 @@ func (h *FileHandler) UpdateFileContent(c *gin.Context) {
 		return
 	}
 
-	if err := h.fileUC.UpdateFileContent(c.Request.Context(), sandboxID, path, content); err != nil {
+	result, err := h.fileUC.UpdateFileContent(c.Request.Context(), sandboxID, path, content)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "Saved",
+		"reloadSignaled": result.ReloadSignaled,
+	})
 }
 
 // CreateFile handles creating files or directories.
