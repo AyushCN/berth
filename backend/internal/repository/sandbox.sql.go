@@ -145,12 +145,13 @@ func (q *Queries) CreateSandboxChange(ctx context.Context, arg CreateSandboxChan
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, username, github_id, github_username, avatar_url)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (id, email, username, github_id, github_username, avatar_url)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, email, username, github_id, github_username, github_token_encrypted, avatar_url, max_sandboxes, max_builds_per_hour, created_at, updated_at
 `
 
 type CreateUserParams struct {
+	ID             uuid.UUID   `json:"id"`
 	Email          string      `json:"email"`
 	Username       pgtype.Text `json:"username"`
 	GithubID       pgtype.Text `json:"github_id"`
@@ -160,6 +161,7 @@ type CreateUserParams struct {
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
 		arg.Email,
 		arg.Username,
 		arg.GithubID,

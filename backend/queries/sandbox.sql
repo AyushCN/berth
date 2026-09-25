@@ -23,8 +23,8 @@ UPDATE sandboxes SET container_id = $2, public_url = $3, runtime_port = $4, upda
 DELETE FROM sandboxes WHERE id = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (email, username, github_id, github_username, avatar_url)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (id, email, username, github_id, github_username, avatar_url)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: GetUserByID :one

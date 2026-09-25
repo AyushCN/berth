@@ -42,6 +42,9 @@ func TestRuntimeLifecycle(t *testing.T) {
 		t.Skipf("skipping test, failed to create runtime (likely permission denied or no daemon): %v", err)
 	}
 	defer rt.Close()
+	if _, err := rt.client.Version(ctx); err != nil {
+		t.Skipf("skipping test, containerd is not reachable: %v", err)
+	}
 
 	// Test CreateSandbox
 	spec := domain.SandboxSpec{
@@ -105,19 +108,19 @@ func TestWarmPool(t *testing.T) {
 	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c3", nil }) 
 
 	// Take one
-	id := wp.Take("alpine:latest")
+	id, _ := wp.Take("alpine:latest")
 	if id != "c2" { // c1 was evicted, so queue should have c2, c3
 		t.Errorf("expected c2, got %s", id)
 	}
 
 	// Take another
-	id = wp.Take("alpine:latest")
+	id, _ = wp.Take("alpine:latest")
 	if id != "c3" {
 		t.Errorf("expected c3, got %s", id)
 	}
 
 	// Pool empty
-	id = wp.Take("alpine:latest")
+	id, _ = wp.Take("alpine:latest")
 	if id != "" {
 		t.Errorf("expected empty, got %s", id)
 	}

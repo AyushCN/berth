@@ -122,13 +122,16 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 	// Async: stage file in git and update git tracking in DB
 	sandboxDir := uc.getSandboxDir(sandboxID)
 	go func() {
-		cmd := exec.Command("git", "add", path)
+		backgroundCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(backgroundCtx, "git", "add", path)
 		cmd.Dir = sandboxDir
 		if err := cmd.Run(); err != nil {
 			slog.Warn("git add failed on save", "sandbox_id", sandboxID, "path", path, "err", err)
 		}
 		if uc.sandboxUC != nil {
-			if err := uc.sandboxUC.repo.UpdateGitTracking(ctx, sandboxID, true, nil, nil); err != nil {
+			if err := uc.sandboxUC.repo.UpdateGitTracking(backgroundCtx, sandboxID, true, nil, nil); err != nil {
 				slog.Warn("failed to update git tracking", "sandbox_id", sandboxID, "err", err)
 			}
 		}

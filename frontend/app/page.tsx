@@ -219,7 +219,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-2xl font-bold text-white mb-3">Workspace UI</h3>
               <p className="text-on-surface-variant leading-relaxed">
-                The app includes a file tree, Monaco editor, and xterm terminal. Frontend-to-API wiring is still in progress.
+                The workspace connects file browsing and saves, terminal sessions, status, and preview to the backend.
               </p>
             </GlassCard>
 

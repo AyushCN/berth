@@ -20,6 +20,7 @@ func NewUserRepository(q *Queries) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	_, err := r.queries.CreateUser(ctx, CreateUserParams{
+		ID:                 u.ID,
 		Email:              u.Email,
 		Username:           pgtype.Text{String: u.Username, Valid: true},
 		GithubID:           pgtype.Text{String: u.GithubID, Valid: true},
