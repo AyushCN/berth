@@ -13,18 +13,22 @@ interface User {
 interface AuthState {
   user: User | null;
   isLoading: boolean;
+  authError: string | null;
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
+  setAuthError: (error: string | null) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
-  setUser: (user) => set({ user, isLoading: false }),
+  authError: null,
+  setUser: (user) => set({ user, isLoading: false, authError: null }),
   setLoading: (isLoading) => set({ isLoading }),
+  setAuthError: (authError) => set({ authError, isLoading: false }),
   logout: () => {
     document.cookie = 'berth_token=; Max-Age=0; path=/';
-    set({ user: null });
+    set({ user: null, isLoading: false, authError: null });
   },
 }));

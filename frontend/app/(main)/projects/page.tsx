@@ -22,37 +22,33 @@ export default function ProjectsPage() {
     mutate,
   } = useSWR("/api/projects", api.projects.list);
 
-  const { data: orgsData } = useSWR("/api/orgs", api.orgs.list);
-  const orgs = orgsData?.organizations || [];
-
   const projects = projectsData?.projects || [];
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
-  const [newProjectOrgId, setNewProjectOrgId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
-    if (!newProjectOrgId) {
-      toast.error("Please select an organization");
-      return;
-    }
     setIsCreating(true);
     try {
+      // Organizations remain an internal project ownership detail. New
+      // accounts normally receive one during sign-in; provision one silently
+      // for older accounts that predate that setup.
+      const organizations = (await api.orgs.list()).organizations || [];
+      const organization = organizations[0] || await api.orgs.create({ name: "Personal" });
       await api.projects.create({
         name: newProjectName,
         description: newProjectDesc,
-        owner_organization_id: newProjectOrgId,
+        owner_organization_id: organization.id,
         is_public: false,
       });
       toast.success("Workspace Project created successfully!");
       setIsCreateModalOpen(false);
       setNewProjectName("");
       setNewProjectDesc("");
-      setNewProjectOrgId("");
       mutate();
     } catch (err: any) {
       toast.error(err.message || "Failed to create project");
@@ -63,7 +59,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-8 pb-12">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary-fixed/10 border-primary-fixed/20 flex items-center justify-center">
             <Folder className="w-5 h-5 text-primary-fixed" />
@@ -79,7 +75,7 @@ export default function ProjectsPage() {
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-indigo-600 hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-95 transition-all"
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary-fixed px-5 py-2.5 text-sm font-bold text-on-primary-fixed shadow-[0_8px_24px_rgba(0,219,233,0.12)] transition-all hover:brightness-110 active:scale-[0.98]"
         >
           <Plus className="w-4 h-4" />
           New Workspace
@@ -127,7 +123,7 @@ export default function ProjectsPage() {
                   id: string;
                   name: string;
                   description?: string;
-                  role: string;
+                  is_public?: boolean;
                 },
                 idx: number,
               ) => (
@@ -154,7 +150,7 @@ export default function ProjectsPage() {
                       <div className="relative z-10 flex items-center justify-between text-[10px] font-bold text-on-surface-variant tracking-wider uppercase pt-3 border-t border-outline-variant/50">
                         <div className="flex items-center gap-1">
                           <Users className="w-3 h-3" />
-                          Role: {project.role}
+                          {project.is_public ? "Public project" : "Private project"}
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-primary-fixed transition-all group-hover:translate-x-0.5 duration-200" />
                       </div>
@@ -185,25 +181,6 @@ export default function ProjectsPage() {
               </button>
             </div>
             <form onSubmit={handleCreateProject} className="p-5 space-y-4">
-              <div>
-                <label className="text-sm font-bold tracking-wide text-on-surface-variant uppercase mb-1.5 block">
-                  Organization
-                </label>
-                <select
-                  required
-                  value={newProjectOrgId}
-                  onChange={(e) => setNewProjectOrgId(e.target.value)}
-                  className="w-full bg-surface-container px-4 py-3 rounded-lg border border-outline-variant text-on-surface focus:border-primary-fixed focus:ring-primary-fixed transition-all outline-none"
-                >
-                  <option value="" disabled>Select an organization</option>
-                  {orgs.map((org: any) => (
-                    <option key={org.id} value={org.id}>{org.name}</option>
-                  ))}
-                </select>
-                {orgs.length === 0 && (
-                  <p className="text-xs text-error mt-2">You must create an organization first.</p>
-                )}
-              </div>
               <div>
                 <label className="text-sm font-bold tracking-wide text-on-surface-variant uppercase mb-1.5 block">
                   Project Name
@@ -239,7 +216,7 @@ export default function ProjectsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreating || !newProjectName.trim() || !newProjectOrgId}
+                  disabled={isCreating || !newProjectName.trim()}
                   className="px-5 py-2 bg-primary-container text-on-primary-fixed-variant hover:shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:brightness-110 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2 transition-all rounded-xl"
                 >
                   {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}

@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
+	"github.com/AyushCN/berth/internal/usecase"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/AyushCN/berth/internal/usecase"
 )
 
 // AuthHandler handles authentication HTTP requests.
@@ -80,7 +80,7 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
 		return
 	}
-	
+
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
@@ -94,4 +94,11 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"user": user})
+}
+
+// Logout expires the browser's HttpOnly session cookie.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetCookie("berth_token", "", -1, "/", "", secure, true)
+	c.Status(http.StatusNoContent)
 }

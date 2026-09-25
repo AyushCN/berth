@@ -31,7 +31,7 @@ export default function ProfilePage() {
             />
           ) : (
             <div className="w-32 h-32 rounded-2xl bg-primary-fixed/10 flex items-center justify-center text-4xl font-black text-primary-fixed shadow-2xl border-2 border-primary-fixed/20">
-              {user.email.slice(0, 2).toUpperCase()}
+              {(user.email || user.username || "BE").slice(0, 2).toUpperCase()}
             </div>
           )}
           <div className="absolute -bottom-3 -right-3 bg-surface p-2 rounded-xl border border-outline-variant shadow-lg">

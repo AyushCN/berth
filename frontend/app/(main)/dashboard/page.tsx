@@ -70,6 +70,8 @@ function SandboxesDashboardContent() {
   const { user } = useAuthStore();
   const { environments, setEnvironments, isLoading, setLoading } = useEnvStore();
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const searchParams = useSearchParams();
   const projectId = searchParams.get("project_id");
@@ -80,24 +82,41 @@ function SandboxesDashboardContent() {
     setLoading(true);
     setError(false);
     
-    const fetchEnvs = () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    let retryDelay = 15_000;
+
+    const fetchEnvs = async () => {
       const fetchPromise = projectId 
         ? api.projects.sandboxes(projectId)
         : api.environments.list();
 
-      fetchPromise
-        .then((data) => setEnvironments(data.sandboxes || []))
-        .catch((err) => {
-          console.error(err);
-          setError(true);
-        })
-        .finally(() => setLoading(false));
+      try {
+        const data = await fetchPromise;
+        setEnvironments(data.sandboxes || []);
+        setError(false);
+        setErrorMessage("");
+        retryDelay = 15_000;
+      } catch (err) {
+        const status = (err as { status?: number })?.status;
+        setError(true);
+        setErrorMessage(status === 429
+          ? "The API is rate limiting requests. We’ll retry automatically in a minute."
+          : "Couldn’t refresh your sandboxes. We’ll try again shortly.");
+        // The user bucket resets every minute. Back off immediately on 429s.
+        retryDelay = status === 429 ? 60_000 : Math.min(retryDelay * 2, 60_000);
+      } finally {
+        setLoading(false);
+        if (!stopped) timer = setTimeout(fetchEnvs, retryDelay);
+      }
     };
 
-    fetchEnvs();
-    const interval = setInterval(fetchEnvs, 3000);
-    return () => clearInterval(interval);
-  }, [user, setEnvironments, setLoading, projectId]);
+    void fetchEnvs();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [user, setEnvironments, setLoading, projectId, retryKey]);
 
   const handleFork = async (e: React.MouseEvent, envId: string, envName: string) => {
     e.preventDefault();
@@ -122,7 +141,7 @@ function SandboxesDashboardContent() {
   return (
     <div className="space-y-8 pb-12">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary-fixed/10 border border-primary-fixed/20 flex items-center justify-center">
             <Code className="w-5 h-5 text-primary-fixed" />
@@ -173,10 +192,13 @@ function SandboxesDashboardContent() {
               />
             ))}
           </div>
-        ) : error ? (
-          <div className="bg-error-container/10 border border-error/20 p-10 rounded-xl text-center">
+        ) : error && environments.length === 0 ? (
+          <div className="bg-error-container/10 border border-error/20 p-8 rounded-2xl text-center">
             <XCircle className="w-10 h-10 text-error mx-auto mb-3" />
-            <p className="text-error font-semibold">Failed to load sandboxes</p>
+            <p className="text-error font-semibold">{errorMessage || "Failed to load sandboxes"}</p>
+            <button onClick={() => { setError(false); setLoading(true); setRetryKey((key) => key + 1); }} className="mt-4 rounded-lg border border-error/30 px-4 py-2 text-sm font-semibold text-error hover:bg-error/10 transition-colors">
+              Try again
+            </button>
           </div>
         ) : environments?.length === 0 ? (
           <div className="bg-surface-container-lowest border border-outline-variant border-dashed rounded-xl py-24 text-center flex flex-col items-center">
@@ -254,6 +276,13 @@ function SandboxesDashboardContent() {
           </div>
         )}
       </div>
+
+      {error && environments.length > 0 && (
+        <div role="status" className="flex items-center justify-between gap-4 rounded-xl border border-amber-300/20 bg-amber-300/5 px-4 py-3 text-sm text-amber-100/80">
+          <span>{errorMessage || "Couldn’t refresh your sandboxes. Your last results are still shown."}</span>
+          <button onClick={() => setRetryKey((key) => key + 1)} className="shrink-0 font-semibold text-amber-100 underline underline-offset-4">Retry now</button>
+        </div>
+      )}
 
       {showCreate && <CreateEnvironmentModal onClose={() => setShowCreate(false)} projectId={projectId} />}
     </div>

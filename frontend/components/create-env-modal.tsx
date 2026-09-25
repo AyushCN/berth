@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useEnvStore } from '@/stores/env';
 import { X, GitBranch, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 
 export function CreateEnvironmentModal({ onClose, projectId }: { onClose: () => void, projectId?: string | null }) {
   const [name, setName] = useState('');
@@ -66,8 +67,7 @@ export function CreateEnvironmentModal({ onClose, projectId }: { onClose: () => 
       addEnvironment(env);
       onClose();
     } catch (err) {
-      console.error(err);
-      alert('Failed to create environment');
+      toast.error(err instanceof Error ? err.message : 'Failed to create sandbox');
     } finally {
       setIsSubmitting(false);
     }

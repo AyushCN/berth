@@ -46,17 +46,29 @@ export default function EnvironmentPage() {
     try {
       setEnv(await api.environments.get(id));
       setLoadError('');
+      return 0;
     } catch (err: any) {
       if (err.status === 404) router.push("/dashboard");
       else setLoadError(err.message || 'Could not load this sandbox.');
+      return err.status || 500;
     }
   }, [id, router]);
 
   useEffect(() => {
     selectEnvironment(id);
-    void fetchEnv();
-    const interval = setInterval(() => void fetchEnv(), 3000);
-    return () => clearInterval(interval);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const poll = async () => {
+      const status = await fetchEnv();
+      if (stopped) return;
+      const retryAfter = status === 0 ? 15_000 : status === 429 ? 60_000 : 30_000;
+      timer = setTimeout(poll, retryAfter);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [id, selectEnvironment, fetchEnv]);
 
   // Auto-switch to logs tab when environment is BUILDING or FAILED

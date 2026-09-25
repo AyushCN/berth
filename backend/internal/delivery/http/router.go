@@ -84,6 +84,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 	}
 
 	api.GET("/auth/dev-login", handler.DevLogin(cfg.JWTSecret, cfg.Env))
+	api.POST("/auth/logout", deps.AuthHandler.Logout)
 
 	// Protected routes (auth via query param or cookie)
 	ws := r.Group("/ws")

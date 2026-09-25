@@ -33,7 +33,13 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
 export const api = {
   auth: {
     devLogin: () => fetchAPI('/api/auth/dev-login'),
-    me: () => fetchAPI('/api/user/me'),
+    logout: () => fetchAPI('/api/auth/logout', { method: 'POST' }),
+    me: async () => {
+      const response = await fetchAPI('/api/user/me');
+      // Berth's API wraps the profile in `{ user }`; keep callers working with
+      // the User object itself, as the other authenticated pages expect.
+      return response?.user ?? response;
+    },
   },
   environments: {
     list: () => fetchAPI('/api/environments'),
