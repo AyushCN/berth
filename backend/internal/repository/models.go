@@ -21,6 +21,119 @@ type AuditLog struct {
 	Timestamp    pgtype.Timestamptz `json:"timestamp"`
 }
 
+type Build struct {
+	ID              uuid.UUID          `json:"id"`
+	BuildPlanID     uuid.UUID          `json:"build_plan_id"`
+	WorkspaceID     uuid.UUID          `json:"workspace_id"`
+	CommitHash      string             `json:"commit_hash"`
+	Status          string             `json:"status"`
+	ImageID         pgtype.UUID        `json:"image_id"`
+	Logs            pgtype.Text        `json:"logs"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	FinishedAt      pgtype.Timestamptz `json:"finished_at"`
+	Error           pgtype.Text        `json:"error"`
+	CacheHit        pgtype.Bool        `json:"cache_hit"`
+	BuildDurationMs pgtype.Int8        `json:"build_duration_ms"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type BuildPlan struct {
+	ID               uuid.UUID          `json:"id"`
+	RuntimeProfileID uuid.UUID          `json:"runtime_profile_id"`
+	BaseImage        string             `json:"base_image"`
+	Dockerfile       string             `json:"dockerfile"`
+	BuildArgs        []byte             `json:"build_args"`
+	InstallCommand   pgtype.Text        `json:"install_command"`
+	BuildCommand     pgtype.Text        `json:"build_command"`
+	StartCommand     pgtype.Text        `json:"start_command"`
+	WorkingDir       pgtype.Text        `json:"working_dir"`
+	Port             pgtype.Int4        `json:"port"`
+	Confidence       float32            `json:"confidence"`
+	Status           string             `json:"status"`
+	Error            pgtype.Text        `json:"error"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ChangeRequest struct {
+	ID                uuid.UUID          `json:"id"`
+	ProjectID         uuid.UUID          `json:"project_id"`
+	SourceWorkspaceID uuid.UUID          `json:"source_workspace_id"`
+	TargetWorkspaceID uuid.UUID          `json:"target_workspace_id"`
+	Title             string             `json:"title"`
+	Description       pgtype.Text        `json:"description"`
+	AuthorID          uuid.UUID          `json:"author_id"`
+	State             string             `json:"state"`
+	Commits           []byte             `json:"commits"`
+	FilesChanged      []byte             `json:"files_changed"`
+	ReviewerID        pgtype.UUID        `json:"reviewer_id"`
+	ReviewedAt        pgtype.Timestamptz `json:"reviewed_at"`
+	MergedAt          pgtype.Timestamptz `json:"merged_at"`
+	MergeCommitHash   pgtype.Text        `json:"merge_commit_hash"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Environment struct {
+	ID               uuid.UUID          `json:"id"`
+	WorkspaceID      uuid.UUID          `json:"workspace_id"`
+	RuntimeProfileID pgtype.UUID        `json:"runtime_profile_id"`
+	Name             string             `json:"name"`
+	State            string             `json:"state"`
+	ContainerID      pgtype.Text        `json:"container_id"`
+	ImageID          pgtype.UUID        `json:"image_id"`
+	PublicUrl        pgtype.Text        `json:"public_url"`
+	Port             pgtype.Int4        `json:"port"`
+	MemoryLimit      pgtype.Int8        `json:"memory_limit"`
+	CpuLimit         pgtype.Int8        `json:"cpu_limit"`
+	LastActivityAt   pgtype.Timestamptz `json:"last_activity_at"`
+	ActiveSessions   pgtype.Int4        `json:"active_sessions"`
+	SuspendedAt      pgtype.Timestamptz `json:"suspended_at"`
+	LastError        pgtype.Text        `json:"last_error"`
+	RestartCount     pgtype.Int4        `json:"restart_count"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type EnvironmentEvent struct {
+	ID            uuid.UUID          `json:"id"`
+	EnvironmentID uuid.UUID          `json:"environment_id"`
+	WorkspaceID   uuid.UUID          `json:"workspace_id"`
+	ProjectID     uuid.UUID          `json:"project_id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	Type          string             `json:"type"`
+	Payload       []byte             `json:"payload"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type EnvironmentService struct {
+	ID            uuid.UUID          `json:"id"`
+	EnvironmentID uuid.UUID          `json:"environment_id"`
+	Name          string             `json:"name"`
+	Type          string             `json:"type"`
+	Image         string             `json:"image"`
+	Port          pgtype.Int4        `json:"port"`
+	Config        []byte             `json:"config"`
+	State         string             `json:"state"`
+	ContainerID   pgtype.Text        `json:"container_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Image struct {
+	ID          uuid.UUID          `json:"id"`
+	BuildID     pgtype.UUID        `json:"build_id"`
+	WorkspaceID uuid.UUID          `json:"workspace_id"`
+	Tag         string             `json:"tag"`
+	Digest      pgtype.Text        `json:"digest"`
+	SizeBytes   pgtype.Int8        `json:"size_bytes"`
+	BaseImage   pgtype.Text        `json:"base_image"`
+	Labels      []byte             `json:"labels"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+}
+
 type Organization struct {
 	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`
@@ -54,6 +167,32 @@ type ProjectCollaborator struct {
 	InvitedByUserID pgtype.UUID        `json:"invited_by_user_id"`
 	InvitedAt       pgtype.Timestamptz `json:"invited_at"`
 	AcceptedAt      pgtype.Timestamptz `json:"accepted_at"`
+}
+
+type RuntimeProfile struct {
+	ID                uuid.UUID          `json:"id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	DetectionEvidence []byte             `json:"detection_evidence"`
+	Language          string             `json:"language"`
+	Version           pgtype.Text        `json:"version"`
+	Framework         pgtype.Text        `json:"framework"`
+	PackageManager    pgtype.Text        `json:"package_manager"`
+	Architecture      pgtype.Text        `json:"architecture"`
+	Entrypoint        pgtype.Text        `json:"entrypoint"`
+	BuildCommand      pgtype.Text        `json:"build_command"`
+	StartCommand      pgtype.Text        `json:"start_command"`
+	Port              pgtype.Int4        `json:"port"`
+	DockerfileSource  pgtype.Text        `json:"dockerfile_source"`
+	DockerfileContent pgtype.Text        `json:"dockerfile_content"`
+	RequiresDatabase  pgtype.Bool        `json:"requires_database"`
+	RequiresRedis     pgtype.Bool        `json:"requires_redis"`
+	Confidence        float32            `json:"confidence"`
+	Status            string             `json:"status"`
+	ConfirmedBy       pgtype.UUID        `json:"confirmed_by"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Sandbox struct {
@@ -107,6 +246,19 @@ type SandboxLog struct {
 	Timestamp pgtype.Timestamptz `json:"timestamp"`
 }
 
+type ShareLink struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID uuid.UUID          `json:"project_id"`
+	Code      string             `json:"code"`
+	Role      string             `json:"role"`
+	CreatedBy uuid.UUID          `json:"created_by"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	MaxUses   pgtype.Int4        `json:"max_uses"`
+	UsesCount pgtype.Int4        `json:"uses_count"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type User struct {
 	ID                   uuid.UUID          `json:"id"`
 	Email                string             `json:"email"`
@@ -119,4 +271,28 @@ type User struct {
 	MaxBuildsPerHour     pgtype.Int4        `json:"max_builds_per_hour"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Workspace struct {
+	ID                    uuid.UUID          `json:"id"`
+	ProjectID             uuid.UUID          `json:"project_id"`
+	Name                  string             `json:"name"`
+	Type                  string             `json:"type"`
+	BaseWorkspaceID       pgtype.UUID        `json:"base_workspace_id"`
+	OwnerID               uuid.UUID          `json:"owner_id"`
+	GitBranch             string             `json:"git_branch"`
+	CommitHash            pgtype.Text        `json:"commit_hash"`
+	HasUncommittedChanges pgtype.Bool        `json:"has_uncommitted_changes"`
+	LastSyncedAt          pgtype.Timestamptz `json:"last_synced_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type WorkspaceMember struct {
+	ID          uuid.UUID          `json:"id"`
+	WorkspaceID uuid.UUID          `json:"workspace_id"`
+	UserID      uuid.UUID          `json:"user_id"`
+	Role        string             `json:"role"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

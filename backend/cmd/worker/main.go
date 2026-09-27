@@ -7,13 +7,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/AyushCN/berth/internal/config"
-	"github.com/AyushCN/berth/internal/infrastructure/containerd"
+	"github.com/AyushCN/berth/internal/infrastructure/docker"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
 	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
+	"github.com/AyushCN/berth/internal/usecase"
 	"github.com/AyushCN/berth/internal/worker"
 )
 
@@ -55,14 +57,10 @@ func main() {
 	}
 	defer redis.Close()
 
-	if cfg.ContainerdSocket == "" {
-		slog.Error("CONTAINERD_SOCK is required for worker mode")
-		os.Exit(1)
-	}
-
-	runtime, err := containerd.NewRuntime(cfg.ContainerdSocket, cfg.Runtime)
+	// Initialize Docker runtime
+	runtime, err := docker.NewDockerRuntime(cfg.DockerHost, cfg.DockerNetwork, cfg.TraefikDomain)
 	if err != nil {
-		slog.Error("failed to init container runtime", "error", err)
+		slog.Error("failed to init docker runtime", "error", err)
 		os.Exit(1)
 	}
 	defer runtime.Close()
@@ -81,10 +79,30 @@ func main() {
 	queries := repository.New(db.Pool())
 	sandboxRepo := repository.NewSandboxRepository(queries)
 
-	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, natsClient)
+	// Prediction repositories
+	modelRepo := repository.NewModelRepository(db.Pool())
+	trainingDataRepo := repository.NewTrainingDataRepository(db.Pool())
+	predictionRepo := repository.NewPredictionRepository(db.Pool())
+
+	// Prediction service
+	modelDir := os.Getenv("MODEL_DIR")
+	if modelDir == "" {
+		modelDir = "/tmp/berth/models"
+	}
+	_ = os.MkdirAll(modelDir, 0755)
+
+	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, modelDir)
+	predictionService := usecase.NewPredictionService(modelTrainer, predictionRepo)
+	dataCollector := usecase.NewDataCollector(trainingDataRepo, repository.NewBuildRepository(queries), repository.NewRuntimeProfileRepository(queries))
+
+	// Inject data collector into sandbox worker
+	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, natsClient, dataCollector)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Start scheduled retraining
+	go predictionService.ScheduledRetraining(ctx, 6*time.Hour)
 
 	go sandboxWorker.Start(ctx)
 

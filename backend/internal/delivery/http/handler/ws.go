@@ -3,23 +3,20 @@ package handler
 import (
 	"net/http"
 
-	infranats "github.com/AyushCN/berth/internal/infrastructure/nats"
+	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"github.com/nats-io/nats.go"
-	"log/slog"
 )
 
-// WSHandler handles WebSocket connections for real-time sync.
+// WSHandler handles WebSocket connections for real-time sync using distributed hub.
 type WSHandler struct {
-	natsClient     *infranats.Client
+	hub            *WSHub
 	allowedOrigins []string
 }
 
-// NewWSHandler creates a WebSocket handler with strict origin validation.
+// NewWSHandler creates a WebSocket handler using distributed hub.
 // allowedOrigins defaults to local dev addresses if none are provided.
-// In production, pass cfg.FrontendURL: handler.NewWSHandler(natsClient, cfg.FrontendURL)
-func NewWSHandler(nc *infranats.Client, allowedOrigins ...string) *WSHandler {
+// In production, pass cfg.FrontendURL: handler.NewWSHandler(redisPubSub, cfg.FrontendURL)
+func NewWSHandler(pubsub *redis.PubSub, allowedOrigins ...string) *WSHandler {
 	origins := allowedOrigins
 	if len(origins) == 0 {
 		origins = []string{
@@ -27,75 +24,26 @@ func NewWSHandler(nc *infranats.Client, allowedOrigins ...string) *WSHandler {
 			"http://127.0.0.1:3000",
 		}
 	}
-	return &WSHandler{natsClient: nc, allowedOrigins: origins}
+
+	hub := NewWSHub(pubsub, allowedOrigins...)
+
+	return &WSHandler{hub: hub, allowedOrigins: allowedOrigins}
 }
 
-func (h *WSHandler) upgrader() *websocket.Upgrader {
-	return &websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				return true
-			}
-			for _, allowed := range h.allowedOrigins {
-				if origin == allowed {
-					return true
-				}
-			}
-			slog.Warn("websocket origin rejected", "origin", origin)
-			return false
-		},
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-}
-
-// HandleSandboxWS upgrades to WebSocket and bridges to NATS.
+// HandleSandboxWS upgrades to WebSocket and bridges to distributed hub.
 func (h *WSHandler) HandleSandboxWS(c *gin.Context) {
-	if h.natsClient == nil {
+	if h.hub == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "real-time sync unavailable"})
 		return
 	}
-	sandboxID := c.Param("id")
-	if sandboxID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sandbox id required"})
-		return
-	}
 
-	conn, err := h.upgrader().Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		slog.Error("websocket upgrade failed", "error", err)
-		return
-	}
-	defer conn.Close()
+	// Use the distributed hub's handler
+	h.hub.HandleWS(c)
+}
 
-	outSubject := "sandbox." + sandboxID + ".output"
-	inSubject := "sandbox." + sandboxID + ".input"
-
-	sub, err := h.natsClient.Subscribe(outSubject, "", func(msg *nats.Msg) {
-		if err := conn.WriteMessage(websocket.TextMessage, msg.Data); err != nil {
-			slog.Error("websocket write failed", "error", err)
-		}
-		_ = msg.Ack()
-	})
-	if err != nil {
-		slog.Error("nats subscribe failed", "error", err)
-		return
-	}
-	defer sub.Unsubscribe()
-
-	for {
-		msgType, data, err := conn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				slog.Error("websocket read error", "error", err)
-			}
-			break
-		}
-		if msgType == websocket.TextMessage || msgType == websocket.BinaryMessage {
-			if err := h.natsClient.Publish(inSubject, data); err != nil {
-				slog.Error("nats publish failed", "error", err)
-			}
-		}
+// Shutdown gracefully shuts down the WebSocket hub
+func (h *WSHandler) Shutdown() {
+	if h.hub != nil {
+		h.hub.Shutdown()
 	}
 }

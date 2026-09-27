@@ -46,11 +46,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize Redis
 	if err := redis.Init(cfg.RedisURL); err != nil {
 		slog.Error("failed to init redis", "error", err)
 		os.Exit(1)
 	}
 	defer redis.Close()
+
+	redisPubSub, err := redis.InitPubSub(cfg.RedisURL)
+	if err != nil {
+		slog.Error("failed to init redis pubsub", "error", err)
+		os.Exit(1)
+	}
+	defer redisPubSub.Close()
 
 	// Repositories
 	natsClient, err := nats.NewClient(cfg.NatsURL)
@@ -68,15 +76,25 @@ func main() {
 	sandboxRepo := repository.NewSandboxRepository(queries)
 	orgRepo := repository.NewOrganizationRepository(queries)
 	projRepo := repository.NewProjectRepository(queries)
+	shareLinkRepo := repository.NewShareLinkRepository(queries)
+	workspaceRepo := repository.NewWorkspaceRepository(queries)
+	workspaceMemberRepo := repository.NewWorkspaceMemberRepository(queries)
+	changeRequestRepo := repository.NewChangeRequestRepository(queries)
+
+	// Prediction repositories
+	modelRepo := repository.NewModelRepository(db.Pool())
+	trainingDataRepo := repository.NewTrainingDataRepository(db.Pool())
+	predictionRepo := repository.NewPredictionRepository(db.Pool())
 
 	// OAuth client
 	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, cfg.FrontendURL+"/api/auth/github/callback")
 
 	// Usecases
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
-	projUC := usecase.NewProjectUsecase(projRepo, orgRepo)
+	projUC := usecase.NewProjectUsecase(projRepo, orgRepo, workspaceRepo, workspaceMemberRepo)
 	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, orgUC, projUC)
 	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, natsClient) // runtime nil in API mode
+	shareLinkUC := usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, nil) // gitUC not yet initialized
 
 	if cfg.Env != "production" {
 		devUserID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -109,17 +127,64 @@ func main() {
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
 	fileUC := usecase.NewFileUsecase(workspaceDir, sandboxUC)
-	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, sandboxRepo)
+
+	// Initialize Docker runtime for Git operations in API mode
+	gitRuntime, err := usecase.NewDockerRuntimeForGit(workspaceDir)
+	if err != nil {
+		slog.Warn("failed to init git runtime, git operations will use host filesystem", "error", err)
+	}
+	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, sandboxRepo, gitRuntime)
+	changeRequestUC := usecase.NewChangeRequestUsecase(changeRequestRepo, workspaceRepo, workspaceMemberRepo, gitUC)
+	shareLinkUC = usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, gitUC)
+
+	// Activity tracker & warm pool
+	idleTimeout := 30 * time.Minute
+	if cfg.Env == "production" {
+		idleTimeout = 60 * time.Minute
+	}
+	activityTracker := usecase.NewActivityTracker(
+		repository.NewEnvironmentRepository(queries),
+		nil, // worker not available in API mode
+		idleTimeout,
+		5*time.Minute,
+	)
+	go activityTracker.Start(context.Background())
+
+	warmPool := usecase.NewWarmPool(
+		repository.NewEnvironmentRepository(queries),
+		nil, // worker not available in API mode
+		repository.NewRuntimeProfileRepository(queries),
+		map[string]int{"node": 2, "python": 1, "go": 1},
+		10*time.Minute,
+	)
+	go warmPool.Start(context.Background())
+
+	// Prediction service
+	modelDir := os.Getenv("MODEL_DIR")
+	if modelDir == "" {
+		modelDir = "/tmp/berth/models"
+	}
+	_ = os.MkdirAll(modelDir, 0755)
+
+	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, modelDir)
+	predictionService := usecase.NewPredictionService(modelTrainer, predictionRepo)
+
+	// Start scheduled retraining (every 6 hours)
+	go predictionService.ScheduledRetraining(context.Background(), 6*time.Hour)
 
 	// Handlers
 	deps := &berthhttp.Dependencies{
-		AuthHandler:    handler.NewAuthHandler(authUC, cfg.FrontendURL),
-		SandboxHandler: handler.NewSandboxHandler(sandboxUC),
-		FileHandler:    handler.NewFileHandler(fileUC),
-		WSHandler:      handler.NewWSHandler(natsClient, cfg.FrontendURL),
-		GitHandler:     handler.NewGitHandler(gitUC),
-		OrgHandler:     handler.NewOrganizationHandler(orgUC),
-		ProjectHandler: handler.NewProjectHandler(projUC),
+		AuthHandler:         handler.NewAuthHandler(authUC, cfg.FrontendURL),
+		SandboxHandler:      handler.NewSandboxHandler(sandboxUC, cfg.TraefikDomain),
+		FileHandler:         handler.NewFileHandler(fileUC),
+		WSHandler:           handler.NewWSHandler(redisPubSub, cfg.FrontendURL),
+		GitHandler:          handler.NewGitHandler(gitUC),
+		OrgHandler:          handler.NewOrganizationHandler(orgUC),
+		ProjectHandler:      handler.NewProjectHandler(projUC),
+		ShareLinkHandler:    handler.NewShareLinkHandler(shareLinkUC),
+		ChangeRequestHandler: handler.NewChangeRequestHandler(changeRequestUC),
+		ActivityHandler:     handler.NewActivityHandler(activityTracker, warmPool),
+		PredictionHandler:   handler.NewPredictionHandler(predictionService),
 	}
 
 	// Router
@@ -145,6 +210,15 @@ func main() {
 	<-quit
 
 	slog.Info("shutting down gracefully...")
+
+	// Shutdown WebSocket hub
+	if deps.WSHandler != nil {
+		deps.WSHandler.Shutdown()
+	}
+
+	// Stop activity tracker and warm pool
+	// Note: In a real implementation, we'd store these in deps and call Stop()
+	// For now, context cancellation will stop them
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

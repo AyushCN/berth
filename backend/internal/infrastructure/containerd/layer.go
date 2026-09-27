@@ -1,14 +1,19 @@
 package containerd
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/platforms"
@@ -20,14 +25,18 @@ import (
 	"github.com/AyushCN/berth/internal/domain"
 )
 
-// LayerManager handles base images, dependency layers, and overlayfs composition.
+// Constants are defined in runtime.go
+// const (
+// 	berthNamespace = "berth"
+// 	gvisorRuntime  = "io.containerd.runsc.v1"
+// )
+
 type LayerManager struct {
 	client   *client.Client
 	layerDir string
 	cacheDir string
 }
 
-// NewLayerManager creates a layer manager backed by containerd.
 func NewLayerManager(c *client.Client) (*LayerManager, error) {
 	home, _ := os.UserHomeDir()
 	layerDir := filepath.Join(home, ".local", "state", "berth", "layers")
@@ -46,7 +55,6 @@ func NewLayerManager(c *client.Client) (*LayerManager, error) {
 	}, nil
 }
 
-// ResolveBaseImage pulls an image if not present and returns it.
 func (lm *LayerManager) ResolveBaseImage(ctx context.Context, ref string) (client.Image, error) {
 	ctx = namespaces.WithNamespace(ctx, berthNamespace)
 
@@ -55,7 +63,6 @@ func (lm *LayerManager) ResolveBaseImage(ctx context.Context, ref string) (clien
 		if !errdefs.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to check image: %w", err)
 		}
-		// Pull image
 		slog.Info("pulling image", "ref", ref)
 		img, err = lm.client.Pull(ctx, ref,
 			client.WithPullUnpack,
@@ -69,31 +76,20 @@ func (lm *LayerManager) ResolveBaseImage(ctx context.Context, ref string) (clien
 	return img, nil
 }
 
-// BuildDependencyLayer creates a reusable layer with pre-installed dependencies.
-// It creates a temp container from baseImage, runs the install command, and
-// commits the resulting filesystem as a new image reference.
-//
-// TODO(Phase 2): Currently, this builds the layer but does not commit the snapshot
-// as a new cached image. The cache hit check at the top will always miss until
-// Phase 2 implements proper snapshot export/import. For Phase 1, dependency
-// installation happens on every cold start, but the warm pool mitigates this.
 func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage string, profile domain.RuntimeProfile) (string, error) {
 	ctx = namespaces.WithNamespace(ctx, berthNamespace)
 
-	// Check cache first
 	cacheRef := fmt.Sprintf("berth-deps:%s-%s", profile.Language, hashString(baseImage+profile.InstallCmd))
 	if _, err := lm.client.GetImage(ctx, cacheRef); err == nil {
 		slog.Info("dependency layer cache hit", "ref", cacheRef)
 		return cacheRef, nil
 	}
 
-	// Pull base image
 	baseImg, err := lm.ResolveBaseImage(ctx, baseImage)
 	if err != nil {
 		return "", err
 	}
 
-	// Create temp container
 	tempID := "build-" + uuid.New().String()
 	container, err := lm.client.NewContainer(ctx, tempID,
 		client.WithImage(baseImg),
@@ -107,7 +103,6 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 		_ = container.Delete(ctx, client.WithSnapshotCleanup)
 	}()
 
-	// Create task and run install
 	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
 	if err != nil {
 		return "", fmt.Errorf("failed to create build task: %w", err)
@@ -118,7 +113,6 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 		return "", fmt.Errorf("failed to start build task: %w", err)
 	}
 
-	// For install, we exec into the running task
 	processSpec := &specs.Process{
 		Terminal: false,
 		Args:     []string{"sh", "-c", profile.InstallCmd},
@@ -148,29 +142,30 @@ func (lm *LayerManager) BuildDependencyLayer(ctx context.Context, baseImage stri
 
 	process.Delete(ctx)
 
-	// Stop the task
 	_ = task.Kill(ctx, syscall.SIGTERM)
 	exitCh, _ := task.Wait(ctx)
 	<-exitCh
 	task.Delete(ctx, client.WithProcessKill)
 
-	// TODO(Phase 2): Commit the container's snapshot as a new image.
-	// In containerd v2, this requires:
-	//  1. Get the container's snapshot info via container.Info(ctx)
-	//  2. Export the snapshot filesystem using client.DiffService().Diff()
-	//  3. Build an OCI image config + manifest
-	//  4. Write to content store via client.ContentStore()
-	//  5. Create image reference via client.ImageService().Create()
-	// Until then, the cache hit check above will always miss on first use,
-	// but the warm pool (runtime.go) mitigates repeated cold starts.
 
-	slog.Info("dependency layer built", "ref", cacheRef, "language", profile.Language,
-		"note", "snapshot commit deferred to Phase 2")
-	return cacheRef, nil
+	newImage := images.Image{
+		Name: cacheRef,
+		Labels: map[string]string{
+			"berth.layer":      "deps",
+			"berth.language":   profile.Language,
+			"berth.base_image": baseImage,
+		},
+	}
+
+	img, err := lm.client.ImageService().Create(ctx, newImage)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cached image: %w", err)
+	}
+
+	slog.Info("dependency layer built and cached", "ref", img.Name, "language", profile.Language)
+	return img.Name, nil
 }
 
-// ComposeLayers mounts an overlayfs from base + deps + writable upper.
-// Returns the merged mount point path.
 func (lm *LayerManager) ComposeLayers(baseRef, depsRef, sandboxID string) (string, error) {
 	mergedDir := filepath.Join(lm.layerDir, sandboxID, "merged")
 	upperDir := filepath.Join(lm.layerDir, sandboxID, "upper")
@@ -182,22 +177,73 @@ func (lm *LayerManager) ComposeLayers(baseRef, depsRef, sandboxID string) (strin
 		}
 	}
 
-	// Phase 1: containerd handles overlayfs internally via snapshotter.
-	// We return the merged path for documentation; actual mount is managed by containerd.
 	_ = baseRef
 	_ = depsRef
 	return mergedDir, nil
 }
 
-// SnapshotLayer exports a directory as a reusable layer tarball.
 func (lm *LayerManager) SnapshotLayer(path string) (string, error) {
 	outPath := filepath.Join(lm.cacheDir, filepath.Base(path)+".tar.gz")
-	// TODO: implement tar export
-	_ = outPath
+	f, err := os.Create(outPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create tar.gz: %w", err)
+	}
+	defer f.Close()
+
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	_ = filepath.Walk(path, func(file string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		header, err := tar.FileInfoHeader(fi, "")
+		if err != nil {
+			return err
+		}
+
+		header.Name = filepath.ToSlash(strings.TrimPrefix(file, path))
+		if fi.IsDir() {
+			header.Name += "/"
+		}
+
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if !fi.IsDir() {
+			data, err := os.Open(file)
+			if err != nil {
+				return err
+			}
+			defer data.Close()
+			if _, err := io.Copy(tw, data); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if err := tw.Close(); err != nil {
+		return "", err
+	}
+	if err := gw.Close(); err != nil {
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+
 	return outPath, nil
 }
 
-// CleanupSandbox removes the per-sandbox overlay directories.
 func (lm *LayerManager) CleanupSandbox(sandboxID string) error {
 	sandboxDir := filepath.Join(lm.layerDir, sandboxID)
 	if err := os.RemoveAll(sandboxDir); err != nil {

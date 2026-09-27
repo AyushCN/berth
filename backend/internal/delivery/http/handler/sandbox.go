@@ -13,11 +13,12 @@ import (
 
 // SandboxHandler handles environment HTTP requests.
 type SandboxHandler struct {
-	sandboxUC *usecase.SandboxUsecase
+	sandboxUC    *usecase.SandboxUsecase
+	traefikDomain string
 }
 
-func NewSandboxHandler(uc *usecase.SandboxUsecase) *SandboxHandler {
-	return &SandboxHandler{sandboxUC: uc}
+func NewSandboxHandler(uc *usecase.SandboxUsecase, traefikDomain string) *SandboxHandler {
+	return &SandboxHandler{sandboxUC: uc, traefikDomain: traefikDomain}
 }
 
 // ListEnvironments returns all environments for the authenticated user.
@@ -189,6 +190,7 @@ func (h *SandboxHandler) ForkEnvironment(c *gin.Context) {
 }
 
 // PreviewProxy acts as a reverse proxy for sandbox previews.
+// Uses Traefik's routing (Host-based) instead of direct localhost connection.
 func (h *SandboxHandler) PreviewProxy(c *gin.Context) {
 	sandboxID := c.Param("id")
 	uid, err := uuid.Parse(sandboxID)
@@ -208,10 +210,18 @@ func (h *SandboxHandler) PreviewProxy(c *gin.Context) {
 		return
 	}
 
+	// Use Traefik's Host-based routing instead of direct localhost
+	// The container has Traefik labels: Host(`{sandboxID}.{traefikDomain}`)
+	targetHost := fmt.Sprintf("%s.%s", sandboxID, h.traefikDomain)
+	if h.traefikDomain == "" {
+		targetHost = fmt.Sprintf("127.0.0.1:%d", *sandbox.Port)
+	}
+
 	// Setup Reverse Proxy
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		req.URL.Host = fmt.Sprintf("127.0.0.1:%d", *sandbox.Port)
+		req.URL.Host = targetHost
+		req.Host = targetHost // Important for Traefik Host-based routing
 		// Strip the `/p/<id>` prefix
 		pathPrefix := fmt.Sprintf("/p/%s", sandboxID)
 		if strings.HasPrefix(req.URL.Path, pathPrefix) {

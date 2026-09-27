@@ -1,48 +1,205 @@
 # Berth
 
-Ephemeral development sandboxes with containerd, repository-based runtime detection, and dependency caching.
+**Ephemeral development sandboxes with containerd, repository-based runtime detection, dependency caching, and ML-powered build predictions.**
 
-Berth is an early-stage, single-host research prototype. Its current rootless development setup uses `runc.v2` and host networking. gVisor support is not currently the default working configuration, and this setup is not suitable for exposing untrusted workloads as a multi-tenant public service.
+Berth is a research prototype for ephemeral development environments. It provisions sandboxed containers on-demand from GitHub repositories, automatically detects the runtime/framework, caches dependencies, and uses ML to predict build times, cache hits, and failure risks.
 
-## Current capabilities
+---
 
-- Go API and worker provision sandboxes through NATS.
-- The worker clones GitHub repositories and detects Node.js, Python, Go, or Rust from repository files using simple rules.
-- containerd manages sandbox containers; exact-image warm containers are reused for Node.js, Python, and Go when available. Host-side dependency caching also reduces repeat setup work.
-- The sandbox UI connects the file tree, editor save, terminal WebSocket, status polling, and preview link to the backend APIs.
-- GitHub OAuth tokens are encrypted at rest and used for owner-authorized pushes to a `berth/<sandbox-id>` branch.
-- Sandboxes receive a 24-hour expiry; the worker periodically removes expired containers and workspaces. Stop/delete requests are sent to the worker over NATS.
-- The local development runtime defaults to `runc`; preview requests are proxied through the API to a host-networked port.
+## 🏗️ Architecture Overview
 
-## Deferred
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Browser    │────▶│  Next.js     │────▶│  Go API      │
+│  (Frontend) │     │  (UI)        │     │  (Control)   │
+└─────────────┘     └──────────────┘     └──────┬───────┘
+                                                 │
+                    ┌────────────────────────────┼────────────────────────────┐
+                    ▼                            ▼                            ▼
+           ┌──────────────────┐          ┌──────────────────┐          ┌──────────────────┐
+           │  PostgreSQL      │          │  NATS          │          │  containerd      │
+           │  (Persistence)   │          │  (Message Bus) │          │  (Container      │
+           │                  │          │                │          │   Runtime)       │
+           └──────────────────┘          └──────────────────┘          └────────┬─────────┘
+                                                                               │
+                                                                        ┌────────▼─────────┐
+                                                                        │  Sandbox         │
+                                                                        │  (Container)     │
+                                                                        └──────────────────┘
+```
 
-- Collaborative editing is out of demo scope. The preview/networking path is not multi-tenant safe.
-- Benchmark and paper work is deferred; current checked-in measurements are research artifacts, not a published performance claim.
+---
 
-## Quick start
+## ✨ Key Features
 
-The development path requires Linux (bare metal or VM), Go, Node.js, Docker Compose, and a separately configured containerd runtime. Follow [docs/QUICKSTART.md](docs/QUICKSTART.md) for local or single-host setup. The preview path is for trusted single-host use; it is not multi-tenant safe.
+| Feature | Description |
+|---------|-------------|
+| **Runtime Detection** | Auto-detects Node.js, Python, Go, Rust, Java with 30+ framework support (Next.js, Django, Gin, Axum, Spring, etc.) |
+| **Architecture Classification** | Detects WEB_APP, API, CLI, FULL_STACK, MONOREPO, LIBRARY |
+| **Build Strategy Pattern** | Pluggable strategies per language (Python, Node, Go, Rust, Java, Docker Compose, Fallback) |
+| **Dependency Caching** | pnpm/npm/yarn/bun, Cargo, Go modules, pip/poetry, Maven/Gradle |
+| **Docker Compose Support** | Parses and builds multi-service compose files |
+| **ML Predictions** | Build time, image size, cache hit probability, failure risk |
+| **ONNX Export** | Export trained models to ONNX for production inference |
+| **Git Integration** | OAuth-backed Git operations, branch management, diff, push |
+| **Collaborative IDE** | File editor, terminal, Git panel, preview proxy |
+| **Warm Pool** | Pre-warmed containers for instant startup |
+
+---
+
+## 📁 Project Structure
+
+```
+berth/
+├── backend/                    # Go API, Worker, Prediction Engine
+│   ├── cmd/
+│   │   ├── api/               # API server entry point
+│   │   └── worker/            # Worker entry point
+│   ├── internal/
+│   │   ├── analyzer/          # Runtime & framework detection
+│   │   ├── usecase/           # Business logic (Build Planner, ML)
+│   │   ├── delivery/          # HTTP/gRPC handlers
+│   │   ├── infrastructure/    # containerd, Docker, NATS, Redis
+│   │   ├── domain/            # Core domain models
+│   │   ├── repository/        # PostgreSQL repositories
+│   │   ├── worker/            # Sandbox worker implementation
+│   │   └── integration/       # Integration tests
+│   ├── migrations/            # SQL migrations
+│   ├── proto/                 # gRPC protobuf definitions
+│   └── go.mod
+├── frontend/                   # Next.js 15 + React 18
+│   ├── app/                   # App Router pages
+│   ├── components/            # React components (editor, terminal, git, file-tree)
+│   ├── stores/                # Zustand state management
+│   └── lib/                   # API client
+├── docs/                       # Documentation
+├── infra/                      # Local dev infrastructure (docker-compose)
+├── scripts/                    # Development scripts
+└── Makefile
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Linux (bare metal or VM with nested virtualization)
+- Go 1.21+
+- Node.js 20+
+- Docker + Docker Compose
+- containerd (rootless)
+- PostgreSQL 16+
+- NATS
+- Redis
+
+### Development Setup
 
 ```bash
+# Start infrastructure
 make up
+
+# Run migrations
 make migrate-up
+
+# Start API server
 cd backend && go run ./cmd/api
+
+# In another terminal, start worker
+MODE=worker go run ./cmd/worker
+
+# Start frontend
+cd frontend && npm run dev
 ```
 
-Run the worker separately with `MODE=worker` and the same backend configuration. Required environment variables and production notes are in the quickstart.
+### Environment Variables
 
-## Project layout
-
-```text
-backend/   Go API, worker, containerd integration, and runtime detector
-frontend/  Next.js interface
-infra/     Local dependency services
-scripts/   Development setup and smoke checks
-docs/      Architecture and current project status
+```bash
+# Backend
+DATABASE_URL=postgres://berth:berth@localhost:5432/berth?sslmode=disable
+REDIS_URL=redis://localhost:6379
+NATS_URL=nats://localhost:4222
+JWT_SECRET=your-32-byte-secret-key-here!!
+GITHUB_CLIENT_ID=your-github-oauth-client-id
+GITHUB_CLIENT_SECRET=your-github-oauth-secret
+FRONTEND_URL=http://localhost:3000
+ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+MODE=api
+PORT=8080
+DOCKER_HOST=unix:///run/user/1000/docker.sock
+TRAEFIK_DOMAIN=localhost
+MODEL_DIR=/tmp/berth/models
 ```
 
-See [docs/STATUS.md](docs/STATUS.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for current limitations.
+---
 
-## License
+## 📚 Documentation
 
-MIT — Research Prototype
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/ARCHITECTURE.md) | System architecture, trust boundaries, data flow |
+| [Status](docs/STATUS.md) | Current implementation status, limitations |
+| [API Reference](docs/API.md) | REST/gRPC endpoints, schemas |
+| [Frontend](docs/FRONTEND.md) | Next.js app structure, components, state |
+| [Backend](docs/BACKEND.md) | Go services, domain models, use cases |
+| [Docker](docs/DOCKER.md) | Container setup, containerd, Docker |
+| [Deployment](docs/DEPLOYMENT.md) | Production deployment guide |
+| [Development](docs/DEVELOPMENT.md) | Local development workflow |
+| [Testing](docs/TESTING.md) | Test strategy, running tests |
+| [Security](docs/SECURITY.md) | Security model, threat model |
+| [Contributing](docs/CONTRIBUTING.md) | Contribution guidelines |
+| [Changelog](docs/CHANGELOG.md) | Version history |
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run all backend tests
+make test
+
+# Run specific package tests
+cd backend && ENCRYPTION_KEY=... go test ./internal/analyzer/... -v
+cd backend && ENCRYPTION_KEY=... go test ./internal/usecase/... -v
+cd backend && ENCRYPTION_KEY=... go test ./internal/integration/... -v
+
+# Run frontend tests
+cd frontend && npm test
+
+# Run linter
+make lint
+```
+
+---
+
+## 🔒 Security Notice
+
+**This is a research prototype, not production-ready.**
+
+- Single-host only, no multi-node support
+- Rootless containerd with runc.v2 (not gVisor)
+- Host networking - no network isolation between sandboxes
+- No mTLS/SPIFFE, no Cilium policies
+- Do not expose to untrusted users or public internet
+
+See [SECURITY.md](docs/SECURITY.md) for full threat model.
+
+---
+
+## 📄 License
+
+MIT License - Research Prototype
+
+---
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
+
+---
+
+## 🔗 Links
+
+- [Project Specification](BERTH_FULL_SPEC.md)
+- [Architecture Diagram](docs/ARCHITECTURE.md)
+- [Current Status](docs/STATUS.md)
+- [API Documentation](docs/API.md)

@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/AyushCN/berth/internal/domain"
 	"github.com/google/uuid"
@@ -14,14 +15,18 @@ var (
 )
 
 type ProjectUsecase struct {
-	projRepo domain.ProjectRepository
-	orgRepo  domain.OrganizationRepository
+	projRepo         domain.ProjectRepository
+	orgRepo          domain.OrganizationRepository
+	workspaceRepo    domain.WorkspaceRepository
+	workspaceMemberRepo domain.WorkspaceMemberRepository
 }
 
-func NewProjectUsecase(projRepo domain.ProjectRepository, orgRepo domain.OrganizationRepository) *ProjectUsecase {
+func NewProjectUsecase(projRepo domain.ProjectRepository, orgRepo domain.OrganizationRepository, workspaceRepo domain.WorkspaceRepository, workspaceMemberRepo domain.WorkspaceMemberRepository) *ProjectUsecase {
 	return &ProjectUsecase{
-		projRepo: projRepo,
-		orgRepo:  orgRepo,
+		projRepo:          projRepo,
+		orgRepo:           orgRepo,
+		workspaceRepo:     workspaceRepo,
+		workspaceMemberRepo: workspaceMemberRepo,
 	}
 }
 
@@ -53,6 +58,33 @@ func (u *ProjectUsecase) Create(ctx context.Context, userID uuid.UUID, orgID uui
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Create canonical workspace for the project
+	canonicalWorkspace := &domain.Workspace{
+		ID:               uuid.New(),
+		ProjectID:        p.ID,
+		Name:             "canonical",
+		Type:             domain.WorkspaceTypeCanonical,
+		OwnerID:          userID,
+		GitBranch:        "main",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	if err := u.workspaceRepo.Create(ctx, canonicalWorkspace); err != nil {
+		// Log error but don't fail project creation
+		// The workspace can be created later
+		_ = err
+	} else {
+		// Add creator as workspace member
+		member := &domain.WorkspaceMember{
+			ID:          uuid.New(),
+			WorkspaceID: canonicalWorkspace.ID,
+			UserID:      userID,
+			Role:        domain.WorkspaceMemberRoleOwner,
+			CreatedAt:   time.Now(),
+		}
+		_ = u.workspaceMemberRepo.Create(ctx, member)
 	}
 
 	return p, nil

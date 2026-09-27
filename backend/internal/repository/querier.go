@@ -14,22 +14,83 @@ import (
 type Querier interface {
 	AddOrganizationMember(ctx context.Context, arg AddOrganizationMemberParams) (OrganizationMember, error)
 	AddProjectCollaborator(ctx context.Context, arg AddProjectCollaboratorParams) (ProjectCollaborator, error)
+	ConfirmRuntimeProfile(ctx context.Context, arg ConfirmRuntimeProfileParams) (RuntimeProfile, error)
+	CountEnvironmentsByStateAndRuntimeProfile(ctx context.Context, arg CountEnvironmentsByStateAndRuntimeProfileParams) (int64, error)
 	CountSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
+	CreateBuild(ctx context.Context, arg CreateBuildParams) (Build, error)
+	CreateBuildPlan(ctx context.Context, arg CreateBuildPlanParams) (BuildPlan, error)
+	CreateChangeRequest(ctx context.Context, arg CreateChangeRequestParams) (ChangeRequest, error)
+	CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (Environment, error)
+	CreateEnvironmentEvent(ctx context.Context, arg CreateEnvironmentEventParams) (EnvironmentEvent, error)
+	CreateEnvironmentService(ctx context.Context, arg CreateEnvironmentServiceParams) (EnvironmentService, error)
+	CreateImage(ctx context.Context, arg CreateImageParams) (Image, error)
 	CreateOrganization(ctx context.Context, name string) (Organization, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
+	CreateRuntimeProfile(ctx context.Context, arg CreateRuntimeProfileParams) (RuntimeProfile, error)
 	CreateSandbox(ctx context.Context, arg CreateSandboxParams) (Sandbox, error)
 	CreateSandboxActivity(ctx context.Context, arg CreateSandboxActivityParams) (SandboxActivity, error)
 	CreateSandboxChange(ctx context.Context, arg CreateSandboxChangeParams) (SandboxChange, error)
+	CreateShareLink(ctx context.Context, arg CreateShareLinkParams) (ShareLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	CreateWorkspaceMember(ctx context.Context, arg CreateWorkspaceMemberParams) (WorkspaceMember, error)
+	DeleteBuild(ctx context.Context, id uuid.UUID) error
+	DeleteBuildPlan(ctx context.Context, id uuid.UUID) error
+	DeleteChangeRequest(ctx context.Context, id uuid.UUID) error
+	DeleteEnvironmentService(ctx context.Context, id uuid.UUID) error
+	DeleteImage(ctx context.Context, id uuid.UUID) error
+	DeleteRuntimeProfile(ctx context.Context, id uuid.UUID) error
 	DeleteSandbox(ctx context.Context, id uuid.UUID) error
+	DeleteShareLink(ctx context.Context, id uuid.UUID) error
+	DeleteWorkspaceMember(ctx context.Context, arg DeleteWorkspaceMemberParams) error
+	GetActiveEnvironmentsByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Environment, error)
+	GetBuild(ctx context.Context, id uuid.UUID) (Build, error)
+	GetBuildPlan(ctx context.Context, id uuid.UUID) (BuildPlan, error)
+	GetBuildPlanByRuntimeProfile(ctx context.Context, runtimeProfileID uuid.UUID) (BuildPlan, error)
+	GetBuildsByBuildPlan(ctx context.Context, buildPlanID uuid.UUID) ([]Build, error)
+	GetBuildsByWorkspace(ctx context.Context, arg GetBuildsByWorkspaceParams) ([]Build, error)
+	GetCanonicalWorkspace(ctx context.Context, projectID uuid.UUID) (Workspace, error)
+	GetChangeRequest(ctx context.Context, id uuid.UUID) (GetChangeRequestRow, error)
+	GetChangeRequestsByProject(ctx context.Context, arg GetChangeRequestsByProjectParams) ([]GetChangeRequestsByProjectRow, error)
+	GetChangeRequestsBySourceWorkspace(ctx context.Context, sourceWorkspaceID uuid.UUID) ([]GetChangeRequestsBySourceWorkspaceRow, error)
+	GetChangeRequestsByState(ctx context.Context, state string) ([]GetChangeRequestsByStateRow, error)
+	GetEnvironment(ctx context.Context, id uuid.UUID) (Environment, error)
+	GetEnvironmentEvents(ctx context.Context, arg GetEnvironmentEventsParams) ([]GetEnvironmentEventsRow, error)
+	GetEnvironmentService(ctx context.Context, id uuid.UUID) (EnvironmentService, error)
+	GetEnvironmentServices(ctx context.Context, environmentID uuid.UUID) ([]EnvironmentService, error)
+	GetEnvironmentsByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Environment, error)
+	GetForkWorkspaces(ctx context.Context, baseWorkspaceID pgtype.UUID) ([]Workspace, error)
+	GetImage(ctx context.Context, id uuid.UUID) (Image, error)
+	GetImageByTag(ctx context.Context, tag string) (Image, error)
+	GetImagesByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Image, error)
+	GetLatestBuildByWorkspace(ctx context.Context, workspaceID uuid.UUID) (Build, error)
+	GetLatestRuntimeProfileByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (RuntimeProfile, error)
 	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
 	GetOrganizationMember(ctx context.Context, arg GetOrganizationMemberParams) (OrganizationMember, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error)
 	GetProjectCollaborator(ctx context.Context, arg GetProjectCollaboratorParams) (ProjectCollaborator, error)
+	GetProjectEvents(ctx context.Context, arg GetProjectEventsParams) ([]GetProjectEventsRow, error)
+	GetRecentProjectEvents(ctx context.Context, arg GetRecentProjectEventsParams) ([]GetRecentProjectEventsRow, error)
+	GetRuntimeProfile(ctx context.Context, id uuid.UUID) (RuntimeProfile, error)
+	GetRuntimeProfilesByProject(ctx context.Context, projectID pgtype.UUID) ([]RuntimeProfile, error)
+	GetRuntimeProfilesByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]RuntimeProfile, error)
 	GetSandboxByID(ctx context.Context, id uuid.UUID) (Sandbox, error)
+	GetShareLinkByCode(ctx context.Context, code string) (ShareLink, error)
+	GetShareLinkByID(ctx context.Context, id uuid.UUID) (ShareLink, error)
+	GetShareLinksByProject(ctx context.Context, projectID uuid.UUID) ([]ShareLink, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByGithubID(ctx context.Context, githubID pgtype.Text) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserWorkspaces(ctx context.Context, userID uuid.UUID) ([]GetUserWorkspacesRow, error)
+	GetWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error)
+	GetWorkspaceEvents(ctx context.Context, arg GetWorkspaceEventsParams) ([]GetWorkspaceEventsRow, error)
+	GetWorkspaceMember(ctx context.Context, arg GetWorkspaceMemberParams) (GetWorkspaceMemberRow, error)
+	GetWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]GetWorkspaceMembersRow, error)
+	GetWorkspaceMembersByUser(ctx context.Context, userID uuid.UUID) ([]GetWorkspaceMembersByUserRow, error)
+	GetWorkspacesByProject(ctx context.Context, projectID uuid.UUID) ([]Workspace, error)
+	IncrementShareLinkUses(ctx context.Context, id uuid.UUID) error
+	ListEnvironmentsByState(ctx context.Context, state string) ([]Environment, error)
+	ListIdleRunningEnvironments(ctx context.Context, lastActivityAt pgtype.Timestamptz) ([]Environment, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
 	ListOrganizationsForUser(ctx context.Context, userID uuid.UUID) ([]ListOrganizationsForUserRow, error)
 	ListProjectCollaborators(ctx context.Context, projectID uuid.UUID) ([]ListProjectCollaboratorsRow, error)
@@ -37,16 +98,33 @@ type Querier interface {
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserRow, error)
 	ListSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sandbox, error)
 	ListSandboxesByProject(ctx context.Context, projectID pgtype.UUID) ([]Sandbox, error)
+	ListSuspendedEnvironments(ctx context.Context, suspendedAt pgtype.Timestamptz) ([]Environment, error)
 	PopPendingSandbox(ctx context.Context) (Sandbox, error)
 	RemoveOrganizationMember(ctx context.Context, arg RemoveOrganizationMemberParams) error
 	RemoveProjectCollaborator(ctx context.Context, arg RemoveProjectCollaboratorParams) error
+	SoftDeleteEnvironment(ctx context.Context, id uuid.UUID) error
+	SoftDeleteWorkspace(ctx context.Context, id uuid.UUID) error
+	UpdateBuild(ctx context.Context, arg UpdateBuildParams) (Build, error)
+	UpdateBuildPlan(ctx context.Context, arg UpdateBuildPlanParams) (BuildPlan, error)
+	UpdateChangeRequest(ctx context.Context, arg UpdateChangeRequestParams) (ChangeRequest, error)
 	UpdateContainerID(ctx context.Context, arg UpdateContainerIDParams) error
+	UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (Environment, error)
+	UpdateEnvironmentActivity(ctx context.Context, arg UpdateEnvironmentActivityParams) (Environment, error)
+	UpdateEnvironmentContainerID(ctx context.Context, arg UpdateEnvironmentContainerIDParams) (Environment, error)
+	UpdateEnvironmentImageID(ctx context.Context, arg UpdateEnvironmentImageIDParams) (Environment, error)
+	UpdateEnvironmentService(ctx context.Context, arg UpdateEnvironmentServiceParams) (EnvironmentService, error)
+	UpdateEnvironmentState(ctx context.Context, arg UpdateEnvironmentStateParams) (Environment, error)
+	UpdateImageLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateOrganizationRole(ctx context.Context, arg UpdateOrganizationRoleParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) error
+	UpdateRuntimeProfile(ctx context.Context, arg UpdateRuntimeProfileParams) (RuntimeProfile, error)
 	UpdateSandboxContainer(ctx context.Context, arg UpdateSandboxContainerParams) error
 	UpdateSandboxGitTracking(ctx context.Context, arg UpdateSandboxGitTrackingParams) error
 	UpdateSandboxState(ctx context.Context, arg UpdateSandboxStateParams) error
+	UpdateShareLink(ctx context.Context, arg UpdateShareLinkParams) (ShareLink, error)
 	UpdateUserToken(ctx context.Context, arg UpdateUserTokenParams) error
+	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
+	UpdateWorkspaceMember(ctx context.Context, arg UpdateWorkspaceMemberParams) (WorkspaceMember, error)
 }
 
 var _ Querier = (*Queries)(nil)

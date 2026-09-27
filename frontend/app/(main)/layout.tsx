@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Code2 } from "lucide-react";
+import { Code2, Brain } from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
 import { LogoutButton } from "@/components/LogoutButton";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 const links = [
   { href: "/dashboard", label: "Sandboxes" },
   { href: "/projects", label: "Projects" },
+  { href: "/predictions", label: "Predictions", icon: Brain },
 ];
 
 export default function MainLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -27,8 +28,9 @@ export default function MainLayout({ children }: Readonly<{ children: React.Reac
           </div>
           <div className="order-3 w-full overflow-x-auto sm:order-none sm:ml-auto sm:w-auto">
             <div className="flex min-w-max items-center gap-1 sm:gap-2">
-            {links.map(({ href, label }) => (
-              <Link key={href} href={href} className="whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:bg-white/5 hover:text-white sm:px-3 sm:text-sm">
+            {links.map(({ href, label, icon: Icon }) => (
+              <Link key={href} href={href} className="whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:bg-white/5 hover:text-white sm:px-3 sm:text-sm flex items-center gap-1.5">
+                {Icon && <Icon className="w-3.5 h-3.5" />}
                 {label}
               </Link>
             ))}

@@ -1,0 +1,26 @@
+# Build stage
+FROM golang:1.26-alpine AS builder
+
+RUN apk add --no-cache git gcc musl-dev
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o berth-worker ./cmd/worker
+
+# Runtime stage
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates git curl bash docker-cli
+
+WORKDIR /app
+
+COPY --from=builder /app/berth-worker /usr/local/bin/
+
+RUN mkdir -p /app/workspaces
+
+ENTRYPOINT ["berth-worker"]

@@ -8,8 +8,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// RuntimeProfile contains the runtime configuration detected from a repository.
-type RuntimeProfile struct {
+// SandboxRuntimeProfile contains the runtime configuration detected from a repository.
+// Deprecated: Use RuntimeProfile from runtime_profile.go instead
+type SandboxRuntimeProfile struct {
 	Language    string // "node", "python", "go", "rust", "other"
 	BaseImage   string // e.g., "node:20-alpine"
 	InstallCmd  string // e.g., "npm install"
@@ -31,25 +32,26 @@ const (
 )
 
 // Sandbox is the core aggregate root for an ephemeral dev environment.
+// Deprecated: Use Workspace + Environment instead
 type Sandbox struct {
-	ID                    uuid.UUID       `json:"id"`
-	ProjectID             uuid.UUID       `json:"project_id"`
-	OwnerID               uuid.UUID       `json:"owner_id"`
-	Name                  string          `json:"name"`
-	GitURL                string          `json:"git_url"`
-	GitBranch             string          `json:"git_branch"`
-	State                 SandboxState    `json:"state"`
-	Profile               *RuntimeProfile `json:"profile,omitempty"`
-	ContainerID           *string         `json:"container_id,omitempty"`
-	PublicURL             *string         `json:"public_url,omitempty"`
-	Port                  *int            `json:"port,omitempty"`
-	CreatedAt             time.Time       `json:"created_at"`
-	UpdatedAt             time.Time       `json:"updated_at"`
-	ExpiresAt             *time.Time      `json:"expires_at,omitempty"`
-	HasUncommittedChanges bool            `json:"has_uncommitted_changes"`
-	LastModifiedAt        *time.Time      `json:"last_modified_at,omitempty"`
-	ModifiedByUserID      *uuid.UUID      `json:"modified_by_user_id,omitempty"`
-	CommitHash            *string         `json:"commit_hash,omitempty"`
+	ID                    uuid.UUID            `json:"id"`
+	ProjectID             uuid.UUID            `json:"project_id"`
+	OwnerID               uuid.UUID            `json:"owner_id"`
+	Name                  string               `json:"name"`
+	GitURL                string               `json:"git_url"`
+	GitBranch             string               `json:"git_branch"`
+	State                 SandboxState         `json:"state"`
+	Profile               *SandboxRuntimeProfile `json:"profile,omitempty"`
+	ContainerID           *string              `json:"container_id,omitempty"`
+	PublicURL             *string              `json:"public_url,omitempty"`
+	Port                  *int                 `json:"port,omitempty"`
+	CreatedAt             time.Time            `json:"created_at"`
+	UpdatedAt             time.Time            `json:"updated_at"`
+	ExpiresAt             *time.Time           `json:"expires_at,omitempty"`
+	HasUncommittedChanges bool                 `json:"has_uncommitted_changes"`
+	LastModifiedAt        *time.Time           `json:"last_modified_at,omitempty"`
+	ModifiedByUserID      *uuid.UUID           `json:"modified_by_user_id,omitempty"`
+	CommitHash            *string              `json:"commit_hash,omitempty"`
 }
 
 // IsActive returns true if the sandbox is running or building.
@@ -108,10 +110,12 @@ type SandboxSpec struct {
 	WorkDir      string
 	WorkspaceDir string            // Host directory to bind-mount into container
 	ExtraMounts  map[string]string // HostDir -> ContainerDir
-	Cmd          []string          // Container main process (keep-alive for dev envs)
+	Cmd          []string          // Container main process (watcher for hot reload)
 	Env          map[string]string
-	MemoryLimit  int64 // bytes
-	CPULimit     int64 // milli-cores
-	DiskLimit    int64 // bytes
+	MemoryLimit  int64             // bytes
+	CPULimit     int64             // milli-cores
+	DiskLimit    int64             // bytes
 	NetworkID    string
+	ExposedPort  *int              // Port the application exposes (for Traefik)
+	Labels       map[string]string // Additional Docker labels (e.g., for Traefik)
 }

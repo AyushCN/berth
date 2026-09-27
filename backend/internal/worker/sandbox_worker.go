@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/AyushCN/berth/internal/analyzer"
 	"github.com/AyushCN/berth/internal/domain"
+	"github.com/AyushCN/berth/internal/usecase"
 	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
 	natsCore "github.com/nats-io/nats.go"
 	"io"
@@ -24,17 +25,19 @@ import (
 )
 
 type SandboxWorker struct {
-	repo       domain.SandboxRepository
-	runtime    domain.ContainerRuntime
-	natsClient *natsInfra.Client
-	wg         sync.WaitGroup
+	repo           domain.SandboxRepository
+	runtime        domain.ContainerRuntime
+	natsClient     *natsInfra.Client
+	dataCollector  *usecase.DataCollector
+	wg             sync.WaitGroup
 }
 
-func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client) *SandboxWorker {
+func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client, dataCollector *usecase.DataCollector) *SandboxWorker {
 	return &SandboxWorker{
-		repo:       repo,
-		runtime:    runtime,
-		natsClient: natsClient,
+		repo:          repo,
+		runtime:       runtime,
+		natsClient:    natsClient,
+		dataCollector: dataCollector,
 	}
 }
 
@@ -284,15 +287,20 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	analyzeDuration := time.Since(analyzeStart)
 	slog.Info("static analysis completed", "sandbox_id", sandbox.ID, "language", profile.Language, "duration", analyzeDuration)
 
-	// Create container with keep-alive command
+	// Create container with process watcher for hot reload
+	watcherCmd := WatcherCommand(profile)
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,
 		WorkDir:      "/workspace",
 		WorkspaceDir: workspaceDir,
-		Cmd:          []string{"sh", "-c", "while true; do sleep 1; done"},
+		Cmd:          watcherCmd,
 		MemoryLimit:  512 * 1024 * 1024,
 		CPULimit:     1000,
+		ExposedPort:  &profile.ExposedPort,
+		Labels: map[string]string{
+			"berth.language": profile.Language,
+		},
 	}
 
 	createStart := time.Now()
@@ -330,30 +338,26 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 			slog.Info("dependencies installed successfully", "sandbox_id", sandbox.ID, "install_duration", installDuration)
 		}
 	}
-	// Start application in background
-	allocatedPort, err := getFreePort()
-	if err != nil {
-		slog.Warn("failed to allocate free port", "error", err)
-		allocatedPort = profile.ExposedPort
-		if allocatedPort == 0 {
-			allocatedPort = 3000
-		}
-	}
 
-	if profile.StartCmd != "" {
-		startArgs := []string{"sh", "-c", fmt.Sprintf("cd /workspace && PORT=%d %s > /tmp/app.log 2>&1 &", allocatedPort, profile.StartCmd)}
-		if out, err := w.runtime.Exec(bgCtx, cid, startArgs); err != nil {
-			slog.Warn("failed to start application", "error", err, "output", out)
-		} else {
-			slog.Info("application start command issued", "cmd", profile.StartCmd, "port", allocatedPort)
-		}
+	// The watcher command (nodemon/uvicorn/air) is the main container process
+	// It will start the application and watch for file changes
+	allocatedPort := profile.ExposedPort
+	if allocatedPort == 0 {
+		allocatedPort = 3000
 	}
 
 	apiHost := os.Getenv("API_PUBLIC_HOST")
 	if apiHost == "" {
 		apiHost = "http://localhost:8080"
 	}
-	publicURL := fmt.Sprintf("%s/p/%s/", apiHost, sandbox.ID)
+	// With Traefik, preview URL is sandbox-id.domain
+	publicURL := fmt.Sprintf("http://%s.%s/", sandbox.ID, strings.TrimPrefix(apiHost, "http://"))
+	if strings.HasPrefix(apiHost, "http://") {
+		host := strings.TrimPrefix(apiHost, "http://")
+		publicURL = fmt.Sprintf("http://%s.%s/", sandbox.ID, host)
+	} else {
+		publicURL = fmt.Sprintf("%s/p/%s/", apiHost, sandbox.ID)
+	}
 	if err := w.repo.UpdateContainerAndURL(context.Background(), sandbox.ID, cid, publicURL, allocatedPort); err != nil {
 		slog.Error("worker failed to update container id and url", "sandbox_id", sandbox.ID, "error", err)
 	}
@@ -361,6 +365,21 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	if err := w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateRunning); err != nil {
 		slog.Error("worker failed to set RUNNING state", "sandbox_id", sandbox.ID, "error", err)
 		return
+	}
+
+	// Collect training data for prediction engine
+	if w.dataCollector != nil {
+		detectionResult := &analyzer.DetectionResult{
+			RuntimeProfile: profile,
+			Architecture:   profile.Architecture,
+			Framework:      profile.Framework,
+			CacheKey:       "",
+			Lockfiles:      []analyzer.LockfileInfo{},
+			EntryPoints:    []analyzer.EntryPoint{},
+		}
+		if err := w.dataCollector.CollectFromProfile(context.Background(), profile, detectionResult); err != nil {
+			slog.Warn("failed to collect training data", "sandbox_id", sandbox.ID, "error", err)
+		}
 	}
 
 	if w.natsClient != nil {

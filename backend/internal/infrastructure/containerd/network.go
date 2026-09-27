@@ -3,11 +3,11 @@ package containerd
 import (
 	"context"
 	"fmt"
-	"os"
 	"log/slog"
 	"net"
 	"sync"
 
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/vishvananda/netlink"
 )
 
@@ -41,14 +41,6 @@ func (nm *NetworkManager) CreateNetwork(ctx context.Context, networkID string) e
 
 	bridgeName := "br-" + networkID[:12]
 
-	if os.Geteuid() != 0 {
-		slog.Warn("skipping network creation: netlink requires root privileges", "networkID", networkID)
-		nm.bridges[networkID] = "mock-bridge"
-		nm.bridgeCIDR[networkID] = "172.30.99.0/24"
-		nm.ipCounter[networkID] = 2
-		return nil
-	}
-
 	// Check if bridge exists
 	_, err := netlink.LinkByName(bridgeName)
 	if err == nil {
@@ -80,16 +72,24 @@ func (nm *NetworkManager) CreateNetwork(ctx context.Context, networkID string) e
 		slog.Warn("bridge IP assignment failed", "error", err)
 	}
 
-	// Enable IP forwarding
-	if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1\n"), 0644); err != nil {
-		slog.Warn("failed to enable ip_forward", "error", err)
+	// Initialize iptables
+	ipt, err := iptables.New()
+	if err != nil {
+		return fmt.Errorf("failed to initialize iptables: %w", err)
 	}
 
-	// Add iptables NAT rule via netfilter (best-effort, requires CAP_NET_ADMIN)
-	// For full netfilter control, use github.com/coreos/go-iptables
-	// This is still better than raw exec.Command because it's typed and testable
-	_ = addMasqueradeRule(cidr, bridgeName)
-	_ = addForwardAcceptRule(bridgeName)
+	// Add iptables NAT rule
+	if err := ipt.Append("nat", "POSTROUTING", "-s", cidr, "!", "-o", "br-"+networkID[:12], "-j", "MASQUERADE"); err != nil {
+		slog.Warn("failed to add masquerade rule", "error", err)
+	}
+
+	// Add forward accept rule
+	if err := ipt.Append("filter", "FORWARD", "-i", "br-"+networkID[:12], "-j", "ACCEPT"); err != nil {
+		slog.Warn("failed to add forward accept rule", "error", err)
+	}
+	if err := ipt.Append("filter", "FORWARD", "-o", "br-"+networkID[:12], "-j", "ACCEPT"); err != nil {
+		slog.Warn("failed to add forward accept rule (out)", "error", err)
+	}
 
 	nm.bridges[networkID] = bridgeName
 	nm.bridgeCIDR[networkID] = cidr
@@ -207,14 +207,5 @@ func (nm *NetworkManager) GetHostPort(containerID string) int {
 }
 
 // addMasqueradeRule adds a POSTROUTING MASQUERADE rule (best-effort).
-func addMasqueradeRule(cidr, bridgeName string) error {
-	// TODO: use github.com/coreos/go-iptables for production
-	// This function is a placeholder for the netlink migration
-	return nil
-}
 
 // addForwardAcceptRule adds a FORWARD ACCEPT rule (best-effort).
-func addForwardAcceptRule(bridgeName string) error {
-	// TODO: use github.com/coreos/go-iptables for production
-	return nil
-}

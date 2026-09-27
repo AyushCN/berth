@@ -89,6 +89,28 @@ func (h *ProjectHandler) ListForUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"projects": projs})
 }
 
+func (h *ProjectHandler) GetByID(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	projectID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project id"})
+		return
+	}
+
+	proj, err := h.projUC.GetByID(c.Request.Context(), uid, projectID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"project": proj})
+}
+
 func (h *ProjectHandler) GetSandboxes(c *gin.Context) {
 	userID, _ := c.Get("userId")
 	uid, err := uuid.Parse(userID.(string))

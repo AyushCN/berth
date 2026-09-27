@@ -250,8 +250,16 @@ export default function EnvironmentPage() {
             {/* Git Panels */}
             {env.git_url && (
               <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-3 gap-3">
-                <GitStatusPanel envId={id} />
-                <CommitHistoryPanel envId={id} />
+                {env.state === 'RUNNING' ? (
+                  <>
+                    <GitStatusPanel envId={id} />
+                    <CommitHistoryPanel envId={id} />
+                  </>
+                ) : (
+                  <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-center text-xs text-white/40">
+                    Git status and commit history will be available when the sandbox is running.
+                  </p>
+                )}
               </div>
             )}
           </div>

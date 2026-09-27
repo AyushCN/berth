@@ -1,32 +1,168 @@
-# Architecture and Trust Boundaries
+# Architecture
 
 ## Overview
 
-Berth is currently a single-host sandbox prototype. The control plane is a Go API backed by PostgreSQL and NATS. A worker consumes sandbox jobs, clones the repository, detects a runtime from repository files, and asks containerd to create and start a sandbox.
+Berth is a single-host sandbox prototype with a control plane (Go API + PostgreSQL + NATS) and a worker that provisions containers via containerd.
 
-```text
-Browser → Next.js frontend → Go API → PostgreSQL
-                                  └── NATS → Go worker → containerd → sandbox
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Browser    │────▶│  Next.js     │────▶│  Go API         │
+│  (Frontend) │     │  (UI)        │     │  (Control Plane)│
+└─────────────┘     └──────────────┘     └───────┬─────────┘
+                                                  │
+         ┌────────────────────────────────────────┼────────────────────────┐
+         │                                        │                        │
+         ▼                                        ▼                        ▼
+┌──────────────────┐                    ┌──────────────────┐      ┌──────────────────┐
+│  PostgreSQL      │                    │  NATS            │      │  containerd      │
+│  (State Store)   │                    │  (Message Bus)   │      │  (Container      │
+│                  │                    │                  │      │   Runtime)       │
+└──────────────────┘                    └──────────────────┘      └────────┬─────────┘
+                                                                            │
+                                                                     ┌────────▼─────────┐
+                                                                     │  Sandbox         │
+                                                                     │  (Container)     │
+                                                                     └──────────────────┘
 ```
 
-## Current implementation
+---
 
-- Runtime detection happens after cloning and uses file-based rules in `backend/internal/analyzer`.
-- The local configuration defaults to rootless containerd with `runc.v2`; gVisor/runsc is not the default verified path.
-- Workspace files are bind-mounted so API edits can reach the running container.
-- Rootless local networking uses the host network namespace. Preview ports therefore do not have per-sandbox network isolation.
-- NATS carries provisioning and terminal traffic. PostgreSQL stores sandbox and account state.
+## Core Components
 
-## Security and deployment limits
+### 1. API Server (`cmd/api`)
+- **Framework**: Gin HTTP server
+- **Auth**: JWT + GitHub OAuth
+- **Endpoints**: REST + WebSocket
+- **Auth Middleware**: JWT validation, rate limiting
+- **WebSocket Hub**: Real-time terminal, file edits, presence
 
-This setup is intended for development and research on a single host. It does not currently provide network isolation between sandboxes, a dedicated public preview gateway, verified multi-tenant isolation, production mTLS/SPIFFE, Cilium policy enforcement, or a multi-node control plane. Runtime hardening and resource limits are host/runtime dependent. Do not expose this configuration to untrusted users as a production multi-tenant service.
+### 2. Worker (`cmd/worker`)
+- **Job Processing**: Consumes NATS `berth.sandbox.create`
+- **Repository Cloning**: GitHub HTTPS cloning with caching
+- **Runtime Analysis**: Post-clone detection via analyzer
+- **Container Lifecycle**: Create → Start → Install → Run
+- **Cleanup**: Expiry sweep, stop/delete via NATS
 
-## Provisioning flow
+### 3. Runtime Analyzer (`internal/analyzer`)
+- **Architecture Detection**: MONOREPO, LIBRARY, CLI, API, FULL_STACK, WEB_APP
+- **Framework Detection**: 30+ frameworks across 5 languages
+- **Entry Points**: Dockerfile, docker-compose, main files
+- **Lockfile Detection**: 18 lockfile types with SHA256 cache keys
+- **Docker Compose Parsing**: Full service/network/volume parsing
 
-1. The frontend submits a repository URL to the Go API.
-2. The API stores a pending sandbox and publishes a NATS job.
-3. The worker validates the URL, clones the repository, and detects the runtime from its files.
-4. The worker creates and starts the container, installs dependencies, and starts the detected application command.
-5. The worker records the container and preview port. Current local preview behavior relies on host networking and is not a stable public routing solution.
+### 4. Build Planner (`internal/usecase/build_planner.go`)
+- **Strategy Pattern**: Compose → Python → Node → Go → Rust → Java → Fallback
+- **BuildPlan Generation**: Dockerfile, build args, commands, ports
+- **Strategy Detection**: Lockfiles, runtime profile, Docker Compose
 
-File editing and terminal components exist, but frontend wiring remains incomplete. OAuth-backed Git push and collaborative editing are outside the demo scope.
+### 5. Prediction Engine (`internal/usecase/`)
+- **DataCollector**: Collects training data from builds/profiles
+- **ModelTrainer**: Linear Regression, Random Forest, XGBoost
+- **PredictionService**: Build time, image size, cache hit, failure risk
+- **ONNX Export**: Binary protobuf ONNX model export
+- **gRPC Service**: Prediction, model management, retraining
+
+### 6. Infrastructure
+- **containerd**: Rootless, runc.v2, layer commit, tar export
+- **PostgreSQL**: SQLC-generated queries, migrations
+- **NATS**: JetStream for job orchestration
+- **Redis**: PubSub for WebSocket, session cache
+- **Docker**: Image building, registry interaction
+
+---
+
+## Data Flow
+
+### Sandbox Provisioning
+```
+1. Frontend → POST /api/environments (repo URL)
+2. API → Create pending sandbox in PostgreSQL
+3. API → Publish NATS job (berth.sandbox.create)
+4. Worker → Consume job, clone repo (with Git cache)
+4. Worker → Analyzer.Analyze(workspace) → RuntimeProfile
+5. Worker → BuildPlanner.GenerateBuildPlan() → BuildPlan
+6. Worker → containerd.CreateSandbox() → Container
+7. Worker → Install deps, start app
+8. Worker → Update sandbox state (RUNNING, public_url)
+9. Frontend ← Poll /api/environments/:id → Status
+```
+
+### Prediction Flow
+```
+1. Sandbox created → DataCollector.CollectFromProfile()
+2. Build completes → DataCollector.CollectFromBuild()
+3. Scheduled → ModelTrainer.TrainModel() (Linear/RF/XGBoost)
+4. Export → ModelTrainer.ExportONNX() → .onnx file
+5. Request → PredictionService.Predict() → ONNX inference
+6. Fallback → Mock prediction if ONNX unavailable
+```
+
+---
+
+## Trust Boundaries & Security
+
+| Boundary | Implementation | Limitation |
+|----------|----------------|------------|
+| **User ↔ API** | JWT + GitHub OAuth | No mTLS |
+| **API ↔ Worker** | NATS (no auth in dev) | No mutual TLS |
+| **Worker ↔ containerd** | Unix socket (rootless) | No remote access |
+| **Sandbox Isolation** | Rootless containerd + runc.v2 | No gVisor, host networking |
+| **Network** | Host network namespace | No per-sandbox isolation |
+| **Secrets** | Encrypted at rest (AES-GCM) | Keys in env vars |
+
+**Not Suitable For**: Multi-tenant public service, untrusted workloads, production deployment.
+
+---
+
+## Database Schema
+
+### Core Tables
+- `users` - GitHub OAuth users
+- `organizations` - Workspaces/teams
+- `projects` - GitHub repositories
+- `workspaces` - Canonical + fork workspaces
+- `environments` - Running sandboxes
+- `runtime_profiles` - Detected runtime specs
+- `build_plans` - Build instructions
+- `builds` - Build history
+- `images` - Built container images
+- `change_requests` - Editor→Owner workflow
+
+### Prediction Tables
+- `predictions` - Model predictions
+- `models` - Trained ML models
+- `training_data` - Build data for training
+
+---
+
+## Configuration
+
+### Environment Variables
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `REDIS_URL` | Yes | Redis connection string |
+| `NATS_URL` | No | NATS server URL |
+| `JWT_SECRET` | Yes | 32+ byte JWT signing key |
+| `GITHUB_CLIENT_ID` | Yes | GitHub OAuth app ID |
+| `GITHUB_CLIENT_SECRET` | Yes | GitHub OAuth secret |
+| `FRONTEND_URL` | Yes | Frontend origin for CORS |
+| `ENCRYPTION_KEY` | Yes | 32-byte hex AES-GCM key |
+| `DOCKER_HOST` | Yes | Docker/containerd socket |
+| `TRAEFIK_DOMAIN` | Yes | Preview domain |
+| `MODEL_DIR` | No | ONNX model storage |
+
+---
+
+## Limitations
+
+| Area | Current State |
+|------|---------------|
+| **Multi-host** | Not supported |
+| **Network Isolation** | Host networking only |
+| **Runtime Hardening** | runc.v2 only, no gVisor |
+| **Multi-tenancy** | Not implemented |
+| **Preview Gateway** | Host network proxy only |
+| **mTLS/SPIFFE** | Not implemented |
+| **Collaborative Editing** | Out of scope |
+| **OAuth Git Push** | Incomplete |

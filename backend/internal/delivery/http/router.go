@@ -50,8 +50,17 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			// Projects
 			authenticated.POST("/projects", deps.ProjectHandler.Create)
 			authenticated.GET("/projects", deps.ProjectHandler.ListForUser)
+			authenticated.GET("/projects/:id", deps.ProjectHandler.GetByID)
 			authenticated.GET("/orgs/:id/projects", deps.ProjectHandler.ListForOrg)
 			authenticated.GET("/projects/:id/sandboxes", deps.ProjectHandler.GetSandboxes)
+
+			// Share Links
+			authenticated.POST("/projects/:id/share-links", deps.ShareLinkHandler.CreateShareLink)
+			authenticated.GET("/projects/:id/share-links", deps.ShareLinkHandler.GetShareLinks)
+			authenticated.DELETE("/projects/:id/share-links/:linkId", deps.ShareLinkHandler.RevokeShareLink)
+
+			// Join via share link (public endpoint, but requires auth)
+			authenticated.POST("/join", deps.ShareLinkHandler.JoinViaShareLink)
 
 			// Environments
 			authenticated.GET("/environments", deps.SandboxHandler.ListEnvironments)
@@ -80,6 +89,33 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			authenticated.POST("/environments/:id/git/commit", deps.GitHandler.Commit)
 			authenticated.POST("/environments/:id/git/push", deps.GitHandler.Push)
 			authenticated.GET("/environments/:id/git/log", deps.GitHandler.Log)
+
+			// Change Requests
+			authenticated.POST("/projects/:id/change-requests", deps.ChangeRequestHandler.CreateChangeRequest)
+			authenticated.GET("/projects/:id/change-requests", deps.ChangeRequestHandler.ListChangeRequests)
+			authenticated.GET("/change-requests/:id", deps.ChangeRequestHandler.GetChangeRequest)
+			authenticated.PUT("/change-requests/:id", deps.ChangeRequestHandler.UpdateChangeRequest)
+			authenticated.POST("/change-requests/:id/merge", deps.ChangeRequestHandler.MergeChangeRequest)
+			authenticated.POST("/change-requests/:id/close", deps.ChangeRequestHandler.CloseChangeRequest)
+			authenticated.GET("/change-requests/:id/diff", deps.ChangeRequestHandler.GetDiff)
+
+			// Predictions
+			authenticated.POST("/predictions/build-time", deps.PredictionHandler.PredictBuildTime)
+			authenticated.POST("/predictions/image-size", deps.PredictionHandler.PredictImageSize)
+			authenticated.POST("/predictions/cache-hit", deps.PredictionHandler.PredictCacheHit)
+			authenticated.POST("/predictions/failure-risk", deps.PredictionHandler.PredictFailureRisk)
+			authenticated.GET("/predictions/history", deps.PredictionHandler.GetPredictionHistory)
+			authenticated.GET("/predictions/models/metrics", deps.PredictionHandler.GetModelMetrics)
+			authenticated.POST("/predictions/models/retrain", deps.PredictionHandler.RetrainModel)
+			authenticated.POST("/predictions/models/export", deps.PredictionHandler.ExportModelONNX)
+			authenticated.POST("/predictions/models/activate", deps.PredictionHandler.ActivateModel)
+
+			// Activity & Suspend/Resume
+			authenticated.POST("/activity", deps.ActivityHandler.RecordActivity)
+			authenticated.POST("/activity/session/start", deps.ActivityHandler.RecordSessionStart)
+			authenticated.POST("/activity/session/end", deps.ActivityHandler.RecordSessionEnd)
+			authenticated.POST("/environments/resume", deps.ActivityHandler.ResumeEnvironment)
+			authenticated.GET("/environments/idle", deps.ActivityHandler.GetIdleEnvironments)
 		}
 	}
 
@@ -98,11 +134,15 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 
 // Dependencies holds all handler dependencies.
 type Dependencies struct {
-	AuthHandler    *handler.AuthHandler
-	SandboxHandler *handler.SandboxHandler
-	FileHandler    *handler.FileHandler
-	WSHandler      *handler.WSHandler
-	GitHandler     *handler.GitHandler
-	OrgHandler     *handler.OrganizationHandler
-	ProjectHandler *handler.ProjectHandler
+	AuthHandler        *handler.AuthHandler
+	SandboxHandler     *handler.SandboxHandler
+	FileHandler        *handler.FileHandler
+	WSHandler          *handler.WSHandler
+	GitHandler         *handler.GitHandler
+	OrgHandler         *handler.OrganizationHandler
+	ProjectHandler     *handler.ProjectHandler
+	ShareLinkHandler   *handler.ShareLinkHandler
+	ChangeRequestHandler *handler.ChangeRequestHandler
+	ActivityHandler    *handler.ActivityHandler
+	PredictionHandler  *handler.PredictionHandler
 }

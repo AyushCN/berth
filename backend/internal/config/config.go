@@ -21,7 +21,12 @@ type Config struct {
 	FrontendURL        string
 	ContainerdSocket   string
 	WorkspaceDir       string
-	Runtime            string // "runsc" or "runc"
+	Runtime            string // "runsc" or "runc" (legacy)
+
+	// Docker runtime settings
+	DockerHost       string
+	DockerNetwork    string
+	TraefikDomain    string
 }
 
 // Load reads configuration from environment variables.
@@ -67,6 +72,9 @@ func Load() (*Config, error) {
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
 		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
 		Runtime:            getEnv("BERTH_RUNTIME", "runc"),
+		DockerHost:       getEnv("DOCKER_HOST", "unix:///var/run/docker.sock"),
+		DockerNetwork:    getEnv("DOCKER_NETWORK", "berth"),
+		TraefikDomain:    getEnv("TRAEFIK_DOMAIN", "localhost"),
 	}
 
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")

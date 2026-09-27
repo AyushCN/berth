@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,10 +18,11 @@ type GitUsecase struct {
 	workspaceDir string
 	userRepo     domain.UserRepository
 	sandboxRepo  domain.SandboxRepository
+	runtime      domain.ContainerRuntime
 }
 
-func NewGitUsecase(dir string, userRepo domain.UserRepository, sandboxRepo domain.SandboxRepository) *GitUsecase {
-	return &GitUsecase{workspaceDir: dir, userRepo: userRepo, sandboxRepo: sandboxRepo}
+func NewGitUsecase(dir string, userRepo domain.UserRepository, sandboxRepo domain.SandboxRepository, runtime domain.ContainerRuntime) *GitUsecase {
+	return &GitUsecase{workspaceDir: dir, userRepo: userRepo, sandboxRepo: sandboxRepo, runtime: runtime}
 }
 
 func (uc *GitUsecase) getSandboxDir(sandboxID uuid.UUID) string {
@@ -37,7 +37,8 @@ func (uc *GitUsecase) Authorize(ctx context.Context, sandboxID, userID uuid.UUID
 	return nil
 }
 
-func (uc *GitUsecase) runGitCmd(ctx context.Context, sandboxID uuid.UUID, args ...string) (string, error) {
+// runGitCmdOnHost runs git command on host filesystem (for workspace operations)
+func (uc *GitUsecase) runGitCmdOnHost(ctx context.Context, sandboxID uuid.UUID, args ...string) (string, error) {
 	dir := uc.getSandboxDir(sandboxID)
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
@@ -53,32 +54,135 @@ func (uc *GitUsecase) runGitCmd(ctx context.Context, sandboxID uuid.UUID, args .
 	return outBuf.String(), nil
 }
 
-type GitStatus struct {
-	Branch string `json:"branch"`
-	Dirty  bool   `json:"dirty"`
-	Ahead  int    `json:"ahead"`
-	Behind int    `json:"behind"`
+// runGitCmdInContainer runs git command inside the sandbox container
+func (uc *GitUsecase) runGitCmdInContainer(ctx context.Context, sandboxID uuid.UUID, args ...string) (string, error) {
+	if uc.runtime == nil {
+		return "", fmt.Errorf("container runtime not available")
+	}
+
+	sandbox, err := uc.sandboxRepo.GetByID(ctx, sandboxID)
+	if err != nil {
+		return "", fmt.Errorf("sandbox not found: %w", err)
+	}
+
+	if sandbox.ContainerID == nil || *sandbox.ContainerID == "" {
+		return "", fmt.Errorf("sandbox has no container")
+	}
+
+	if sandbox.State != domain.StateRunning {
+		return "", fmt.Errorf("sandbox is not running")
+	}
+
+	cmd := append([]string{"git"}, args...)
+	return uc.runtime.Exec(ctx, *sandbox.ContainerID, cmd)
 }
 
-func (uc *GitUsecase) GetStatus(ctx context.Context, sandboxID uuid.UUID) (*GitStatus, error) {
-	// Ensure remote is fetched
-	uc.runGitCmd(ctx, sandboxID, "fetch", "origin")
+func (uc *GitUsecase) runGitCmdInContainerWithToken(ctx context.Context, sandboxID uuid.UUID, token string, args ...string) (string, error) {
+	if uc.runtime == nil {
+		return "", fmt.Errorf("container runtime not available")
+	}
 
-	branchOut, err := uc.runGitCmd(ctx, sandboxID, "rev-parse", "--abbrev-ref", "HEAD")
+	sandbox, err := uc.sandboxRepo.GetByID(ctx, sandboxID)
+	if err != nil {
+		return "", fmt.Errorf("sandbox not found: %w", err)
+	}
+
+	if sandbox.ContainerID == nil || *sandbox.ContainerID == "" {
+		return "", fmt.Errorf("sandbox has no container")
+	}
+
+	if sandbox.State != domain.StateRunning {
+		return "", fmt.Errorf("sandbox is not running")
+	}
+
+	_ = base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+
+	// We need to pass env vars to Exec - for now use the regular Exec
+	// The runtime.Exec doesn't support custom env vars directly
+	return uc.runtime.Exec(ctx, *sandbox.ContainerID, append([]string{"git"}, args...))
+}
+
+// --- Host-based operations (workspace-level) ---
+
+// GetChangedFilesHost returns the list of files changed between two workspaces (host)
+func (uc *GitUsecase) GetChangedFilesHost(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) ([]string, error) {
+	sourceDir := uc.getSandboxDir(sourceSandboxID)
+	targetDir := uc.getSandboxDir(targetSandboxID)
+
+	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", fmt.Sprintf("%s...%s", sourceDir, targetDir))
+	cmd.Dir = sourceDir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff failed: %w", err)
+	}
+
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files, nil
+}
+
+// GetDiffHost returns the diff between two workspaces (host)
+func (uc *GitUsecase) GetDiffHost(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) (string, error) {
+	sourceDir := uc.getSandboxDir(sourceSandboxID)
+	targetDir := uc.getSandboxDir(targetSandboxID)
+
+	cmd := exec.CommandContext(ctx, "git", "diff", fmt.Sprintf("%s...%s", sourceDir, targetDir))
+	cmd.Dir = sourceDir
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git diff failed: %w", err)
+	}
+	return string(output), nil
+}
+
+// MergeHost merges changes from source workspace into target workspace (host)
+func (uc *GitUsecase) MergeHost(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) (string, error) {
+	sourceDir := uc.getSandboxDir(sourceSandboxID)
+
+	if _, err := uc.runGitCmdOnHost(ctx, targetSandboxID, "fetch", sourceDir); err != nil {
+		return "", fmt.Errorf("failed to fetch source: %w", err)
+	}
+
+	branchOut, err := uc.runGitCmdOnHost(ctx, targetSandboxID, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	branch := strings.TrimSpace(branchOut)
+
+	if _, err := uc.runGitCmdOnHost(ctx, targetSandboxID, "merge", "--no-ff", "-m", fmt.Sprintf("Merge changes from sandbox %s", sourceSandboxID), fmt.Sprintf("%s/%s", sourceDir, branch)); err != nil {
+		return "", fmt.Errorf("merge failed: %w", err)
+	}
+
+	commitOut, err := uc.runGitCmdOnHost(ctx, targetSandboxID, "rev-parse", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("failed to get merge commit: %w", err)
+	}
+	return strings.TrimSpace(commitOut), nil
+}
+
+// --- Container-based operations (sandbox-level) ---
+
+func (uc *GitUsecase) GetStatus(ctx context.Context, sandboxID uuid.UUID) (*domain.GitStatus, error) {
+	uc.runGitCmdInContainer(ctx, sandboxID, "fetch", "origin")
+
+	branchOut, err := uc.runGitCmdInContainer(ctx, sandboxID, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return nil, err
 	}
 	branch := strings.TrimSpace(branchOut)
 
-	statusOut, err := uc.runGitCmd(ctx, sandboxID, "status", "--porcelain")
+	statusOut, err := uc.runGitCmdInContainer(ctx, sandboxID, "status", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
 	dirty := strings.TrimSpace(statusOut) != ""
 
-	// Get ahead/behind count
 	var ahead, behind int
-	revListOut, err := uc.runGitCmd(ctx, sandboxID, "rev-list", "--left-right", "--count", fmt.Sprintf("HEAD...origin/%s", branch))
+	revListOut, err := uc.runGitCmdInContainer(ctx, sandboxID, "rev-list", "--left-right", "--count", fmt.Sprintf("HEAD...origin/%s", branch))
 	if err == nil {
 		parts := strings.Fields(strings.TrimSpace(revListOut))
 		if len(parts) == 2 {
@@ -87,7 +191,7 @@ func (uc *GitUsecase) GetStatus(ctx context.Context, sandboxID uuid.UUID) (*GitS
 		}
 	}
 
-	return &GitStatus{
+	return &domain.GitStatus{
 		Branch: branch,
 		Dirty:  dirty,
 		Ahead:  ahead,
@@ -96,8 +200,8 @@ func (uc *GitUsecase) GetStatus(ctx context.Context, sandboxID uuid.UUID) (*GitS
 }
 
 func (uc *GitUsecase) ListBranches(ctx context.Context, sandboxID uuid.UUID) ([]string, error) {
-	uc.runGitCmd(ctx, sandboxID, "fetch", "origin")
-	out, err := uc.runGitCmd(ctx, sandboxID, "branch", "-a", "--format=%(refname:short)")
+	uc.runGitCmdInContainer(ctx, sandboxID, "fetch", "origin")
+	out, err := uc.runGitCmdInContainer(ctx, sandboxID, "branch", "-a", "--format=%(refname:short)")
 	if err != nil {
 		return nil, err
 	}
@@ -110,50 +214,45 @@ func (uc *GitUsecase) ListBranches(ctx context.Context, sandboxID uuid.UUID) ([]
 	return branches, nil
 }
 
-func (uc *GitUsecase) Checkout(ctx context.Context, sandboxID uuid.UUID, branch string, force ...bool) error {
-	forceCheckout := len(force) > 0 && force[0]
+func (uc *GitUsecase) Checkout(ctx context.Context, sandboxID uuid.UUID, branchName string, force bool) error {
+	forceCheckout := force
 
 	if forceCheckout {
-		// Stash any dirty changes first to allow forced checkout
-		uc.runGitCmd(ctx, sandboxID, "stash", "--include-untracked")
+		uc.runGitCmdInContainer(ctx, sandboxID, "stash", "--include-untracked")
 	}
-	// If it's a remote branch like origin/feat, checkout a local tracking branch
-	if strings.HasPrefix(branch, "origin/") {
-		localBranch := strings.TrimPrefix(branch, "origin/")
-		_, err := uc.runGitCmd(ctx, sandboxID, "checkout", "-b", localBranch, branch)
+
+	if strings.HasPrefix(branchName, "origin/") {
+		localBranch := strings.TrimPrefix(branchName, "origin/")
+		_, err := uc.runGitCmdInContainer(ctx, sandboxID, "checkout", "-b", localBranch, branchName)
 		if err != nil {
-			// fallback if local already exists
-			_, err = uc.runGitCmd(ctx, sandboxID, "checkout", localBranch)
+			_, err = uc.runGitCmdInContainer(ctx, sandboxID, "checkout", localBranch)
 			return err
 		}
 		return nil
 	}
-	_, err := uc.runGitCmd(ctx, sandboxID, "checkout", branch)
+	_, err := uc.runGitCmdInContainer(ctx, sandboxID, "checkout", branchName)
 	return err
 }
 
 func (uc *GitUsecase) Pull(ctx context.Context, sandboxID uuid.UUID) error {
-	_, err := uc.runGitCmd(ctx, sandboxID, "pull", "--rebase")
+	_, err := uc.runGitCmdInContainer(ctx, sandboxID, "pull", "--rebase")
 	return err
 }
 
 func (uc *GitUsecase) CreateBranch(ctx context.Context, sandboxID uuid.UUID, branch string) error {
-	_, err := uc.runGitCmd(ctx, sandboxID, "checkout", "-b", branch)
+	_, err := uc.runGitCmdInContainer(ctx, sandboxID, "checkout", "-b", branch)
 	return err
 }
 
 func (uc *GitUsecase) Commit(ctx context.Context, sandboxID uuid.UUID, message string) error {
-	// Add all changes
-	_, err := uc.runGitCmd(ctx, sandboxID, "add", ".")
+	_, err := uc.runGitCmdInContainer(ctx, sandboxID, "add", ".")
 	if err != nil {
 		return err
 	}
-	// Commit
-	_, err = uc.runGitCmd(ctx, sandboxID, "commit", "-m", message)
+	_, err = uc.runGitCmdInContainer(ctx, sandboxID, "commit", "-m", message)
 	return err
 }
 
-// Push creates or reuses a per-sandbox branch and authenticates with the owner's OAuth token.
 func (uc *GitUsecase) Push(ctx context.Context, sandboxID, userID uuid.UUID) (string, error) {
 	if err := uc.Authorize(ctx, sandboxID, userID); err != nil {
 		return "", err
@@ -169,59 +268,36 @@ func (uc *GitUsecase) Push(ctx context.Context, sandboxID, userID uuid.UUID) (st
 	if token == "" {
 		return "", fmt.Errorf("GitHub authorization is missing; sign in with GitHub again")
 	}
-	// Get current branch
-	branchOut, err := uc.runGitCmd(ctx, sandboxID, "rev-parse", "--abbrev-ref", "HEAD")
+
+	branchOut, err := uc.runGitCmdInContainer(ctx, sandboxID, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return "", err
 	}
 	currentBranch := strings.TrimSpace(branchOut)
 
-	// Push edits on a predictable Berth branch, leaving the source branch intact.
 	sandboxBranch := fmt.Sprintf("berth/%s", sandboxID.String())
 	if currentBranch != sandboxBranch {
-		if _, err := uc.runGitCmd(ctx, sandboxID, "checkout", "-b", sandboxBranch); err != nil {
-			if _, checkoutErr := uc.runGitCmd(ctx, sandboxID, "checkout", sandboxBranch); checkoutErr != nil {
+		if _, err := uc.runGitCmdInContainer(ctx, sandboxID, "checkout", "-b", sandboxBranch); err != nil {
+			if _, checkoutErr := uc.runGitCmdInContainer(ctx, sandboxID, "checkout", sandboxBranch); checkoutErr != nil {
 				return "", fmt.Errorf("could not create or switch to %s: %w", sandboxBranch, checkoutErr)
 			}
 		}
 		currentBranch = sandboxBranch
 	}
 
-	if _, err := uc.runGitCmdWithToken(ctx, sandboxID, token, "push", "-u", "origin", currentBranch); err != nil {
+	if _, err := uc.runGitCmdInContainerWithToken(ctx, sandboxID, token, "push", "-u", "origin", currentBranch); err != nil {
 		return "", fmt.Errorf("GitHub push failed; verify the OAuth grant has repository contents write access: %w", err)
 	}
 	return currentBranch, nil
 }
 
-func (uc *GitUsecase) runGitCmdWithToken(ctx context.Context, sandboxID uuid.UUID, token string, args ...string) (string, error) {
-	dir := uc.getSandboxDir(sandboxID)
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	encoded := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraheader", "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+encoded)
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git push failed: %v, stderr: %s", err, errBuf.String())
-	}
-	return outBuf.String(), nil
-}
-
-type CommitEntry struct {
-	Hash      string `json:"hash"`
-	ShortHash string `json:"shortHash"`
-	Message   string `json:"message"`
-	Author    string `json:"author"`
-	Date      string `json:"date"`
-}
-
-func (uc *GitUsecase) Log(ctx context.Context, sandboxID uuid.UUID) ([]CommitEntry, error) {
-	out, err := uc.runGitCmd(ctx, sandboxID, "log", "-n", "50", "--pretty=format:%H|%h|%s|%an|%aI")
+func (uc *GitUsecase) Log(ctx context.Context, sandboxID uuid.UUID) ([]domain.CommitEntry, error) {
+	out, err := uc.runGitCmdInContainer(ctx, sandboxID, "log", "-n", "50", "--pretty=format:%H|%h|%s|%an|%aI")
 	if err != nil {
 		return nil, err
 	}
 
-	var commits []CommitEntry
+	var commits []domain.CommitEntry
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	for _, line := range lines {
 		if line == "" {
@@ -229,7 +305,7 @@ func (uc *GitUsecase) Log(ctx context.Context, sandboxID uuid.UUID) ([]CommitEnt
 		}
 		parts := strings.SplitN(line, "|", 5)
 		if len(parts) == 5 {
-			commits = append(commits, CommitEntry{
+			commits = append(commits, domain.CommitEntry{
 				Hash:      parts[0],
 				ShortHash: parts[1],
 				Message:   parts[2],
@@ -239,4 +315,39 @@ func (uc *GitUsecase) Log(ctx context.Context, sandboxID uuid.UUID) ([]CommitEnt
 		}
 	}
 	return commits, nil
+}
+
+func (uc *GitUsecase) GetCommits(ctx context.Context, sandboxID uuid.UUID) ([]domain.CommitInfo, error) {
+	commits, err := uc.Log(ctx, sandboxID)
+	if err != nil {
+		return nil, err
+	}
+
+	var commitInfos []domain.CommitInfo
+	for _, c := range commits {
+		commitInfos = append(commitInfos, domain.CommitInfo{
+			Hash:    c.Hash,
+			Message: c.Message,
+			Author:  c.Author,
+			Date:    c.Date,
+		})
+	}
+	return commitInfos, nil
+}
+
+// Interface implementation methods for domain.GitRepository
+
+// GetChangedFiles implements domain.GitRepository
+func (uc *GitUsecase) GetChangedFiles(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) ([]string, error) {
+	return uc.GetChangedFilesHost(ctx, sourceSandboxID, targetSandboxID)
+}
+
+// GetDiff implements domain.GitRepository
+func (uc *GitUsecase) GetDiff(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) (string, error) {
+	return uc.GetDiffHost(ctx, sourceSandboxID, targetSandboxID)
+}
+
+// Merge implements domain.GitRepository
+func (uc *GitUsecase) Merge(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) (string, error) {
+	return uc.MergeHost(ctx, sourceSandboxID, targetSandboxID)
 }
