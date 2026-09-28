@@ -62,7 +62,8 @@ func TestRuntimeLifecycle(t *testing.T) {
 	t.Logf("created sandbox: %s", containerID)
 
 	// Test StartSandbox
-	if err := rt.StartSandbox(ctx, containerID); err != nil {
+	execProfile := domain.DefaultExecutionProfile()
+	if err := rt.StartSandbox(ctx, containerID, execProfile); err != nil {
 		t.Fatalf("failed to start sandbox: %v", err)
 	}
 	t.Logf("started sandbox: %s", containerID)
@@ -82,13 +83,13 @@ func TestRuntimeLifecycle(t *testing.T) {
 	t.Logf("logs: %s", logs)
 
 	// Test StopSandbox
-	if err := rt.StopSandbox(ctx, containerID); err != nil {
+	if err := rt.StopSandbox(ctx, containerID, execProfile); err != nil {
 		t.Fatalf("failed to stop sandbox: %v", err)
 	}
 	t.Logf("stopped sandbox: %s", containerID)
 
 	// Test DeleteSandbox
-	if err := rt.DeleteSandbox(ctx, containerID); err != nil {
+	if err := rt.DeleteSandbox(ctx, containerID, execProfile); err != nil {
 		t.Fatalf("failed to delete sandbox: %v", err)
 	}
 	t.Logf("deleted sandbox: %s", containerID)
@@ -101,26 +102,26 @@ func TestWarmPool(t *testing.T) {
 	defer wp.Stop()
 
 	// PreWarm containers
-	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c1", nil })
-	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c2", nil })
+	_ = wp.PreWarm(context.Background(), "alpine:latest", domain.RuntimeRunc, 400, func() (string, error) { return "c1", nil })
+	_ = wp.PreWarm(context.Background(), "alpine:latest", domain.RuntimeRunc, 400, func() (string, error) { return "c2", nil })
 	
 	// Third one should evict c1 because 400+400+400 > 1000
-	_ = wp.PreWarm(context.Background(), "alpine:latest", 400, func() (string, error) { return "c3", nil }) 
+	_ = wp.PreWarm(context.Background(), "alpine:latest", domain.RuntimeRunc, 400, func() (string, error) { return "c3", nil }) 
 
 	// Take one
-	id, _ := wp.Take("alpine:latest")
+	id, _ := wp.Take("alpine:latest", domain.RuntimeRunc)
 	if id != "c2" { // c1 was evicted, so queue should have c2, c3
 		t.Errorf("expected c2, got %s", id)
 	}
 
 	// Take another
-	id, _ = wp.Take("alpine:latest")
+	id, _ = wp.Take("alpine:latest", domain.RuntimeRunc)
 	if id != "c3" {
 		t.Errorf("expected c3, got %s", id)
 	}
 
 	// Pool empty
-	id, _ = wp.Take("alpine:latest")
+	id, _ = wp.Take("alpine:latest", domain.RuntimeRunc)
 	if id != "" {
 		t.Errorf("expected empty, got %s", id)
 	}

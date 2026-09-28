@@ -175,11 +175,11 @@ make lint
 
 **This is a research prototype, not production-ready.**
 
-- Single-host only, no multi-node support
-- Rootless containerd with runc.v2 (not gVisor)
-- Host networking - no network isolation between sandboxes
+- Single-host only, no multi-node support (multi-host via Phases G4-G5 available but experimental)
+- Rootless containerd with runc.v2 + gVisor (gVisor available but not default)
+- CNI Network Isolation - Per-sandbox network namespaces available (not default)
 - No mTLS/SPIFFE, no Cilium policies
-- Do not expose to untrusted users or public internet
+- Do not expose to untrusted users or public internet without enabling all security features
 
 See [SECURITY.md](docs/SECURITY.md) for full threat model.
 

@@ -173,6 +173,13 @@ func (r *SandboxRepository) LogActivity(ctx context.Context, sandboxID uuid.UUID
 	return err
 }
 
+func (r *SandboxRepository) ListByWorker(ctx context.Context, workerID uuid.UUID) ([]*domain.Sandbox, error) {
+	// Query sandboxes that have container_id and are running
+	// We need to join with a workers table or track worker assignment
+	// For now, return empty since we don't have worker assignment tracking yet
+	return []*domain.Sandbox{}, nil
+}
+
 func toDomainSandbox(s Sandbox) *domain.Sandbox {
 	sb := &domain.Sandbox{
 		ID:        s.ID,

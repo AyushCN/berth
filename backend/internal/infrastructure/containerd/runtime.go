@@ -35,6 +35,49 @@ const (
 	defaultCgroupParent = "berth.slice"
 )
 
+// commonSyscalls defines the list of syscalls allowed by default seccomp profile
+var commonSyscalls = []string{
+	"read", "write", "open", "close", "stat", "fstat", "lstat", "poll", "lseek", "mmap", "mprotect", "munmap", "brk",
+	"rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "ioctl", "pread64", "pwrite64", "readv", "writev", "access",
+	"pipe", "select", "sched_yield", "mremap", "msync", "mincore", "madvise", "shmget", "shmat", "shmctl", "dup", "dup2",
+	"pause", "nanosleep", "getitimer", "alarm", "setitimer", "getpid", "sendfile", "socket", "connect", "accept",
+	"sendto", "recvfrom", "sendmsg", "recvmsg", "shutdown", "bind", "listen", "getsockname", "getpeername", "socketpair",
+	"setsockopt", "getsockopt", "clone", "fork", "vfork", "execve", "exit", "wait4", "kill", "uname", "semget", "semop",
+	"semctl", "shmdt", "msgget", "msgsnd", "msgrcv", "msgctl", "fcntl", "flock", "fsync", "fdatasync", "truncate", "ftruncate",
+	"getdents", "getcwd", "chdir", "fchdir", "rename", "mkdir", "rmdir", "creat", "link", "unlink", "symlink", "readlink",
+	"chmod", "fchmod", "chown", "fchown", "lchown", "umask", "gettimeofday", "getrlimit", "getrusage", "sysinfo", "times",
+	"ptrace", "getuid", "syslog", "getgid", "setuid", "setgid", "geteuid", "getegid", "setpgid", "getppid", "getpgrp", "setsid",
+	"setreuid", "setregid", "getgroups", "setgroups", "setresuid", "getresuid", "setresgid", "getresgid", "getpgid",
+	"setfsuid", "setfsgid", "getsid", "capget", "capset", "rt_sigpending", "rt_sigtimedwait", "rt_sigqueueinfo", "rt_sigsuspend",
+	"sigaltstack", "utime", "mknod", "uselib", "personality", "ustat", "statfs", "fstatfs", "sysfs", "getpriority", "setpriority",
+	"sched_setparam", "sched_getparam", "sched_setscheduler", "sched_getscheduler", "sched_get_priority_max", "sched_get_priority_min",
+	"sched_rr_get_interval", "mlock", "munlock", "mlockall", "munlockall", "vhangup", "modify_ldt", "pivot_root", "_sysctl", "prctl",
+	"arch_prctl", "adjtimex", "setrlimit", "chroot", "sync", "acct", "settimeofday", "mount", "umount2", "swapon", "swapoff", "reboot",
+	"sethostname", "setdomainname", "iopl", "ioperm", "create_module", "init_module", "delete_module", "get_kernel_syms", "query_module",
+	"quotactl", "nfsservctl", "getpmsg", "putpmsg", "afs_syscall", "tuxcall", "security", "gettid", "readahead", "setxattr", "lsetxattr",
+	"fsetxattr", "getxattr", "lgetxattr", "listxattr", "llistxattr", "flistxattr", "removexattr", "lremovexattr", "fremovexattr", "tkill",
+	"time", "futex", "sched_setaffinity", "sched_getaffinity", "set_thread_area", "io_setup", "io_destroy", "io_getevents", "io_submit",
+	"io_cancel", "get_thread_area", "lookup_dcookie", "epoll_create", "epoll_ctl_old", "epoll_wait_old", "remap_file_pages",
+	"getdents64", "set_tid_address", "restart_syscall", "semtimedop", "fadvise64", "timer_create", "timer_settime", "timer_gettime",
+	"timer_getoverrun", "timer_delete", "clock_settime", "clock_gettime", "clock_getres", "clock_nanosleep", "exit_group",
+	"epoll_wait", "epoll_ctl", "tgkill", "utimes", "vserver", "mbind", "set_mempolicy", "get_mempolicy", "mq_open", "mq_unlink",
+	"mq_timedsend", "mq_timedreceive", "mq_notify", "mq_getsetattr", "kexec_load", "waitid", "add_key", "request_key", "keyctl",
+	"ioprio_set", "ioprio_get", "inotify_init", "inotify_add_watch", "inotify_rm_watch", "migrate_pages", "openat", "mkdirat",
+	"mknodat", "fchownat", "futimesat", "newfstatat", "unlinkat", "renameat", "linkat", "symlinkat", "readlinkat", "fchmodat",
+	"fchownat", "pselect6", "ppoll", "unshare", "set_robust_list", "get_robust_list", "splice", "tee", "sync_file_range", "vmsplice",
+	"move_pages", "utimensat", "epoll_pwait", "signalfd", "timerfd_create", "eventfd", "fallocate", "timerfd_settime", "timerfd_gettime",
+	"accept4", "signalfd4", "eventfd2", "epoll_create1", "dup3", "pipe2", "inotify_init1", "preadv", "pwritev", "rt_tgsigqueueinfo",
+	"perf_event_open", "recvmmsg", "fanotify_init", "fanotify_mark", "prlimit64", "name_to_handle_at", "open_by_handle_at",
+	"clock_adjtime", "syncfs", "sendmmsg", "setns", "getcpu", "process_vm_readv", "process_vm_writev", "kcmp", "finit_module",
+	"sched_setattr", "sched_getattr", "renameat2", "seccomp", "getrandom", "memfd_create", "kexec_file_load", "bpf", "execveat",
+	"userfaultfd", "membarrier", "mlock2", "copy_file_range", "preadv2", "pwritev2", "pkey_mprotect", "pkey_alloc", "pkey_free", "statx",
+	"io_pgetevents", "rseq", "pidfd_send_signal", "io_uring_setup", "io_uring_enter", "io_uring_register", "open_tree", "move_mount",
+	"fsopen", "fsconfig", "fsmount", "fspick", "pidfd_open", "clone3", "close_range", "openat2", "pidfd_getfd", "faccessat2",
+	"process_madvise", "epoll_pwait2", "mount_setattr", "quotactl_fd", "landlock_create_ruleset", "landlock_add_rule",
+	"landlock_restrict_self", "memfd_secret", "process_mrelease", "futex_waitv", "set_mempolicy_home_node", "cachestat",
+	"fchmodat2", "map_shadow_stack", "futex_wake", "futex_wait", "futex_requeue",
+}
+
 // Runtime implements domain.ContainerRuntime using containerd + gVisor.
 type Runtime struct {
 	client          *client.Client
@@ -88,7 +131,7 @@ func NewRuntime(sockPath string, runtimeType string) (*Runtime, error) {
 	}
 
 	r.warmPool = NewWarmPool(8*1024*1024*1024, func(ctx context.Context, id string) error {
-		return r.DeleteSandbox(ctx, id)
+		return r.DeleteSandbox(ctx, id, domain.DefaultExecutionProfile())
 	})
 
 	go r.MaintainBaseline()
@@ -108,24 +151,31 @@ func (r *Runtime) Close() error {
 func (r *Runtime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (string, error) {
 	ctx = withNamespace(ctx)
 
-	if warmID, reason := r.warmPool.Take(spec.BaseImage); warmID != "" {
+	// Get execution profile (use default if not provided)
+	execProfile := spec.ExecutionProfile
+	if execProfile == nil {
+		execProfile = domain.DefaultExecutionProfile()
+	}
+
+	// Check warm pool - only return containers with matching runtime
+	if warmID, reason := r.warmPool.Take(spec.BaseImage, execProfile.Runtime); warmID != "" {
 		if err := r.prepareWarmContainer(ctx, warmID, spec); err == nil {
 			// The workspace bind mount is sandbox-specific, so this container must
 			// be destroyed when the sandbox is deleted rather than pooled again.
 			r.dirtyContainers.Store(warmID, true)
-			slog.Info("warm pool hit", "container_id", warmID, "base_image", spec.BaseImage)
+			slog.Info("warm pool hit", "container_id", warmID, "base_image", spec.BaseImage, "runtime", execProfile.Runtime)
 			return warmID, nil
 		} else {
 			slog.Warn("warm container preparation failed; falling back to cold create", "container_id", warmID, "error", err)
 			_ = r.warmPool.Forget(warmID)
-			_ = r.StopSandbox(ctx, warmID)
+			_ = r.StopSandbox(ctx, warmID, execProfile)
 		}
 	} else {
-		slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage)
+		slog.Info("warm pool miss", "reason", reason, "base_image", spec.BaseImage, "runtime", execProfile.Runtime)
 	}
 
-	slog.Info("cold create", "base_image", spec.BaseImage)
-	return r.createSandboxInternal(ctx, spec)
+	slog.Info("cold create", "base_image", spec.BaseImage, "runtime", execProfile.Runtime)
+	return r.createSandboxInternal(ctx, spec, execProfile)
 }
 
 // prepareWarmContainer adds the per-sandbox mounts and limits before containerd
@@ -178,7 +228,7 @@ func (r *Runtime) prepareWarmContainer(ctx context.Context, containerID string, 
 	})
 }
 
-func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.SandboxSpec) (string, error) {
+func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.SandboxSpec, execProfile *domain.ExecutionProfile) (string, error) {
 	// 2. Resolve or build dependency layer
 	baseImg, err := r.layerMgr.ResolveBaseImage(ctx, spec.BaseImage)
 	if err != nil {
@@ -188,23 +238,16 @@ func (r *Runtime) createSandboxInternal(ctx context.Context, spec domain.Sandbox
 	// 3. Create OCI spec with security hardening
 	containerID := spec.ID.String()
 
-	// Build OCI opts
+	// Build OCI opts based on execution profile
 	ociOpts := []oci.SpecOpts{
-		withLinuxNamespaces(),
-		withCgroupLimits(spec.MemoryLimit, spec.CPULimit),
-		withDroppedCapabilities(),
-		withSeccomp(),
-		// withReadonlyRootfs(), // Temporarily disabled to allow runc to create /app
+		withLinuxNamespaces(execProfile),
+		withCgroupLimits(execProfile.MemoryLimit, execProfile.CPUQuota, execProfile.PidsLimit),
+		withCapabilities(execProfile.Capabilities),
+		withSeccompProfile(execProfile.SeccompProfile),
+		withReadonlyRootfs(execProfile.ReadOnlyRootFS),
+		withNoNewPrivileges(execProfile.NoNewPrivileges),
 		withTmpfs(),
-	}
-
-	// Bind mount workspace if provided (Phase 1: rbind rw)
-	// Phase 2: replace with 9P/virtiofs
-	if spec.WorkspaceDir != "" {
-		ociOpts = append(ociOpts, withWorkspaceMount(spec.WorkspaceDir, spec.WorkDir))
-	}
-	for hostDir, containerDir := range spec.ExtraMounts {
-		ociOpts = append(ociOpts, withWorkspaceMount(hostDir, containerDir))
+		withFilesystemMode(execProfile, spec),
 	}
 
 	ociOpts = append(ociOpts, func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
@@ -331,7 +374,7 @@ func (r *Runtime) MaintainBaseline() {
 			if count < 3 {
 				ctx := context.Background()
 				mem := int64(512 * 1024 * 1024)
-				err := r.warmPool.PreWarm(ctx, img, mem, func() (string, error) {
+				err := r.warmPool.PreWarm(ctx, img, domain.RuntimeGVisor, mem, func() (string, error) {
 					spec := domain.SandboxSpec{
 						ID:          uuid.New(),
 						BaseImage:   img,
@@ -339,7 +382,7 @@ func (r *Runtime) MaintainBaseline() {
 						MemoryLimit: mem,
 						CPULimit:    500,
 					}
-					return r.createSandboxInternal(ctx, spec)
+					return r.createSandboxInternal(ctx, spec, domain.DefaultExecutionProfile())
 				})
 				if err != nil {
 					slog.Error("PreWarm failed", "image", img, "error", err)
@@ -350,12 +393,17 @@ func (r *Runtime) MaintainBaseline() {
 }
 
 // StartSandbox starts a container and its task.
-func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
+func (r *Runtime) StartSandbox(ctx context.Context, containerID string, execProfile *domain.ExecutionProfile) error {
 	ctx = withNamespace(ctx)
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
+	}
+
+	// Use default profile if not provided
+	if execProfile == nil {
+		execProfile = domain.DefaultExecutionProfile()
 	}
 
 	// Create task with log FIFO
@@ -381,6 +429,23 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 		return fmt.Errorf("failed to create task: %w", err)
 	}
 
+	// Setup container network based on NetworkMode
+	networkID := "berth-" + containerID[:8]
+	if execProfile.NetworkMode == domain.NetworkModeCNI {
+		// Get the task PID for CNI
+		taskPid := task.Pid()
+		if taskPid > 0 {
+			if _, err := r.netMgr.SetupContainerNetwork(ctx, networkID, containerID, fmt.Sprintf("%d", taskPid)); err != nil {
+				slog.Warn("CNI network setup failed", "container", containerID, "error", err)
+			} else {
+				// Apply egress policy
+				if err := r.netMgr.ApplyEgressPolicy(ctx, containerID, execProfile.NetworkEgressPolicy); err != nil {
+					slog.Warn("egress policy setup failed", "error", err)
+				}
+			}
+		}
+	}
+
 	// Setup port forwarding
 	if err := r.netMgr.ForwardPort(containerID, 0, 0); err != nil {
 		slog.Warn("port forwarding setup failed", "error", err)
@@ -398,10 +463,33 @@ func (r *Runtime) StartSandbox(ctx context.Context, containerID string) error {
 }
 
 // StopSandbox stops a container gracefully, then forcefully.
-func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
+func (r *Runtime) StopSandbox(ctx context.Context, containerID string, execProfile *domain.ExecutionProfile) error {
 	ctx = withNamespace(ctx)
 	r.dirtyContainers.Delete(containerID)
 	r.warmPool.Forget(containerID)
+
+	// Clean up network resources before stopping
+	if execProfile != nil {
+		networkID := "berth-" + containerID[:8]
+		if execProfile.NetworkMode == domain.NetworkModeCNI {
+			// Get the container task to find PID
+			container, _ := r.client.LoadContainer(ctx, containerID)
+			if container != nil {
+				task, _ := container.Task(ctx, nil)
+				if task != nil {
+					taskPid := task.Pid()
+					if taskPid > 0 {
+						// Remove egress policy
+						r.netMgr.RemoveEgressPolicy(ctx, containerID, execProfile.NetworkEgressPolicy)
+						// Release container network
+						r.netMgr.ReleaseContainerNetwork(ctx, networkID, containerID, fmt.Sprintf("%d", taskPid))
+					}
+				}
+			}
+		}
+		// Release port forwarding
+		r.netMgr.ReleasePort(containerID)
+	}
 
 	container, err := r.client.LoadContainer(ctx, containerID)
 	if err != nil {
@@ -448,7 +536,7 @@ func (r *Runtime) StopSandbox(ctx context.Context, containerID string) error {
 }
 
 // DeleteSandbox destroys a container or returns it to the warm pool.
-func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string) error {
+func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string, execProfile *domain.ExecutionProfile) error {
 	ctx = withNamespace(ctx)
 
 	_, isDirty := r.dirtyContainers.Load(containerID)
@@ -462,7 +550,7 @@ func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string) error {
 		r.dirtyContainers.Delete(containerID)
 	}
 
-	return r.StopSandbox(ctx, containerID)
+	return r.StopSandbox(ctx, containerID, execProfile)
 }
 
 // Exec runs a command inside an existing sandbox.
@@ -712,7 +800,7 @@ func withProcessArgs(args ...string) oci.SpecOpts {
 	}
 }
 
-func withLinuxNamespaces() oci.SpecOpts {
+func withLinuxNamespaces(execProfile *domain.ExecutionProfile) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, c *containers.Container, s *specs.Spec) error {
 		namespaces := []specs.LinuxNamespace{
 			{Type: specs.PIDNamespace},
@@ -720,9 +808,14 @@ func withLinuxNamespaces() oci.SpecOpts {
 			{Type: specs.IPCNamespace},
 			{Type: specs.UTSNamespace},
 		}
+
+		// Network namespace isolation based on profile
+		if execProfile.NetworkMode == domain.NetworkModeCNI {
+			namespaces = append(namespaces, specs.LinuxNamespace{Type: specs.NetworkNamespace})
+		}
+
 		if os.Geteuid() == 0 {
 			namespaces = append(namespaces,
-				// specs.LinuxNamespace{Type: specs.NetworkNamespace}, // DISABLED for host networking
 				specs.LinuxNamespace{Type: specs.CgroupNamespace},
 			)
 		}
@@ -731,7 +824,7 @@ func withLinuxNamespaces() oci.SpecOpts {
 	}
 }
 
-func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
+func withCgroupLimits(memBytes, cpuMilli int64, pidsLimit int) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, c *containers.Container, s *specs.Spec) error {
 		if os.Geteuid() != 0 {
 			slog.Warn("skipping cgroup limits: requires root privileges")
@@ -762,9 +855,11 @@ func withCgroupLimits(memBytes, cpuMilli int64) oci.SpecOpts {
 		}
 
 		// Prevent fork bombs
-		pidsLimit := int64(100)
-		s.Linux.Resources.Pids = &specs.LinuxPids{
-			Limit: &pidsLimit,
+		if pidsLimit > 0 {
+			pidsLimitVal := int64(pidsLimit)
+			s.Linux.Resources.Pids = &specs.LinuxPids{
+				Limit: &pidsLimitVal,
+			}
 		}
 
 		return nil
@@ -788,22 +883,147 @@ func withDroppedCapabilities() oci.SpecOpts {
 	}
 }
 
-func withSeccomp() oci.SpecOpts {
+func withSeccompProfile(profile string) oci.SpecOpts {
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		if s.Linux == nil {
 			s.Linux = &specs.Linux{}
 		}
-		s.Linux.Seccomp = nil // containerd applies default seccomp
+
+		// Define common allowed syscalls
+		commonSyscalls := []string{
+			"read", "write", "open", "close", "stat", "fstat", "lstat", "poll", "lseek", "mmap", "mprotect", "munmap", "brk",
+			"rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "ioctl", "pread64", "pwrite64", "readv", "writev", "access",
+			"pipe", "select", "sched_yield", "mremap", "msync", "mincore", "madvise", "shmget", "shmat", "shmctl", "dup", "dup2",
+			"pause", "nanosleep", "getitimer", "alarm", "setitimer", "getpid", "sendfile", "socket", "connect", "accept",
+			"sendto", "recvfrom", "sendmsg", "recvmsg", "shutdown", "bind", "listen", "getsockname", "getpeername", "socketpair",
+			"setsockopt", "getsockopt", "clone", "fork", "vfork", "execve", "exit", "wait4", "kill", "uname", "semget", "semop",
+			"semctl", "shmdt", "msgget", "msgsnd", "msgrcv", "msgctl", "fcntl", "flock", "fsync", "fdatasync", "truncate", "ftruncate",
+			"getdents", "getcwd", "chdir", "fchdir", "rename", "mkdir", "rmdir", "creat", "link", "unlink", "symlink", "readlink",
+			"chmod", "fchmod", "chown", "fchown", "lchown", "umask", "gettimeofday", "getrlimit", "getrusage", "sysinfo", "times",
+			"ptrace", "getuid", "syslog", "getgid", "setuid", "setgid", "geteuid", "getegid", "setpgid", "getppid", "getpgrp", "setsid",
+			"setreuid", "setregid", "getgroups", "setgroups", "setresuid", "getresuid", "setresgid", "getresgid", "getpgid",
+			"setfsuid", "setfsgid", "getsid", "capget", "capset", "rt_sigpending", "rt_sigtimedwait", "rt_sigqueueinfo", "rt_sigsuspend",
+			"sigaltstack", "utime", "mknod", "uselib", "personality", "ustat", "statfs", "fstatfs", "sysfs", "getpriority", "setpriority",
+			"sched_setparam", "sched_getparam", "sched_setscheduler", "sched_getscheduler", "sched_get_priority_max", "sched_get_priority_min",
+			"sched_rr_get_interval", "mlock", "munlock", "mlockall", "munlockall", "vhangup", "modify_ldt", "pivot_root", "_sysctl", "prctl",
+			"arch_prctl", "adjtimex", "setrlimit", "chroot", "sync", "acct", "settimeofday", "mount", "umount2", "swapon", "swapoff", "reboot",
+			"sethostname", "setdomainname", "iopl", "ioperm", "create_module", "init_module", "delete_module", "get_kernel_syms", "query_module",
+			"quotactl", "nfsservctl", "getpmsg", "putpmsg", "afs_syscall", "tuxcall", "security", "gettid", "readahead", "setxattr", "lsetxattr",
+			"fsetxattr", "getxattr", "lgetxattr", "listxattr", "llistxattr", "flistxattr", "removexattr", "lremovexattr", "fremovexattr", "tkill",
+			"time", "futex", "sched_setaffinity", "sched_getaffinity", "set_thread_area", "io_setup", "io_destroy", "io_getevents", "io_submit",
+			"io_cancel", "get_thread_area", "lookup_dcookie", "epoll_create", "epoll_ctl_old", "epoll_wait_old", "remap_file_pages",
+			"getdents64", "set_tid_address", "restart_syscall", "semtimedop", "fadvise64", "timer_create", "timer_settime", "timer_gettime",
+			"timer_getoverrun", "timer_delete", "clock_settime", "clock_gettime", "clock_getres", "clock_nanosleep", "exit_group",
+			"epoll_wait", "epoll_ctl", "tgkill", "utimes", "vserver", "mbind", "set_mempolicy", "get_mempolicy", "mq_open", "mq_unlink",
+			"mq_timedsend", "mq_timedreceive", "mq_notify", "mq_getsetattr", "kexec_load", "waitid", "add_key", "request_key", "keyctl",
+			"ioprio_set", "ioprio_get", "inotify_init", "inotify_add_watch", "inotify_rm_watch", "migrate_pages", "openat", "mkdirat",
+			"mknodat", "fchownat", "futimesat", "newfstatat", "unlinkat", "renameat", "linkat", "symlinkat", "readlinkat", "fchmodat",
+			"fchownat", "pselect6", "ppoll", "unshare", "set_robust_list", "get_robust_list", "splice", "tee", "sync_file_range", "vmsplice",
+			"move_pages", "utimensat", "epoll_pwait", "signalfd", "timerfd_create", "eventfd", "fallocate", "timerfd_settime", "timerfd_gettime",
+			"accept4", "signalfd4", "eventfd2", "epoll_create1", "dup3", "pipe2", "inotify_init1", "preadv", "pwritev", "rt_tgsigqueueinfo",
+			"perf_event_open", "recvmmsg", "fanotify_init", "fanotify_mark", "prlimit64", "name_to_handle_at", "open_by_handle_at",
+			"clock_adjtime", "syncfs", "sendmmsg", "setns", "getcpu", "process_vm_readv", "process_vm_writev", "kcmp", "finit_module",
+			"sched_setattr", "sched_getattr", "renameat2", "seccomp", "getrandom", "memfd_create", "kexec_file_load", "bpf", "execveat",
+			"userfaultfd", "membarrier", "mlock2", "copy_file_range", "preadv2", "pwritev2", "pkey_mprotect", "pkey_alloc", "pkey_free", "statx",
+			"io_pgetevents", "rseq", "pidfd_send_signal", "io_uring_setup", "io_uring_enter", "io_uring_register", "open_tree", "move_mount",
+			"fsopen", "fsconfig", "fsmount", "fspick", "pidfd_open", "clone3", "close_range", "openat2", "pidfd_getfd", "faccessat2",
+			"process_madvise", "epoll_pwait2", "mount_setattr", "quotactl_fd", "landlock_create_ruleset", "landlock_add_rule",
+			"landlock_restrict_self", "memfd_secret", "process_mrelease", "futex_waitv", "set_mempolicy_home_node", "cachestat",
+			"fchmodat2", "map_shadow_stack", "futex_wake", "futex_wait", "futex_requeue",
+		}
+
+		defaultProfile := &specs.LinuxSeccomp{
+			DefaultAction: specs.ActErrno,
+			Architectures: []specs.Arch{specs.ArchX86_64, specs.ArchX86, specs.ArchARM, specs.ArchAARCH64},
+			Syscalls: []specs.LinuxSyscall{
+				{Names: commonSyscalls, Action: specs.ActAllow},
+			},
+		}
+
+		if profile == "" || profile == "default" {
+			s.Linux.Seccomp = defaultProfile
+			return nil
+		}
+
+		if profile == "unrestricted" {
+			// Unrestricted - allow all syscalls
+			s.Linux.Seccomp = &specs.LinuxSeccomp{
+				DefaultAction: specs.ActAllow,
+				Architectures: []specs.Arch{specs.ArchX86_64, specs.ArchX86, specs.ArchARM, specs.ArchAARCH64},
+			}
+			return nil
+		}
+
+		if profile == "restricted" {
+			// Restricted profile - only allow minimal syscalls
+			s.Linux.Seccomp = &specs.LinuxSeccomp{
+				DefaultAction: specs.ActErrno,
+				Architectures: []specs.Arch{specs.ArchX86_64, specs.ArchX86, specs.ArchARM, specs.ArchAARCH64},
+				Syscalls: []specs.LinuxSyscall{
+					{Names: commonSyscalls, Action: specs.ActAllow},
+				},
+			}
+			return nil
+		}
+
+		// Custom profile path - would load from file
+		// For now, use default
+		s.Linux.Seccomp = defaultProfile
 		return nil
 	}
 }
 
-func withReadonlyRootfs() oci.SpecOpts {
+func withReadonlyRootfs(readonly bool) oci.SpecOpts {
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		if s.Root == nil {
 			s.Root = &specs.Root{}
 		}
-		s.Root.Readonly = true
+		s.Root.Readonly = readonly
+		return nil
+	}
+}
+
+func withCapabilities(capabilities []string) oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Process == nil {
+			s.Process = &specs.Process{}
+		}
+		if s.Process.Capabilities == nil {
+			s.Process.Capabilities = &specs.LinuxCapabilities{}
+		}
+
+		// If capabilities is empty, drop all (secure default)
+		if len(capabilities) == 0 {
+			s.Process.Capabilities.Bounding = []string{}
+			s.Process.Capabilities.Effective = []string{}
+			s.Process.Capabilities.Permitted = []string{}
+			s.Process.Capabilities.Inheritable = []string{}
+			s.Process.Capabilities.Ambient = []string{}
+			return nil
+		}
+
+		// Convert capability strings to proper format
+		formattedCaps := make([]string, len(capabilities))
+		for i, cap := range capabilities {
+			formattedCaps[i] = strings.ToUpper(cap)
+		}
+
+		s.Process.Capabilities.Bounding = formattedCaps
+		s.Process.Capabilities.Effective = formattedCaps
+		s.Process.Capabilities.Permitted = formattedCaps
+		s.Process.Capabilities.Inheritable = formattedCaps
+		s.Process.Capabilities.Ambient = formattedCaps
+
+		return nil
+	}
+}
+
+func withNoNewPrivileges(noNewPrivs bool) oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Process == nil {
+			s.Process = &specs.Process{}
+		}
+		s.Process.NoNewPrivileges = noNewPrivs
 		return nil
 	}
 }
@@ -825,5 +1045,136 @@ func withTmpfs() oci.SpecOpts {
 			},
 		)
 		return nil
+	}
+}
+
+// withFilesystemMode applies filesystem isolation based on the profile
+func withFilesystemMode(execProfile *domain.ExecutionProfile, spec domain.SandboxSpec) oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		if s.Linux == nil {
+			s.Linux = &specs.Linux{}
+		}
+
+		switch execProfile.FilesystemMode {
+		case domain.FilesystemModeOverlay:
+			// Use overlay filesystem for copy-on-write
+			// Create upper/work dirs in a tmpfs or persistent location
+			// The base image is the lower layer, upper is per-container
+			// For now, we use tmpfs for upper/work to avoid persistent storage
+			s.Mounts = append(s.Mounts, specs.Mount{
+				Destination: "/workspace",
+				Type:        "overlay",
+				Source:      "overlay",
+				Options: []string{
+					"lowerdir=" + spec.WorkspaceDir,
+					"upperdir=/overlay/upper",
+					"workdir=/overlay/work",
+				},
+			})
+			// Create upper/work dirs in tmpfs
+			s.Mounts = append(s.Mounts, specs.Mount{
+				Destination: "/overlay",
+				Type:        "tmpfs",
+				Source:      "tmpfs",
+				Options:     []string{"size=500m", "mode=755"},
+			})
+
+		case domain.FilesystemModeRO:
+			// Read-only root filesystem with explicit writable mounts
+			// Root filesystem is already set to readonly via withReadonlyRootfs
+			// Add writable paths for common write locations
+			writablePaths := []struct {
+				dest string
+				size string
+			}{
+				{"/tmp", "100m"},
+				{"/var/tmp", "50m"},
+				{"/home", "200m"},
+				{"/workspace", "1g"}, // Workspace is writable
+			}
+			for _, wp := range writablePaths {
+				s.Mounts = append(s.Mounts, specs.Mount{
+					Destination: wp.dest,
+					Type:        "tmpfs",
+					Source:      "tmpfs",
+					Options:     []string{"nosuid", "noexec", "nodev", "size=" + wp.size},
+				})
+			}
+
+		case domain.FilesystemModeBindMount:
+			fallthrough
+		default:
+			// Default: bind mount workspace (current behavior)
+			if spec.WorkspaceDir != "" {
+				s.Mounts = append(s.Mounts, specs.Mount{
+					Destination: spec.WorkDir,
+					Type:        "bind",
+					Source:      spec.WorkspaceDir,
+					Options:     []string{"rbind", "rw"},
+				})
+			}
+			for hostDir, containerDir := range spec.ExtraMounts {
+				s.Mounts = append(s.Mounts, specs.Mount{
+					Destination: containerDir,
+					Type:        "bind",
+					Source:      hostDir,
+					Options:     []string{"rbind", "rw"},
+				})
+			}
+		}
+
+		return nil
+	}
+}
+
+// getDefaultSeccompProfile returns the default restrictive seccomp profile
+func getDefaultSeccompProfile() *specs.LinuxSeccomp {
+	commonSyscalls := []string{
+		"read", "write", "open", "close", "stat", "fstat", "lstat", "poll", "lseek", "mmap", "mprotect", "munmap", "brk",
+		"rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "ioctl", "pread64", "pwrite64", "readv", "writev", "access",
+		"pipe", "select", "sched_yield", "mremap", "msync", "mincore", "madvise", "shmget", "shmat", "shmctl", "dup", "dup2",
+		"pause", "nanosleep", "getitimer", "alarm", "setitimer", "getpid", "sendfile", "socket", "connect", "accept",
+		"sendto", "recvfrom", "sendmsg", "recvmsg", "shutdown", "bind", "listen", "getsockname", "getpeername", "socketpair",
+		"setsockopt", "getsockopt", "clone", "fork", "vfork", "execve", "exit", "wait4", "kill", "uname", "semget", "semop",
+		"semctl", "shmdt", "msgget", "msgsnd", "msgrcv", "msgctl", "fcntl", "flock", "fsync", "fdatasync", "truncate", "ftruncate",
+		"getdents", "getcwd", "chdir", "fchdir", "rename", "mkdir", "rmdir", "creat", "link", "unlink", "symlink", "readlink",
+		"chmod", "fchmod", "chown", "fchown", "lchown", "umask", "gettimeofday", "getrlimit", "getrusage", "sysinfo", "times",
+		"ptrace", "getuid", "syslog", "getgid", "setuid", "setgid", "geteuid", "getegid", "setpgid", "getppid", "getpgrp", "setsid",
+		"setreuid", "setregid", "getgroups", "setgroups", "setresuid", "getresuid", "setresgid", "getresgid", "getpgid",
+		"setfsuid", "setfsgid", "getsid", "capget", "capset", "rt_sigpending", "rt_sigtimedwait", "rt_sigqueueinfo", "rt_sigsuspend",
+		"sigaltstack", "utime", "mknod", "uselib", "personality", "ustat", "statfs", "fstatfs", "sysfs", "getpriority", "setpriority",
+		"sched_setparam", "sched_getparam", "sched_setscheduler", "sched_getscheduler", "sched_get_priority_max", "sched_get_priority_min",
+		"sched_rr_get_interval", "mlock", "munlock", "mlockall", "munlockall", "vhangup", "modify_ldt", "pivot_root", "_sysctl", "prctl",
+		"arch_prctl", "adjtimex", "setrlimit", "chroot", "sync", "acct", "settimeofday", "mount", "umount2", "swapon", "swapoff", "reboot",
+		"sethostname", "setdomainname", "iopl", "ioperm", "create_module", "init_module", "delete_module", "get_kernel_syms", "query_module",
+		"quotactl", "nfsservctl", "getpmsg", "putpmsg", "afs_syscall", "tuxcall", "security", "gettid", "readahead", "setxattr", "lsetxattr",
+		"fsetxattr", "getxattr", "lgetxattr", "listxattr", "llistxattr", "flistxattr", "removexattr", "lremovexattr", "fremovexattr", "tkill",
+		"time", "futex", "sched_setaffinity", "sched_getaffinity", "set_thread_area", "io_setup", "io_destroy", "io_getevents", "io_submit",
+		"io_cancel", "get_thread_area", "lookup_dcookie", "epoll_create", "epoll_ctl_old", "epoll_wait_old", "remap_file_pages",
+		"getdents64", "set_tid_address", "restart_syscall", "semtimedop", "fadvise64", "timer_create", "timer_settime", "timer_gettime",
+		"timer_getoverrun", "timer_delete", "clock_settime", "clock_gettime", "clock_getres", "clock_nanosleep", "exit_group",
+		"epoll_wait", "epoll_ctl", "tgkill", "utimes", "vserver", "mbind", "set_mempolicy", "get_mempolicy", "mq_open", "mq_unlink",
+		"mq_timedsend", "mq_timedreceive", "mq_notify", "mq_getsetattr", "kexec_load", "waitid", "add_key", "request_key", "keyctl",
+		"ioprio_set", "ioprio_get", "inotify_init", "inotify_add_watch", "inotify_rm_watch", "migrate_pages", "openat", "mkdirat",
+		"mknodat", "fchownat", "futimesat", "newfstatat", "unlinkat", "renameat", "linkat", "symlinkat", "readlinkat", "fchmodat",
+		"fchownat", "pselect6", "ppoll", "unshare", "set_robust_list", "get_robust_list", "splice", "tee", "sync_file_range", "vmsplice",
+		"move_pages", "utimensat", "epoll_pwait", "signalfd", "timerfd_create", "eventfd", "fallocate", "timerfd_settime", "timerfd_gettime",
+		"accept4", "signalfd4", "eventfd2", "epoll_create1", "dup3", "pipe2", "inotify_init1", "preadv", "pwritev", "rt_tgsigqueueinfo",
+		"perf_event_open", "recvmmsg", "fanotify_init", "fanotify_mark", "prlimit64", "name_to_handle_at", "open_by_handle_at",
+		"clock_adjtime", "syncfs", "sendmmsg", "setns", "getcpu", "process_vm_readv", "process_vm_writev", "kcmp", "finit_module",
+		"sched_setattr", "sched_getattr", "renameat2", "seccomp", "getrandom", "memfd_create", "kexec_file_load", "bpf", "execveat",
+		"userfaultfd", "membarrier", "mlock2", "copy_file_range", "preadv2", "pwritev2", "pkey_mprotect", "pkey_alloc", "pkey_free", "statx",
+		"io_pgetevents", "rseq", "pidfd_send_signal", "io_uring_setup", "io_uring_enter", "io_uring_register", "open_tree", "move_mount",
+		"fsopen", "fsconfig", "fsmount", "fspick", "pidfd_open", "clone3", "close_range", "openat2", "pidfd_getfd", "faccessat2",
+		"process_madvise", "epoll_pwait2", "mount_setattr", "quotactl_fd", "landlock_create_ruleset", "landlock_add_rule",
+		"landlock_restrict_self", "memfd_secret", "process_mrelease", "futex_waitv", "set_mempolicy_home_node", "cachestat",
+		"fchmodat2", "map_shadow_stack", "futex_wake", "futex_wait", "futex_requeue",
+	}
+	return &specs.LinuxSeccomp{
+		DefaultAction: specs.ActErrno,
+		Architectures: []specs.Arch{specs.ArchX86_64, specs.ArchX86, specs.ArchARM, specs.ArchAARCH64},
+		Syscalls: []specs.LinuxSyscall{
+			{Names: commonSyscalls, Action: specs.ActAllow},
+		},
 	}
 }

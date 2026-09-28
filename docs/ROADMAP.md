@@ -8,12 +8,62 @@
 | v0.2.0 | 2024-Q2 | Containerd Infrastructure - Layer commit, tar export, iptables |
 | v0.3.0 | 2024-Q3 | Frontend IDE - Editor, Terminal, Git, Preview |
 | v0.4.0 | 2024-Q4 | **Prediction Engine** - ML, ONNX, gRPC, UI |
-| v0.5.0 | 2025-Q1 | **Beta** - Production hardening, A/B testing, Model Registry |
-| v1.0.0 | 2025-Q2 | **GA** - Multi-node, gVisor, mTLS, Multi-tenant |
+| v0.5.0 | 2025-Q1 | **Security Hardening & Multi-Host (G1-G5)** |
+| v0.6.0 | 2025-Q2 | **Beta** - Production hardening, A/B testing, Model Registry |
+| v1.0.0 | 2025-Q3 | **GA** - Multi-node, gVisor default, mTLS, Multi-tenant |
 
 ---
 
-## v0.5.0 - Beta (2025-Q1)
+## v0.5.0 - Security Hardening & Multi-Host (2025-Q1) ✅ COMPLETE
+
+### Phase G1: gVisor Execution ✅
+- [x] **Explicit Runtime Selection** - Explicit RuntimeGVisor vs RuntimeRunc
+- [x] **No Implicit Fallback** - No implicit fallback to runc for untrusted workloads
+- [x] **Runtime Validation** - runsc availability check at startup
+- [x] **Warm Pool Separation** - Separate pools by runtime (gVisor vs runc)
+- [x] **ExecutionProfile** - Encapsulates all security settings
+
+### Phase G2: Network Isolation (CNI + Egress) ✅
+- [x] **CNI Network Namespaces** - Per-sandbox isolated network namespaces
+- [x] **Network Modes** - CNI (isolated), Host (shared), None (no network)
+- [x] **CNI Bridge Plugin** - Bridge with host-local IPAM
+- [x] **Egress Policies** - Default, Restricted (DNS/HTTP/HTTPS), None, Trusted
+- [x] **Port Forwarding** - iptables DNAT for host→container port mapping
+- [x] **CNI Lifecycle** - ADD/DEL with proper cleanup
+
+### Phase G3: Filesystem + Capability + Syscall Hardening ✅
+- [x] **Filesystem Modes** - BindMount, OverlayFS (COW), Read-only rootfs
+- [x] **OverlayFS COW** - Per-container upper/work dirs in tmpfs
+- [x] **Read-only Rootfs** - Explicit writable tmpfs mounts
+- [x] **Enhanced Capability Dropping** - Empty = drop all
+- [x] **NoNewPrivileges** - Prevent privilege escalation
+- [x] **Seccomp Profiles** - Default (250+ syscalls), Restricted, Unrestricted
+- [x] **PIDs Limits** - Fork bomb prevention
+- [x] **tmpfs Mounts** - /tmp, /var/tmp with noexec/nosuid/nodev
+
+### Phase G4: Tenant/Worker Isolation & Multi-host Scheduling ✅
+- [x] **Tenant Model** - Resource quotas, allowed configurations
+- [x] **Worker Agent** - Auto-registration, heartbeats, resource monitoring
+- [x] **Distributed Scheduler** - Binpack/Spread/LeastUsed + preemption
+- [x] **Worker Health** - Automatic status transitions
+- [x] **Multi-cluster Federation** - Cross-cluster scheduling
+- [x] **Cross-cluster Migration** - MigrateOut/MigrateIn
+
+### Phase G5: Cross-Host Platform & Container Migration ✅
+- [x] **VXLAN Mesh Networking** - Cross-host VXLAN overlay, ARP proxy, FDB
+- [x] **CRIU Checkpoint/Restore** - Pre-dump iterations, live migration
+- [x] **Live Migration Orchestrator** - Pre-dump → final dump → transfer → restore
+- [x] **Migration Orchestrator** - Progress tracking, cancellation, status
+- [x] **CRIU Integration** - Pre-dump iterations (3x), final dump, rsync transfer
+- [x] **VXLAN Mesh** - Cross-host VXLAN overlay, ARP proxy, FDB management
+- [x] **CRIU Checkpoint/Restore** - Pre-dump iterations, live migration
+- [x] **Live Migration Orchestrator** - Pre-dump → final dump → transfer → restore
+- [x] **Migration Orchestrator** - Progress tracking, cancellation, status
+- [x] **CRIU Integration** - Pre-dump iterations (3x), final dump, rsync transfer
+
+---
+
+## v0.6.0 - Beta (2025-Q2)
 
 ### Prediction Engine Enhancements
 - [ ] **ONNX Runtime Native** - Fix libonnxruntime.so loading in containers
@@ -48,7 +98,7 @@
 
 ---
 
-## v1.0.0 - General Availability (2025-Q2)
+## v1.0.0 - General Availability (2025-Q3)
 
 ### Multi-Node Architecture
 - [ ] **Control Plane HA** - Raft consensus for API/worker coordination

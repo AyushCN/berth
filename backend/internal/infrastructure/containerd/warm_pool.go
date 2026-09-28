@@ -6,12 +6,15 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/AyushCN/berth/internal/domain"
 )
 
 // WarmContainer holds metadata for a pre-created container.
 type WarmContainer struct {
 	ID          string
 	BaseImage   string
+	Runtime     domain.SandboxRuntime
 	CreatedAt   time.Time
 	MemoryBytes int64
 }
@@ -47,7 +50,7 @@ func (wp *WarmPool) Stop() {
 
 // PreWarm attempts to pre-create a container if resources allow.
 // creator is a callback that actually provisions the container via containerd.
-func (wp *WarmPool) PreWarm(ctx context.Context, baseImage string, memoryBytes int64, creator func() (string, error)) error {
+func (wp *WarmPool) PreWarm(ctx context.Context, baseImage string, runtime domain.SandboxRuntime, memoryBytes int64, creator func() (string, error)) error {
 	wp.mu.Lock()
 	if wp.usedMemoryBytes+memoryBytes > wp.maxMemoryBytes {
 		// Eviction policy: simple for now - find oldest container across all pools
@@ -74,10 +77,11 @@ func (wp *WarmPool) PreWarm(ctx context.Context, baseImage string, memoryBytes i
 	wp.available[baseImage] = append(wp.available[baseImage], &WarmContainer{
 		ID:          id,
 		BaseImage:   baseImage,
+		Runtime:     runtime,
 		CreatedAt:   time.Now(),
 		MemoryBytes: memoryBytes,
 	})
-	slog.Info("container pre-warmed", "base_image", baseImage, "id", id, "used_mem", wp.usedMemoryBytes)
+	slog.Info("container pre-warmed", "base_image", baseImage, "runtime", runtime, "id", id, "used_mem", wp.usedMemoryBytes)
 	return nil
 }
 
@@ -118,12 +122,25 @@ func (wp *WarmPool) evictOne() bool {
 
 // Take removes a container from the warm pool for assignment.
 // Returns empty string if no warm container is available, along with a reason.
-func (wp *WarmPool) Take(baseImage string) (string, string) {
+func (wp *WarmPool) Take(baseImage string, runtime domain.SandboxRuntime) (string, string) {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
 	queue := wp.available[baseImage]
-	if len(queue) == 0 {
+	var c *WarmContainer
+	var idx int
+	found := false
+
+	for i, container := range queue {
+		if container.Runtime == runtime {
+			c = container
+			idx = i
+			found = true
+			break
+		}
+	}
+
+	if !found {
 		total := 0
 		for _, q := range wp.available {
 			total += len(q)
@@ -131,11 +148,10 @@ func (wp *WarmPool) Take(baseImage string) (string, string) {
 		if total == 0 {
 			return "", "pool_empty"
 		}
-		return "", "no_image_match"
+		return "", "no_image_or_runtime_match"
 	}
 
-	c := queue[0]
-	wp.available[baseImage] = queue[1:]
+	wp.available[baseImage] = append(queue[:idx], queue[idx+1:]...)
 	wp.active[c.ID] = c
 	wp.usedMemoryBytes -= c.MemoryBytes // Memory is now accounted to the active runtime
 	return c.ID, ""

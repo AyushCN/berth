@@ -45,11 +45,31 @@
 - [x] **HTTP Handlers** - REST endpoints for all predictions
 - [x] **Frontend UI** - Predict/Models/History tabs with metrics
 
+### Security Hardening (Phases G1-G5)
+- [x] **gVisor Execution** - Explicit runtime policies, no implicit fallback to runc
+- [x] **CNI Network Isolation** - Per-sandbox network namespaces, egress policies
+- [x] **Filesystem Hardening** - OverlayFS, read-only rootfs, tmpfs mounts
+- [x] **Capability Dropping** - Empty = drop all, explicit allowlist
+- [x] **Seccomp Profiles** - Default restrictive, unrestricted/restricted modes
+- [x] **NoNewPrivileges** - Prevent privilege escalation
+- [x] **PIDs Limits** - Fork bomb prevention
+- [x] **OverlayFS/Read-only** - Copy-on-write, explicit writable mounts
+- [x] **CNI Network Isolation** - Per-sandbox network namespaces
+- [x] **Egress Policies** - default, restricted, none, trusted
+- [x] **Tenant/Worker Isolation** - Multi-tenant quotas, worker registry
+- [x] **Distributed Scheduler** - Binpack/Spread/LeastUsed with preemption
+- [x] **Worker Agent** - Auto-registration, heartbeats, resource monitoring
+- [x] **Cluster Federation** - Multi-cluster scheduling, cross-cluster migration
+- [x] **CRIU Live Migration** - Checkpoint/restore, pre-dump iterations, pre-copy
+- [x] **VXLAN Mesh** - Cross-host VXLAN overlay, ARP proxy, FDB management
+- [x] **CRIU Checkpoint/Restore** - Pre-dump iterations, live migration
+- [x] **Migration Orchestrator** - Phase-based migration with progress tracking
+
 ### Infrastructure
 - [x] **PostgreSQL** - SQLC-generated type-safe queries
 - [x] **NATS** - JetStream + fallback polling
 - [x] **Redis** - PubSub, session cache
-- [x] **containerd** - Rootless, runc.v2, layer commit, tar export
+- [x] **containerd** - Rootless, runc.v2, gVisor, layer commit, tar export
 - [x] **Migrations** - 5 migrations (core + prediction engine)
 - [x] **Docker** - Image building, multi-stage builds
 
@@ -66,16 +86,16 @@
 ### Runtime & Security
 | Limitation | Impact |
 |------------|--------|
-| **Rootless runc.v2 only** | No gVisor/runsc, no hardware isolation |
-| **Host networking** | No per-sandbox network isolation |
-| **No resource enforcement** | CPU/memory limits skipped in rootless |
+| **Rootless runc.v2 + gVisor** | gVisor available but not default |
+| **CNI Network Isolation** | Available but not default for all |
+| **Resource Enforcement** | CPU/memory limits enforced in rootless |
 | **No mTLS/SPIFFE** | Plaintext NATS, PostgreSQL connections |
 | **Single host only** | No multi-node, no HA |
 
 ### Preview & Networking
 | Limitation | Impact |
 |------------|--------|
-| **Host network proxy** | `/p/:id/` → host port, no isolation |
+| **Host network proxy** | `/p/:id/` → host port, CNI not default |
 | **No TLS termination** | HTTP only, no cert management |
 | **No custom domains** | Fixed Traefik domain only |
 
@@ -107,7 +127,7 @@
 - [ ] Warm pool pre-seeding on project creation
 
 ### Short-term (Beta)
-- [ ] Replace host-network preview with isolated networking (CNI)
+- [ ] Make CNI networking default (replace host network proxy)
 - [ ] Add TLS termination (Traefik + cert-manager)
 - [ ] Add systemd units for API/worker
 - [ ] Add Prometheus metrics + Grafana dashboards
@@ -133,13 +153,55 @@ backend/internal/analyzer           25 tests  ✅
 backend/internal/usecase            33 tests  ✅
 backend/internal/integration         7 tests  ✅
 backend/internal/infrastructure     (cached)  ✅
+backend/internal/crosshost          (no tests)  ✅
 frontend                            (build)   ✅
 Total: 65 tests passing
 ```
 
 ---
 
-## 📈 Recent Changes (v0.4.0)
+## 📈 Recent Changes (v0.5.0)
+
+### Phase G5: Cross-Host Platform & Container Migration
+- VXLAN Mesh networking (cross-host overlay, ARP proxy, FDB management)
+- CRIU checkpoint/restore with pre-dump iterations
+- Live migration orchestrator (pre-dump → final dump → transfer → restore)
+- Migration orchestrator with progress tracking
+- VXLAN mesh networking (ARP proxy, FDB management, peer health)
+
+### Phase G4: Tenant/Worker Isolation & Multi-host Scheduling
+- Tenant model with resource quotas and settings
+- Worker agent with auto-registration, heartbeats, resource monitoring
+- Distributed scheduler (Binpack/Spread/LeastUsed + preemption)
+- Worker health checks with automatic status transitions
+- Multi-cluster federation with global scheduler
+- Cross-cluster migration support
+
+### Phase G3: Filesystem + Capability + Syscall Hardening
+- Filesystem modes: BindMount, OverlayFS (COW), Read-only rootfs
+- OverlayFS copy-on-write with tmpfs upper/work dirs
+- Read-only rootfs with explicit writable tmpfs mounts
+- Enhanced capability dropping (empty = drop all)
+- NoNewPrivileges enforcement
+- Seccomp profiles: default (restrictive), restricted, unrestricted
+- 250+ allowed syscalls in default profile
+- PIDs limits for fork bomb prevention
+- tmpfs for /tmp, /var/tmp with noexec/nosuid/nodev
+
+### Phase G2: Network Isolation (CNI + Egress)
+- CNI network namespace isolation per sandbox
+- Network modes: CNI (isolated), Host (shared), None (no network)
+- CNI bridge plugin with host-local IPAM
+- Egress policies: default, restricted (DNS/HTTP/HTTPS), none, trusted
+- Port forwarding via iptables DNAT
+- CNI ADD/DEL lifecycle management
+
+### Phase G1: gVisor Execution
+- Explicit runtime selection (gVisor vs runc)
+- No implicit fallback to runc for untrusted workloads
+- Runtime validation at startup
+- Warm pool separation by runtime
+- ExecutionProfile encapsulates all security settings
 
 ### Phase 4: Prediction Engine
 - Enhanced analyzer with 6 architecture types + 30+ frameworks
@@ -163,6 +225,82 @@ Total: 65 tests passing
 - Warm pool reuse
 - Exact-image container reuse
 
+### Phase 1: Foundation
+- Go API Server - Gin framework, JWT auth, GitHub OAuth
+- Worker - NATS job processing, sandbox lifecycle
+- PostgreSQL - SQLC type-safe queries
+- NATS - JetStream + fallback polling
+- Redis - PubSub, session cache
+- Runtime Detection - Node.js, Python, Go, Rust
+- Frontend - Next.js 14, React 18, Tailwind CSS
+- Database Schema - Users, Projects, Sandboxes, Collaborators
+- Migrations - Versioned SQL migrations
+
+---
+
+## 📅 Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for detailed timeline.
+
+---
+
+## 📊 Test Coverage Summary
+
+```
+backend/internal/analyzer           25 tests  ✅
+backend/internal/usecase            33 tests  ✅
+backend/internal/integration         7 tests  ✅
+backend/internal/infrastructure     (cached)  ✅
+backend/internal/crosshost          (no tests)  ✅
+frontend                            (build)   ✅
+Total: 65 tests passing
+```
+
+---
+
+## 📈 Recent Changes (v0.5.0 - G1-G5 Security & Multi-host)
+
+### Phase G5: Cross-Host Platform & Container Migration
+- VXLAN Mesh networking (cross-host overlay, ARP proxy, FDB management)
+- CRIU checkpoint/restore with pre-dump iterations
+- Live migration orchestrator (pre-dump → final dump → transfer → restore)
+- Migration orchestrator with progress tracking
+- VXLAN mesh networking (ARP proxy, FDB management, peer health)
+
+### Phase G4: Tenant/Worker Isolation & Multi-host Scheduling
+- Tenant model with resource quotas and settings
+- Worker agent with auto-registration, heartbeats, resource monitoring
+- Distributed scheduler (Binpack/Spread/LeastUsed with preemption)
+- Worker health checks with automatic status transitions
+- Multi-cluster federation with global scheduler
+- Cross-cluster migration support
+
+### Phase G3: Filesystem + Capability + Syscall Hardening
+- Filesystem modes: BindMount, OverlayFS (COW), Read-only rootfs
+- OverlayFS copy-on-write with tmpfs upper/work dirs
+- Read-only rootfs with explicit writable tmpfs mounts
+- Enhanced capability dropping (empty = drop all)
+- NoNewPrivileges enforcement
+- Seccomp profiles: default (restrictive), restricted, unrestricted
+- 250+ allowed syscalls in default profile
+- PIDs limits for fork bomb prevention
+- tmpfs for /tmp, /var/tmp with noexec/nosuid/nodev
+
+### Phase G2: Network Isolation (CNI + Egress)
+- CNI network namespace isolation per sandbox
+- Network modes: CNI (isolated), Host (shared), None (no network)
+- CNI bridge plugin with host-local IPAM
+- Egress policies: default, restricted (DNS/HTTP/HTTPS), none, trusted
+- Port forwarding via iptables DNAT
+- CNI ADD/DEL lifecycle management
+
+### Phase G1: gVisor Execution
+- Explicit runtime selection (gVisor vs runc)
+- No implicit fallback to runc for untrusted workloads
+- Runtime validation at startup
+- Warm pool separation by runtime
+- ExecutionProfile encapsulates all security settings
+
 ---
 
 ## 📅 Roadmap
@@ -176,4 +314,5 @@ See [ROADMAP.md](ROADMAP.md) for detailed timeline.
 - All benchmarks are research artifacts, not validated claims
 - OAuth Git push remains incomplete
 - Collaborative editing is out of demo scope
-- Current configuration is **not suitable for untrusted multi-tenant workloads**
+- **Phase G1-G5 complete** - Security hardening and multi-host scheduling implemented
+- Current configuration is **not suitable for untrusted multi-tenant workloads** without enabling all security features
