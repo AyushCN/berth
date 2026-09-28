@@ -553,8 +553,8 @@ func (r *Runtime) DeleteSandbox(ctx context.Context, containerID string, execPro
 	return r.StopSandbox(ctx, containerID, execProfile)
 }
 
-// Exec runs a command inside an existing sandbox.
-func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (string, error) {
+// ExecWithEnv runs a command inside an existing sandbox with custom environment variables.
+func (r *Runtime) ExecWithEnv(ctx context.Context, containerID string, cmd []string, env map[string]string) (string, error) {
 	ctx = withNamespace(ctx)
 
 	// Any exec makes the container dirty and unfit for reuse in the warm pool
@@ -570,11 +570,17 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		return "", fmt.Errorf("failed to get task: %w", err)
 	}
 
+	// Build environment variables
+	envVars := []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+	for k, v := range env {
+		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
+	}
+
 	processSpec := &specs.Process{
 		Terminal: false,
 		Args:     cmd,
 		Cwd:      "/workspace",
-		Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+		Env:      envVars,
 	}
 
 	home, _ := os.UserHomeDir()
@@ -614,6 +620,11 @@ func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (s
 		_ = os.RemoveAll(fifoDir)
 		return stdoutBuf.String(), nil
 	}
+}
+
+// Exec runs a command inside an existing sandbox.
+func (r *Runtime) Exec(ctx context.Context, containerID string, cmd []string) (string, error) {
+	return r.ExecWithEnv(ctx, containerID, cmd, nil)
 }
 
 // ExecPTY runs an interactive command inside an existing sandbox.

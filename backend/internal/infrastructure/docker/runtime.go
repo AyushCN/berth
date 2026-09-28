@@ -184,7 +184,15 @@ func (d *DockerRuntime) DeleteSandbox(ctx context.Context, containerID string) e
 }
 
 func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmdArgs []string) (string, error) {
-	args := []string{"exec", "-w", "/workspace", containerID}
+	return d.ExecWithEnv(ctx, containerID, cmdArgs, nil)
+}
+
+func (d *DockerRuntime) ExecWithEnv(ctx context.Context, containerID string, cmdArgs []string, env map[string]string) (string, error) {
+	args := []string{"exec", "-w", "/workspace"}
+	for k, v := range env {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+	args = append(args, containerID)
 	args = append(args, cmdArgs...)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)

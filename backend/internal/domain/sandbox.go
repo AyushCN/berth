@@ -215,6 +215,7 @@ type ContainerRuntime interface {
 	StopSandbox(ctx context.Context, containerID string) error
 	DeleteSandbox(ctx context.Context, containerID string) error
 	Exec(ctx context.Context, containerID string, cmd []string) (string, error)
+	ExecWithEnv(ctx context.Context, containerID string, cmd []string, env map[string]string) (string, error)
 	ExecPTY(ctx context.Context, containerID string, cmd []string) (stdin io.WriteCloser, stdout io.Reader, wait func() error, err error)
 	GetLogs(ctx context.Context, containerID string, tail int) (string, error)
 }

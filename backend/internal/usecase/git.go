@@ -3,7 +3,6 @@ package usecase
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -95,11 +94,12 @@ func (uc *GitUsecase) runGitCmdInContainerWithToken(ctx context.Context, sandbox
 		return "", fmt.Errorf("sandbox is not running")
 	}
 
-	_ = base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+	// Pass GITHUB_TOKEN as environment variable
+	env := map[string]string{
+		"GITHUB_TOKEN": token,
+	}
 
-	// We need to pass env vars to Exec - for now use the regular Exec
-	// The runtime.Exec doesn't support custom env vars directly
-	return uc.runtime.Exec(ctx, *sandbox.ContainerID, append([]string{"git"}, args...))
+	return uc.runtime.ExecWithEnv(ctx, *sandbox.ContainerID, append([]string{"git"}, args...), env)
 }
 
 // --- Host-based operations (workspace-level) ---
