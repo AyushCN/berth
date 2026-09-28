@@ -63,7 +63,7 @@ type Worker struct {
 	Name            string            `json:"name"`            // Human-readable name
 	Hostname        string            `json:"hostname"`        // Network hostname/IP
 	APIPort         int               `json:"api_port"`        // gRPC/HTTP API port
-	ContainerdSock  string            `json:"containerd_sock"` // Path to containerd socket
+	DockerSock      string            `json:"docker_sock"`     // Path to Docker socket (default: unix:///var/run/docker.sock)
 	Labels          map[string]string `json:"labels"`          // Custom labels (e.g., gpu=true, region=us-east)
 	MaxMemory       int64             `json:"max_memory"`      // Total memory in bytes
 	MaxCPU          int64             `json:"max_cpu"`         // Total CPU in milli-cores

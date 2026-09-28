@@ -18,9 +18,9 @@ import (
 
 // WorkerAgent runs on each compute node and registers with the control plane.
 type WorkerAgent struct {
-	worker         *domain.Worker
+	worker      *domain.Worker
 	controlPlane   ControlPlaneClient
-	containerdSock string
+	dockerSock     string
 	runtime        domain.ContainerRuntime
 	mu             sync.RWMutex
 	stopCh         chan struct{}
@@ -35,7 +35,7 @@ type ControlPlaneClient interface {
 	ReportSandboxStatus(ctx context.Context, sandboxID uuid.UUID, status string) error
 }
 
-func NewWorkerAgent(controlPlane ControlPlaneClient, containerdSock string, containerRuntime domain.ContainerRuntime) *WorkerAgent {
+func NewWorkerAgent(controlPlane ControlPlaneClient, dockerSock string, containerRuntime domain.ContainerRuntime) *WorkerAgent {
 	hostname, _ := os.Hostname()
 
 	// Detect resources
@@ -48,7 +48,7 @@ func NewWorkerAgent(controlPlane ControlPlaneClient, containerdSock string, cont
 		Name:           hostname,
 		Hostname:       getLocalIP(),
 		APIPort:        9090,
-		ContainerdSock: containerdSock,
+		DockerSock:     dockerSock,
 		Labels:         detectLabels(),
 		MaxMemory:      totalMem,
 		MaxCPU:         totalCPU,
@@ -61,14 +61,14 @@ func NewWorkerAgent(controlPlane ControlPlaneClient, containerdSock string, cont
 			"go_os":        runtime.GOOS,
 			"go_arch":      runtime.GOARCH,
 			"num_cpu":      fmt.Sprintf("%d", runtime.NumCPU()),
-			"containerd":   containerdSock,
+			"docker":       dockerSock,
 		},
 	}
 
 	return &WorkerAgent{
-		worker:         worker,
+		worker:      worker,
 		controlPlane:   controlPlane,
-		containerdSock: containerdSock,
+		dockerSock:     dockerSock,
 		runtime:        containerRuntime,
 		stopCh:         make(chan struct{}),
 	}
@@ -219,6 +219,8 @@ func detectLabels() map[string]string {
 	// Check for container runtime
 	if _, err := os.Stat("/run/containerd/containerd.sock"); err == nil {
 		labels["runtime"] = "containerd"
+	} else if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		labels["runtime"] = "docker"
 	}
 
 	// Check for KVM

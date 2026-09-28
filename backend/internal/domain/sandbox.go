@@ -98,10 +98,10 @@ type ExecutionProfile struct {
 // DefaultExecutionProfile returns a secure default execution profile for untrusted workloads.
 func DefaultExecutionProfile() *ExecutionProfile {
 	return &ExecutionProfile{
-		Runtime:           RuntimeGVisor,
+		Runtime:           RuntimeRunc,
 		Rootless:          true,
-		NetworkMode:       NetworkModeCNI,
-		FilesystemMode:    FilesystemModeRO,
+		NetworkMode:       NetworkModeHost,
+		FilesystemMode:    FilesystemModeBindMount,
 		Capabilities:      []string{}, // Drop all capabilities
 		CPUQuota:          1000,       // 1 CPU
 		MemoryLimit:       512 * 1024 * 1024, // 512 MiB
@@ -183,7 +183,7 @@ func (s *Sandbox) CanEdit() bool {
 type WarmPoolEntry struct {
 	ID          uuid.UUID
 	ProfileHash string // hash of RuntimeProfile for matching
-	ContainerID string // containerd container ID
+	ContainerID string // Docker container ID
 	CreatedAt   time.Time
 	LastUsedAt  *time.Time
 }
@@ -207,8 +207,8 @@ type SandboxRepository interface {
 	LogActivity(ctx context.Context, sandboxID uuid.UUID, userID uuid.UUID, activityType string, data []byte) error
 }
 
-// ContainerRuntime defines the interface for containerd/gVisor operations.
-// This abstracts containerd so we can mock it in tests.
+// ContainerRuntime defines the interface for container runtime operations.
+// This abstracts the container runtime so we can mock it in tests.
 type ContainerRuntime interface {
 	CreateSandbox(ctx context.Context, spec SandboxSpec) (string, error) // returns containerID
 	StartSandbox(ctx context.Context, containerID string) error
