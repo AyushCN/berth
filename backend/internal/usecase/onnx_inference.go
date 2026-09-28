@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,11 @@ func (e *ONNXInferenceEngine) initialize() error {
 		initErr = ort.InitializeEnvironment()
 		if initErr == nil {
 			e.initialized = true
+		} else {
+			// Log warning but don't fail - ONNX Runtime unavailable, will use fallback
+			slog.Warn("ONNX Runtime native library not available, using fallback predictions", "error", initErr)
+			e.initialized = false
+			initErr = nil // Don't propagate error, allow fallback
 		}
 	})
 	return initErr
@@ -49,6 +55,11 @@ func (e *ONNXInferenceEngine) initialize() error {
 func (e *ONNXInferenceEngine) LoadModel(ctx context.Context, modelID uuid.UUID, onnxPath string) error {
 	if err := e.initialize(); err != nil {
 		return fmt.Errorf("failed to initialize ONNX Runtime: %w", err)
+	}
+
+	// If ONNX Runtime is not available, return a special error that triggers fallback
+	if !e.initialized {
+		return fmt.Errorf("ONNX Runtime not available, using fallback")
 	}
 
 	e.mu.Lock()
@@ -101,6 +112,11 @@ func (e *ONNXInferenceEngine) UnloadModel(modelID uuid.UUID) error {
 func (e *ONNXInferenceEngine) Predict(ctx context.Context, modelID uuid.UUID, features map[string]float64) (map[string]float64, error) {
 	if err := e.initialize(); err != nil {
 		return nil, fmt.Errorf("ONNX Runtime not initialized: %w", err)
+	}
+
+	// If ONNX Runtime is not available, return error to trigger fallback
+	if !e.initialized {
+		return nil, fmt.Errorf("ONNX Runtime not available")
 	}
 
 	e.mu.RLock()
