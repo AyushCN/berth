@@ -182,7 +182,7 @@ func (r *DockerRuntime) SetupNetwork(ctx context.Context) error
 #### API Server
 ```dockerfile
 # Dockerfile.api
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -199,7 +199,7 @@ ENTRYPOINT ["/berth-api"]
 #### Worker
 ```dockerfile
 # Dockerfile.worker
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
