@@ -111,9 +111,13 @@ func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSp
 	}
 	args = append(args, "-e", "HOME=/workspace", "-e", "TERM=xterm-256color")
 
-	// Exposed port
+	// Exposed port and port publishing (for direct access when not using Traefik)
 	if spec.ExposedPort != nil && *spec.ExposedPort > 0 {
 		args = append(args, "--expose", strconv.Itoa(*spec.ExposedPort))
+		// Publish port to host for direct access when not using Traefik
+		if d.traefikDomain == "" {
+			args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", *spec.ExposedPort, *spec.ExposedPort))
+		}
 	}
 
 	// TTY and stdin
@@ -124,7 +128,7 @@ func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSp
 	args = append(args, spec.Cmd...)
 
 	// Execute create
-	slog.Debug("docker create command", "args", strings.Join(args, " "))
+	slog.Info("docker create command", "args", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

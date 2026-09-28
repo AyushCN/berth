@@ -38,7 +38,8 @@ func nodeWatcherCommand(profile *domain.RuntimeProfile) []string {
 
 	// Detect package manager for the right npx/nodemon path
 	// For simplicity, use npx which works with npm/yarn/pnpm
-	watchCmd := fmt.Sprintf("npx nodemon --watch . --ext js,ts,json,jsx,tsx --exec \"%s\"", startCmd)
+	// Use -y flag to auto-confirm installation of nodemon
+	watchCmd := fmt.Sprintf("npx -y nodemon --watch . --ext js,ts,json,jsx,tsx --exec \"%s\"", startCmd)
 
 	// If using bun, use bun's built-in watcher
 	if strings.Contains(profile.BaseImage, "oven/bun") {
@@ -49,13 +50,13 @@ func nodeWatcherCommand(profile *domain.RuntimeProfile) []string {
 }
 
 func pythonWatcherCommand(profile *domain.RuntimeProfile) []string {
-	// Use uvicorn with --reload for hot reload
+	// Use the analyzer's detected start command, with hot reload if possible
 	startCmd := profile.StartCmd
 	if startCmd == "" {
 		startCmd = "uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 	}
 
-	// Ensure --reload flag is present
+	// Ensure --reload flag is present for uvicorn/flask
 	if !strings.Contains(startCmd, "--reload") {
 		if strings.Contains(startCmd, "uvicorn") {
 			startCmd = strings.Replace(startCmd, "uvicorn", "uvicorn --reload", 1)
@@ -66,7 +67,21 @@ func pythonWatcherCommand(profile *domain.RuntimeProfile) []string {
 		}
 	}
 
-	return []string{"sh", "-c", startCmd}
+	// Wrap in a script that keeps container alive if entry point fails
+	// This allows users to debug via terminal even if auto-detected command fails
+	wrappedCmd := fmt.Sprintf(`
+set -e
+echo "Starting: %s"
+if %s; then
+    exit 0
+else
+    echo "Start command failed, keeping container alive for debugging..."
+    echo "You can now connect via terminal to investigate."
+    tail -f /dev/null
+fi
+`, startCmd, startCmd)
+
+	return []string{"sh", "-c", wrappedCmd}
 }
 
 func goWatcherCommand(profile *domain.RuntimeProfile) []string {

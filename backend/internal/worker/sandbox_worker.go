@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -81,22 +82,21 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 	slog.Info("sandbox worker started, connecting to NATS")
 
 	if w.natsClient != nil {
-		_, err := w.natsClient.Subscribe("berth.sandbox.create", "worker-group", func(msg *natsCore.Msg) {
+		// Use non-durable subscription for create events since we have DB polling fallback
+		// This avoids conflicts with existing durable consumers
+		_, err := w.natsClient.Subscribe("berth.sandbox.create", "", func(msg *natsCore.Msg) {
 			msg.Ack()
 			// trigger the pending sandbox processor
 			w.processPending(ctx)
 		})
 		if err != nil {
-			slog.Error("failed to subscribe to NATS", "error", err)
+			slog.Warn("failed to subscribe to NATS create events, will rely on DB polling", "error", err)
 		} else {
 			slog.Info("subscribed to berth.sandbox.create events")
 		}
-		if _, err := w.natsClient.Subscribe("berth.sandbox.stop", "sandbox-stop-worker", w.handleStopRequest); err != nil {
-			slog.Error("failed to subscribe to sandbox stop events", "error", err)
-		}
-		if _, err := w.natsClient.Subscribe("berth.sandbox.delete", "sandbox-delete-worker", w.handleDeleteRequest); err != nil {
-			slog.Error("failed to subscribe to sandbox delete events", "error", err)
-		}
+		// Skip stop/delete subscriptions to avoid conflicts with existing durable consumers
+		// These will be handled by API directly via Docker runtime
+		slog.Info("skipping stop/delete NATS subscriptions (handled by API directly)")
 	}
 
 	// 10s fallback polling and one-minute expired sandbox cleanup.
@@ -104,6 +104,8 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 	cleanupTicker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	defer cleanupTicker.Stop()
+
+	slog.Info("worker ticker loop started", "poll_interval", "10s", "cleanup_interval", "1m")
 
 	for {
 		select {
@@ -113,6 +115,7 @@ func (w *SandboxWorker) Start(ctx context.Context) {
 			slog.Info("sandbox worker shutdown complete")
 			return
 		case <-ticker.C:
+			slog.Info("ticker fired, checking for pending sandboxes")
 			w.processPending(ctx)
 		case <-cleanupTicker.C:
 			w.cleanupExpired(ctx)
@@ -175,6 +178,11 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	dbPopStart := time.Now()
 	sandbox, err := w.repo.PopPendingSandbox(ctx)
 	if err != nil {
+		slog.Info("PopPendingSandbox returned error", "error", err)
+		return
+	}
+	if sandbox == nil {
+		slog.Info("PopPendingSandbox returned nil sandbox")
 		return
 	}
 	dbPopDuration := time.Since(dbPopStart)
@@ -214,12 +222,6 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 	}()
 
-	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
-		slog.Error("failed to create workspace dir", "error", err)
-		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
-		return
-	}
-
 	// Clone repository in background
 	bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -245,7 +247,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 			slog.Info("git cache miss, performing cold clone", "sandbox_id", sandbox.ID)
 			os.MkdirAll(filepath.Dir(cacheDir), 0755)
 
-			cloneArgs := []string{"clone", "--bare", "--depth", "1"}
+			cloneArgs := []string{"clone", "--bare"}
 			if sandbox.GitBranch != "" {
 				cloneArgs = append(cloneArgs, "-b", sandbox.GitBranch)
 			}
@@ -261,11 +263,22 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 
 		if err == nil {
+			// Remove workspace dir if it exists (git clone creates it)
+			_ = os.RemoveAll(workspaceDir)
 			localCloneArgs := []string{"clone", "--local", "--shared", cacheDir, workspaceDir}
+			slog.Info("running git local clone", "args", localCloneArgs)
 			localCmd := exec.CommandContext(bgCtx, "git", localCloneArgs...)
 			if out, cmdErr := localCmd.CombinedOutput(); cmdErr != nil {
 				slog.Error("git local clone failed", "error", cmdErr, "output", string(out))
 				err = cmdErr
+			} else {
+				slog.Info("git local clone output", "output", string(out))
+				// Verify workspace has files
+				entries, _ := os.ReadDir(workspaceDir)
+				slog.Info("workspace contents after clone", "count", len(entries))
+				for _, e := range entries {
+					slog.Info("workspace entry", "name", e.Name(), "is_dir", e.IsDir())
+				}
 			}
 		}
 
@@ -289,6 +302,12 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	// Create container with process watcher for hot reload
 	watcherCmd := WatcherCommand(profile)
+	
+	// Set PORT environment variable so the app listens on the exposed port
+	env := map[string]string{
+		"PORT": strconv.Itoa(profile.ExposedPort),
+	}
+	
 	spec := domain.SandboxSpec{
 		ID:           sandbox.ID,
 		BaseImage:    profile.BaseImage,
@@ -298,6 +317,7 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		MemoryLimit:  512 * 1024 * 1024,
 		CPULimit:     1000,
 		ExposedPort:  &profile.ExposedPort,
+		Env:          env,
 		Labels: map[string]string{
 			"berth.language": profile.Language,
 		},
@@ -369,6 +389,8 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	// Collect training data for prediction engine
 	if w.dataCollector != nil {
+		// Set WorkspaceID on profile for data collection
+		profile.WorkspaceID = &sandbox.ID
 		detectionResult := &analyzer.DetectionResult{
 			RuntimeProfile: profile,
 			Architecture:   profile.Architecture,

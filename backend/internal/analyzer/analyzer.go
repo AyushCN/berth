@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -82,7 +83,7 @@ func Analyze(workspaceDir string) *domain.RuntimeProfile {
 			BaseImage:   "docker.io/library/node:20-alpine",
 			InstallCmd:  "npm install",
 			StartCmd:    "npm start",
-			ExposedPort: 3000,
+			ExposedPort: 3001,
 		}
 
 		// Sub-rule: Check for specific Node.js frameworks or scripts
@@ -131,6 +132,20 @@ func Analyze(workspaceDir string) *domain.RuntimeProfile {
 			profile.StartCmd = "python manage.py runserver 0.0.0.0:8000" // Django
 		} else if _, err := os.Stat(filepath.Join(workspaceDir, "app.py")); err == nil {
 			profile.StartCmd = "python app.py" // Flask / Generic
+		} else if _, err := os.Stat(filepath.Join(workspaceDir, "back.py")); err == nil {
+			// Check if it's Flask/FastAPI
+			content, _ := os.ReadFile(filepath.Join(workspaceDir, "back.py"))
+			if bytes.Contains(content, []byte("flask")) || bytes.Contains(content, []byte("Flask")) {
+				profile.StartCmd = "FLASK_APP=back.py flask run --host=0.0.0.0 --port=8000 --reload"
+			} else if bytes.Contains(content, []byte("fastapi")) || bytes.Contains(content, []byte("FastAPI")) {
+				profile.StartCmd = "uvicorn back:app --host 0.0.0.0 --port 8000 --reload"
+			} else {
+				profile.StartCmd = "python back.py"
+			}
+		} else if _, err := os.Stat(filepath.Join(workspaceDir, "server.py")); err == nil {
+			profile.StartCmd = "python server.py"
+		} else if _, err := os.Stat(filepath.Join(workspaceDir, "run.py")); err == nil {
+			profile.StartCmd = "python run.py"
 		}
 
 		return profile

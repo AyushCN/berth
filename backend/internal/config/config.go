@@ -74,7 +74,7 @@ func Load() (*Config, error) {
 		Runtime:            getEnv("BERTH_RUNTIME", "runc"),
 		DockerHost:       getEnv("DOCKER_HOST", "unix:///var/run/docker.sock"),
 		DockerNetwork:    getEnv("DOCKER_NETWORK", "berth"),
-		TraefikDomain:    getEnv("TRAEFIK_DOMAIN", "localhost"),
+		TraefikDomain:    getEnv("TRAEFIK_DOMAIN", ""),
 	}
 
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")

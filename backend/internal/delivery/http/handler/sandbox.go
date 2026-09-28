@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -201,11 +202,13 @@ func (h *SandboxHandler) PreviewProxy(c *gin.Context) {
 
 	sandbox, err := h.sandboxUC.GetPreviewEnvironment(c.Request.Context(), uid)
 	if err != nil {
+		slog.Error("preview proxy: sandbox not found", "sandbox_id", sandboxID, "error", err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 
 	if sandbox.Port == nil || *sandbox.Port == 0 {
+		slog.Error("preview proxy: sandbox not running or port not assigned", "sandbox_id", sandboxID)
 		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "sandbox is not running or port is not assigned"})
 		return
 	}
@@ -216,6 +219,8 @@ func (h *SandboxHandler) PreviewProxy(c *gin.Context) {
 	if h.traefikDomain == "" {
 		targetHost = fmt.Sprintf("127.0.0.1:%d", *sandbox.Port)
 	}
+
+	slog.Info("preview proxy: forwarding request", "sandbox_id", sandboxID, "target_host", targetHost, "port", *sandbox.Port)
 
 	// Setup Reverse Proxy
 	director := func(req *http.Request) {
@@ -233,6 +238,10 @@ func (h *SandboxHandler) PreviewProxy(c *gin.Context) {
 	}
 
 	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
+		slog.Error("preview proxy error", "sandbox_id", sandboxID, "target_host", targetHost, "error", err)
+		rw.WriteHeader(http.StatusBadGateway)
+	}
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
