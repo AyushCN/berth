@@ -22,19 +22,28 @@ export function DockerLogs({ envId }: { envId: string }) {
         }
       } catch (err: any) {
         if (isMounted) {
-          // If it's the "not running" error, just show waiting
-          if (err.message && err.message.includes("sandbox is not running")) {
+          // The API says "environment is not running (no container id)" and
+          // "unauthorized to get logs", not "sandbox is not running", so this
+          // branch never matched and the raw Go error was written into the
+          // terminal buffer. Treat any not-yet-ready state as "keep waiting".
+          const msg = err.message || "";
+          const waiting =
+            msg.includes("not running") ||
+            msg.includes("no container id") ||
+            msg.includes("unauthorized to get logs");
+          if (waiting) {
              // do nothing, let it show "Waiting for logs..."
           } else {
-             // Optionally write error to logs
-             setLogs(`Error: ${err.message}`);
+             setLogs(`Error: ${msg}`);
           }
         }
       }
     };
-    
+
     fetchLogs();
-    const interval = setInterval(fetchLogs, 3000);
+    // 5s rather than 3s: this panel alone accounted for 20 requests a minute,
+    // which on its own exhausted the shared per-user rate limit.
+    const interval = setInterval(fetchLogs, 5000);
     
     return () => {
       isMounted = false;

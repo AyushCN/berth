@@ -144,8 +144,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined into the bundle at BUILD time, so they must
+        # be passed here rather than only in the runtime environment below.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api.localhost}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://api.localhost}
+        API_URL: ${API_URL:-http://api:8080}
     environment:
-      NEXT_PUBLIC_API_URL: http://api.localhost
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api.localhost}
     ports:
       - "3000:3000"
     networks:

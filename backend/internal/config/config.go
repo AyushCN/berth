@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/joho/godotenv"
 
@@ -27,12 +28,20 @@ type Config struct {
 	Runtime            string // "runsc" or "runc" (legacy)
 
 	// Docker runtime settings
-	DockerHost       string
-	DockerNetwork    string
-	TraefikDomain    string
+	DockerHost    string
+	DockerNetwork string
+	TraefikDomain string
 
 	// ModelDir is where trained prediction artefacts are written.
 	ModelDir string
+
+	// RateLimitRequestsPerMinute bounds the whole /api group per client IP
+	// and per path.
+	RateLimitRequestsPerMinute int
+	// RateLimitAuthenticatedPerMinute bounds all authenticated routes, which
+	// share a single bucket per user. It must sit comfortably above the
+	// frontend's own polling or a user watching a log tail gets locked out.
+	RateLimitAuthenticatedPerMinute int
 }
 
 // Load reads configuration from environment variables.
@@ -78,22 +87,24 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		Mode:               mode,
-		Env:                getEnv("ENV", "development"),
-		Port:               port,
-		DatabaseURL:        dbURL,
-		RedisURL:           redisURL,
-		NatsURL:            getEnv("NATS_URL", "nats://localhost:4222"),
-		JWTSecret:          jwtSecret,
-		GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
-		GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
-		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
-		ContainerdSocket:   os.Getenv("CONTAINERD_SOCK"),
-		Runtime:            getEnv("BERTH_RUNTIME", "runc"),
-		DockerHost:       getEnv("DOCKER_HOST", "unix:///var/run/docker.sock"),
-		DockerNetwork:    getEnv("DOCKER_NETWORK", "berth"),
-		TraefikDomain:    getEnv("TRAEFIK_DOMAIN", ""),
-		ModelDir:         getEnv("MODEL_DIR", "/tmp/berth/models"),
+		Mode:                            mode,
+		Env:                             getEnv("ENV", "development"),
+		Port:                            port,
+		DatabaseURL:                     dbURL,
+		RedisURL:                        redisURL,
+		NatsURL:                         getEnv("NATS_URL", "nats://localhost:4222"),
+		JWTSecret:                       jwtSecret,
+		GithubClientID:                  os.Getenv("GITHUB_CLIENT_ID"),
+		GithubClientSecret:              os.Getenv("GITHUB_CLIENT_SECRET"),
+		FrontendURL:                     getEnv("FRONTEND_URL", "http://localhost:3000"),
+		ContainerdSocket:                os.Getenv("CONTAINERD_SOCK"),
+		Runtime:                         getEnv("BERTH_RUNTIME", "runc"),
+		DockerHost:                      getEnv("DOCKER_HOST", "unix:///var/run/docker.sock"),
+		DockerNetwork:                   getEnv("DOCKER_NETWORK", "berth"),
+		TraefikDomain:                   getEnv("TRAEFIK_DOMAIN", ""),
+		ModelDir:                        getEnv("MODEL_DIR", "/tmp/berth/models"),
+		RateLimitRequestsPerMinute:      getEnvInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 200),
+		RateLimitAuthenticatedPerMinute: getEnvInt("RATE_LIMIT_AUTHENTICATED_PER_MINUTE", 120),
 	}
 
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")
@@ -111,4 +122,18 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getEnvInt reads a positive integer, falling back on unset or unparseable
+// values rather than failing startup on a typo in a tuning knob.
+func getEnvInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }

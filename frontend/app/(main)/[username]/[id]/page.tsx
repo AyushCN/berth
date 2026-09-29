@@ -20,15 +20,13 @@ const DockerLogs = dynamic(() => import('@/components/docker-logs').then(mod => 
 });
 import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
+import { presentState, isBuilding, isFailed, canStart, hasContainer } from '@/lib/environment-state';
 
-const statusColors: Record<string, string> = {
-  IDLE: "text-gray-400 bg-gray-400/10 border-gray-400/20",
-  PENDING: "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
-  BUILDING: "text-blue-400 bg-blue-400/10 border-blue-400/20",
-  RUNNING: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
-  STOPPED: "text-orange-400 bg-orange-400/10 border-orange-400/20",
-  FAILED: "text-red-400 bg-red-400/10 border-red-400/20",
-};
+// Status rendering resolves through lib/environment-state, which knows the full
+// 12-value environment enum plus the 6 legacy sandbox values. This local map
+// only covered the legacy set, so CREATED, BUILD_FAILED, CRASHED, SUSPENDED and
+// friends all fell through to a grey "Idle" badge.
+const present = (env: { state?: string }) => presentState(env.state);
 
 export default function EnvironmentPage() {
   const { id } = useParams<{ id: string }>();
@@ -71,9 +69,11 @@ export default function EnvironmentPage() {
     };
   }, [id, selectEnvironment, fetchEnv]);
 
-  // Auto-switch to logs tab when environment is BUILDING or FAILED
+  // Auto-switch to the logs tab while building and when a build has failed.
+  // Checking only "BUILDING"/"FAILED" missed BUILD_FAILED and CRASHED, so the
+  // tab never opened on a real failure.
   useEffect(() => {
-    if (env?.state === "BUILDING" || env?.state === "FAILED") {
+    if (isBuilding(env?.state) || isFailed(env?.state)) {
       setActiveTab("logs");
     }
   }, [env?.state]);
@@ -176,11 +176,12 @@ export default function EnvironmentPage() {
           {/* Right: status + actions */}
           <div className="flex items-center gap-3 shrink-0 flex-wrap">
             <div
-              className={`px-3 py-1.5 rounded-full border text-xs font-bold tracking-wider uppercase flex items-center gap-2 ${statusColors[env.state] || statusColors.IDLE}`}
+              className={`px-3 py-1.5 rounded-full border text-xs font-bold tracking-wider uppercase flex items-center gap-2 ${present(env).color}`}
+              title={present(env).label}
             >
-              {env.state === "BUILDING" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {env.state === "RUNNING" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]" />}
-              {env.state}
+              {isBuilding(env.state) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {!isBuilding(env.state) && <span className={`w-1.5 h-1.5 rounded-full ${present(env).dot}`} />}
+              {present(env).label}
             </div>
             {env.expires_at && (
               <span className="text-xs text-on-surface-variant flex items-center gap-1" title={`Expires ${new Date(env.expires_at).toLocaleString()}`}>
@@ -209,7 +210,7 @@ export default function EnvironmentPage() {
               </button>
             )}
 
-            {(env.state === "STOPPED" || env.state === "FAILED" || env.state === "RUNNING") && (
+            {canStart(env.state) && (
               <button
                 onClick={handleRestart}
                 disabled={isRestarting}
@@ -243,7 +244,7 @@ export default function EnvironmentPage() {
                 Files
               </div>
               <div className="flex-1 overflow-y-auto p-2">
-                <FileTree envId={id} selectedPath={activeFile || ''} onSelectFile={setActiveFile} enabled={env.state === 'RUNNING' || env.state === 'STOPPED'} />
+                <FileTree envId={id} selectedPath={activeFile || ''} onSelectFile={setActiveFile} enabled={hasContainer(env.state)} />
               </div>
             </div>
 

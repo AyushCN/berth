@@ -24,7 +24,10 @@ export interface ShareLink {
   created_by: string;
   expires_at: string | null;
   max_uses: number | null;
-  current_uses: number;
+  // The API emits `uses_count` (backend/internal/domain/share_link.go).
+  // This was declared as `current_uses`, so the usage pill rendered
+  // "undefined / 3" on every link.
+  uses_count: number;
   created_at: string;
 }
 
@@ -271,7 +274,7 @@ export function ShareLinkList({ projectId, links, onRefresh }: ShareLinkListProp
               <div className="flex items-center gap-2 flex-wrap">
                 {getRoleBadge(link.role)}
                 <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-xs font-mono">
-                  {getUsageText(link.current_uses, link.max_uses)}
+                  {getUsageText(link.uses_count, link.max_uses)}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                   link.expires_at && new Date(link.expires_at) < new Date()

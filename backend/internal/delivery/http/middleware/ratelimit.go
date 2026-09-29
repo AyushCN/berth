@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	infradis "github.com/AyushCN/berth/internal/infrastructure/redis"
+	"github.com/gin-gonic/gin"
 	"log/slog"
 )
 
-func RateLimit() gin.HandlerFunc {
+// RateLimit applies a per-client-IP, per-path limit to the whole /api group.
+func RateLimit(requestsPerMinute int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		client := infradis.Client()
 		if client == nil {
@@ -32,7 +33,7 @@ func RateLimit() gin.HandlerFunc {
 			client.Expire(ctx, key, time.Minute)
 		}
 
-		if count > 200 {
+		if count > int64(requestsPerMinute) {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
 			return
 		}
@@ -41,8 +42,15 @@ func RateLimit() gin.HandlerFunc {
 	}
 }
 
-// RateLimitUser applies a stricter rate limit per user bucket for authenticated routes.
-func RateLimitUser() gin.HandlerFunc {
+// RateLimitUser applies a stricter per-user limit to authenticated routes.
+//
+// Every authenticated route shares one bucket per user, so the ceiling has to
+// accommodate the client's own polling or a user merely watching a log stream
+// locks themselves out of the whole API. At the previous hardcoded 30/min the
+// frontend generated roughly 36 requests a minute (the log tail alone is
+// 20/min), so opening the Build Logs tab reliably produced 429s everywhere.
+// The value now comes from configuration.
+func RateLimitUser(requestsPerMinute int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		client := infradis.Client()
 		if client == nil {
@@ -70,7 +78,7 @@ func RateLimitUser() gin.HandlerFunc {
 			client.Expire(ctx, key, time.Minute)
 		}
 
-		if count > 30 {
+		if count > int64(requestsPerMinute) {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
 			return
 		}

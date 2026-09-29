@@ -20,40 +20,12 @@ import { useEnvStore } from "@/stores/env";
 import { useAuthStore } from "@/stores/auth";
 import { api } from "@/lib/api";
 import { CreateEnvironmentModal } from "@/components/create-env-modal";
+import { presentState } from "@/lib/environment-state";
 
-const statusConfig: Record<
-  string,
-  { color: string; dot: string; label: string }
-> = {
-  IDLE: {
-    color: "text-gray-400 bg-gray-400/10 border-gray-400/20",
-    dot: "bg-gray-400",
-    label: "Idle",
-  },
-  BUILDING: {
-    color: "text-blue-400 bg-blue-400/10 border-blue-400/20",
-    dot: "bg-blue-400 animate-bounce",
-    label: "Building",
-  },
-  RUNNING: {
-    color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
-    dot: "bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]",
-    label: "Running",
-  },
-  STOPPED: {
-    color: "text-orange-400 bg-orange-400/10 border-orange-400/20",
-    dot: "bg-orange-400",
-    label: "Stopped",
-  },
-  FAILED: {
-    color: "text-red-400 bg-red-400/10 border-red-400/20",
-    dot: "bg-red-400",
-    label: "Failed",
-  },
-};
-
+// Resolves through lib/environment-state so the full environment enum is
+// covered, not just the four legacy values this page used to hardcode.
 function StatusBadge({ status }: { status: string }) {
-  const cfg = statusConfig[status] ?? statusConfig.IDLE;
+  const cfg = presentState(status);
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase border ${cfg.color}`}
@@ -87,13 +59,19 @@ function SandboxesDashboardContent() {
     let retryDelay = 15_000;
 
     const fetchEnvs = async () => {
-      const fetchPromise = projectId 
-        ? api.projects.sandboxes(projectId)
-        : api.environments.list();
-
+      // The two sources use different envelope keys:
+      //   GET /api/environments            -> { environments: [...] }
+      //   GET /api/projects/:id/sandboxes  -> { sandboxes: [...] }
+      // Reading `data.sandboxes` unconditionally meant the dashboard always
+      // rendered the empty state.
       try {
-        const data = await fetchPromise;
-        setEnvironments(data.sandboxes || []);
+        if (projectId) {
+          const scoped = await api.projects.sandboxes(projectId);
+          setEnvironments(scoped?.sandboxes ?? []);
+        } else {
+          const all = await api.environments.list();
+          setEnvironments(all?.environments ?? []);
+        }
         setError(false);
         setErrorMessage("");
         retryDelay = 15_000;
@@ -125,12 +103,14 @@ function SandboxesDashboardContent() {
     try {
       await api.environments.fork(envId, { name: `${envName} (Fork)` });
       toast.success("Sandbox forked successfully!");
-      // Refetch
-      const fetchPromise = projectId 
-        ? api.projects.sandboxes(projectId)
-        : api.environments.list();
-      const data = await fetchPromise;
-      setEnvironments(data.sandboxes || []);
+      // Refetch, honouring the same per-source envelope keys as above.
+      if (projectId) {
+        const scoped = await api.projects.sandboxes(projectId);
+        setEnvironments(scoped?.sandboxes ?? []);
+      } else {
+        const all = await api.environments.list();
+        setEnvironments(all?.environments ?? []);
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to fork sandbox");
     } finally {

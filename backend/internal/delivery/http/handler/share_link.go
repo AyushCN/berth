@@ -27,6 +27,24 @@ type joinShareLinkRequest struct {
 	Code string `json:"code" binding:"required"`
 }
 
+// ValidateShareLink reports whether a share code is usable, without consuming
+// a use. The /join/<code> page calls this on mount and previously had no
+// endpoint to call, so every visitor got the "Link Invalid" screen.
+func (h *ShareLinkHandler) ValidateShareLink(c *gin.Context) {
+	code := c.Query("code")
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+		return
+	}
+
+	result, err := h.shareLinkUC.ValidateShareLink(c.Request.Context(), code)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 // CreateShareLink creates a new share link for a project
 func (h *ShareLinkHandler) CreateShareLink(c *gin.Context) {
 	userID, _ := c.Get("userId")

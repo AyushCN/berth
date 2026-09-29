@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/AyushCN/berth/internal/domain"
@@ -13,11 +14,11 @@ import (
 )
 
 type CreateShareLinkRequest struct {
-	ProjectID   uuid.UUID
-	Role        string // VIEWER, EDITOR
-	CreatedBy   uuid.UUID
-	ExpiresAt   *time.Time
-	MaxUses     *int
+	ProjectID uuid.UUID
+	Role      string // VIEWER, EDITOR
+	CreatedBy uuid.UUID
+	ExpiresAt *time.Time
+	MaxUses   *int
 }
 
 type JoinViaShareLinkRequest struct {
@@ -113,6 +114,66 @@ func (uc *ShareLinkUsecase) RevokeShareLink(ctx context.Context, linkID, userID 
 	return uc.shareLinkRepo.Update(ctx, link)
 }
 
+// ValidateShareLink reports whether a share code is currently usable, without
+// consuming a use. The /join/<code> page calls this on mount before offering
+// the join button, and previously had no endpoint to call: every visitor saw
+// the "Link Invalid" screen.
+func (uc *ShareLinkUsecase) ValidateShareLink(ctx context.Context, code string) (*ShareLinkValidation, error) {
+	if strings.TrimSpace(code) == "" {
+		return nil, fmt.Errorf("share code is required")
+	}
+
+	link, err := uc.shareLinkRepo.GetByCode(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("invalid or expired share link")
+	}
+
+	now := time.Now()
+	switch {
+	case link.RevokedAt != nil:
+		return nil, fmt.Errorf("share link has been revoked")
+	case link.ExpiresAt != nil && link.ExpiresAt.Before(now):
+		return nil, fmt.Errorf("share link has expired")
+	case link.MaxUses != nil && link.UsesCount >= *link.MaxUses:
+		return nil, fmt.Errorf("share link has reached its usage limit")
+	}
+
+	project, err := uc.projectRepo.GetByID(ctx, link.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project for share link")
+	}
+
+	result := &ShareLinkValidation{
+		Valid:     true,
+		Code:      link.Code,
+		Role:      link.Role,
+		ProjectID: link.ProjectID,
+		ExpiresAt: link.ExpiresAt,
+		MaxUses:   link.MaxUses,
+		UsesCount: link.UsesCount,
+	}
+	if project != nil {
+		result.ProjectName = project.Name
+	}
+	if link.ExpiresAt != nil {
+		result.ExpiresInSeconds = int(time.Until(*link.ExpiresAt).Seconds())
+	}
+	return result, nil
+}
+
+// ShareLinkValidation is the response for GET /api/share-links/validate.
+type ShareLinkValidation struct {
+	Valid            bool       `json:"valid"`
+	Code             string     `json:"code"`
+	ProjectID        uuid.UUID  `json:"project_id"`
+	ProjectName      string     `json:"project_name"`
+	Role             string     `json:"role"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	ExpiresInSeconds int        `json:"expires_in_seconds,omitempty"`
+	MaxUses          *int       `json:"max_uses,omitempty"`
+	UsesCount        int        `json:"uses_count"`
+}
+
 func (uc *ShareLinkUsecase) JoinViaShareLink(ctx context.Context, req JoinViaShareLinkRequest) (*domain.Workspace, error) {
 	link, err := uc.shareLinkRepo.GetByCode(ctx, req.Code)
 	if err != nil {
@@ -205,16 +266,16 @@ func (uc *ShareLinkUsecase) JoinViaShareLink(ctx context.Context, req JoinViaSha
 
 func (uc *ShareLinkUsecase) createForkWorkspace(ctx context.Context, canonical *domain.Workspace, userID uuid.UUID) (*domain.Workspace, error) {
 	workspace := &domain.Workspace{
-		ID:               uuid.New(),
-		ProjectID:        canonical.ProjectID,
-		Name:             fmt.Sprintf("%s-fork", userID.String()[:8]),
-		Type:             domain.WorkspaceTypeFork,
-		BaseWorkspaceID:  &canonical.ID,
-		OwnerID:          userID,
-		GitBranch:        canonical.GitBranch,
-		CommitHash:       canonical.CommitHash,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		ID:              uuid.New(),
+		ProjectID:       canonical.ProjectID,
+		Name:            fmt.Sprintf("%s-fork", userID.String()[:8]),
+		Type:            domain.WorkspaceTypeFork,
+		BaseWorkspaceID: &canonical.ID,
+		OwnerID:         userID,
+		GitBranch:       canonical.GitBranch,
+		CommitHash:      canonical.CommitHash,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	if err := uc.workspaceRepo.Create(ctx, workspace); err != nil {
@@ -233,7 +294,7 @@ func (uc *ShareLinkUsecase) createForkWorkspace(ctx context.Context, canonical *
 		if err := uc.gitRepo.CreateBranch(ctx, canonical.ID, forkBranch); err != nil {
 			slog.Warn("failed to create fork branch", "workspace_id", canonical.ID, "error", err)
 		}
-		
+
 		// The fork workspace will use this branch when its environment is created
 		workspace.GitBranch = forkBranch
 		if err := uc.workspaceRepo.Update(ctx, workspace); err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,17 @@ func (uc *GitUsecase) Authorize(ctx context.Context, environmentID, userID uuid.
 // runGitCmdOnHost runs git command on host filesystem (for workspace operations)
 func (uc *GitUsecase) runGitCmdOnHost(ctx context.Context, environmentID uuid.UUID, args ...string) (string, error) {
 	dir := uc.getSandboxDir(environmentID)
+
+	// Fail cleanly before spawning git. exec would otherwise fail inside
+	// chdir and wrap the absolute host path (WORKSPACE_ROOT/<id>) in the
+	// error, which the handlers return verbatim to the client.
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("workspace for environment %s is not available on this host", environmentID)
+		}
+		return "", fmt.Errorf("workspace for environment %s is not readable", environmentID)
+	}
+
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 
@@ -63,7 +75,13 @@ func (uc *GitUsecase) runGitCmdOnHost(ctx context.Context, environmentID uuid.UU
 
 	err := cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf("git %s failed: %v, stderr: %s", strings.Join(args, " "), err, errBuf.String())
+		// git's own stderr is safe to surface; the exec error is not, because
+		// it embeds the host path.
+		detail := strings.TrimSpace(errBuf.String())
+		if detail == "" {
+			detail = "no output"
+		}
+		return "", fmt.Errorf("git %s failed: %s", strings.Join(args, " "), detail)
 	}
 	return outBuf.String(), nil
 }
@@ -258,7 +276,9 @@ func (uc *GitUsecase) CheckoutHost(ctx context.Context, environmentID uuid.UUID,
 }
 
 func (uc *GitUsecase) GetLogsHost(ctx context.Context, environmentID uuid.UUID, limit int) (string, error) {
-	out, err := uc.runGitCmdOnHost(ctx, environmentID, "log", fmt.Sprintf("--oneline -%d", limit))
+	// "--oneline -20" must be two separate arguments. As one argument git
+	// rejects it as an unknown option, so this always returned an error.
+	out, err := uc.runGitCmdOnHost(ctx, environmentID, "log", "--oneline", fmt.Sprintf("-%d", limit))
 	if err != nil {
 		return "", err
 	}
@@ -297,30 +317,44 @@ func (uc *GitUsecase) Commit(ctx context.Context, environmentID uuid.UUID, messa
 	return err
 }
 
+// commitLogFormat requests every field the UI renders. The previous
+// `--oneline` output carries neither author nor date, so Author and Date were
+// hardcoded to "". The frontend then called formatDistanceToNow(new Date("")),
+// which throws RangeError: Invalid time value, and relativeTime("") rendered
+// "NaNd ago".
+//
+// Fields are separated with \x1f (unit separator) so commit subjects
+// containing spaces or the other delimiters still parse.
+const commitLogFormat = "--pretty=format:%H%x1f%h%x1f%an%x1f%aI%x1f%s"
+
+const commitLogSeparator = "\x1f"
+
 // GetCommits returns the commit history for an environment
 func (uc *GitUsecase) GetCommits(ctx context.Context, environmentID uuid.UUID) ([]domain.CommitEntry, error) {
-	out, err := uc.runGitCmdOnHost(ctx, environmentID, "log", "--oneline", "-20")
+	out, err := uc.runGitCmdOnHost(ctx, environmentID, "log", commitLogFormat, "-20")
 	if err != nil {
 		return nil, err
 	}
 
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) == 1 && lines[0] == "" {
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
 		return []domain.CommitEntry{}, nil
 	}
 
+	lines := strings.Split(trimmed, "\n")
 	commits := make([]domain.CommitEntry, 0, len(lines))
 	for _, line := range lines {
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) >= 2 {
-			commits = append(commits, domain.CommitEntry{
-				Hash:      parts[0],
-				ShortHash: parts[0][:min(7, len(parts[0]))],
-				Message:   parts[1],
-				Author:    "",
-				Date:      "",
-			})
+		parts := strings.SplitN(line, commitLogSeparator, 5)
+		if len(parts) < 5 {
+			continue
 		}
+		commits = append(commits, domain.CommitEntry{
+			Hash:      parts[0],
+			ShortHash: parts[1],
+			Message:   parts[4],
+			Author:    parts[2],
+			Date:      parts[3],
+		})
 	}
 	return commits, nil
 }

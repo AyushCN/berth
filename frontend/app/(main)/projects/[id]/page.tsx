@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
+import { presentState } from "@/lib/environment-state";
 import { formatDistanceToNow } from "date-fns";
 import { CreateShareLinkModal, ShareLinkList, ShareLink } from "@/components/share/ShareLinkComponents";
 
@@ -243,13 +244,16 @@ export default function ProjectDetailPage() {
             </div>
 
             <div className="flex gap-3">
-              <Link
-                href={`/projects/${project.id}/settings`}
+              {/* There is no app/(main)/projects/[id]/settings route, so this
+                  link was a guaranteed 404. Share links are the only settings
+                  surface that exists today. */}
+              <a
+                href="#share-links"
                 className="px-4 py-2 bg-slate-800/50 border border-slate-700 text-slate-300 rounded-xl font-medium hover:bg-slate-800 hover:text-white transition-all"
               >
-                <Settings className="w-4 h-4 mr-2" />
+                <Settings className="w-4 h-4 mr-2 inline" />
                 Manage Settings
-              </Link>
+              </a>
               <button
                 onClick={handleDeleteProject}
                 className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl font-medium hover:bg-red-500/20 transition-all"
@@ -314,14 +318,8 @@ export default function ProjectDetailPage() {
                             <Box className="w-4 h-4 text-primary-fixed" />
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                              sandbox.state === "RUNNING" ? "bg-emerald-500/10 text-emerald-400" :
-                              sandbox.state === "BUILDING" ? "bg-blue-500/10 text-blue-400" :
-                              sandbox.state === "STOPPED" ? "bg-orange-500/10 text-orange-400" :
-                              sandbox.state === "FAILED" ? "bg-red-500/10 text-red-400" :
-                              "bg-slate-700/50 text-slate-400"
-                            }`}>
-                              {sandbox.state}
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${presentState(sandbox.state).color}`}>
+                              {presentState(sandbox.state).label}
                             </span>
                           </div>
                         </div>

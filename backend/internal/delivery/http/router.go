@@ -27,7 +27,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 
 	// API routes
 	api := r.Group("/api")
-	api.Use(middleware.RateLimit())
+	api.Use(middleware.RateLimit(cfg.RateLimitRequestsPerMinute))
 	{
 		// Auth
 		api.GET("/auth/github", deps.AuthHandler.GithubLogin)
@@ -37,7 +37,7 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 		// Authenticated routes
 		authenticated := api.Group("")
 		authenticated.Use(middleware.Auth(cfg.JWTSecret))
-		authenticated.Use(middleware.RateLimitUser())
+		authenticated.Use(middleware.RateLimitUser(cfg.RateLimitAuthenticatedPerMinute))
 		{
 			authenticated.GET("/user/me", deps.AuthHandler.GetMe)
 
@@ -61,6 +61,10 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 
 			// Join via share link (public endpoint, but requires auth)
 			authenticated.POST("/join", deps.ShareLinkHandler.JoinViaShareLink)
+			// Validate a share code without consuming a use. The /join/<code>
+			// page calls this on mount and previously had no endpoint at all,
+			// so every visitor got the "Link Invalid" screen.
+			authenticated.GET("/share-links/validate", deps.ShareLinkHandler.ValidateShareLink)
 
 			// Environments
 			authenticated.GET("/environments", deps.EnvironmentHandler.ListEnvironments)
@@ -137,15 +141,15 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 
 // Dependencies holds all handler dependencies.
 type Dependencies struct {
-	AuthHandler         *handler.AuthHandler
-	EnvironmentHandler  *handler.EnvironmentHandler
-	FileHandler         *handler.FileHandler
-	WSHandler           *handler.WSHandler
-	GitHandler          *handler.GitHandler
-	OrgHandler          *handler.OrganizationHandler
-	ProjectHandler      *handler.ProjectHandler
-	ShareLinkHandler    *handler.ShareLinkHandler
+	AuthHandler          *handler.AuthHandler
+	EnvironmentHandler   *handler.EnvironmentHandler
+	FileHandler          *handler.FileHandler
+	WSHandler            *handler.WSHandler
+	GitHandler           *handler.GitHandler
+	OrgHandler           *handler.OrganizationHandler
+	ProjectHandler       *handler.ProjectHandler
+	ShareLinkHandler     *handler.ShareLinkHandler
 	ChangeRequestHandler *handler.ChangeRequestHandler
-	ActivityHandler     *handler.ActivityHandler
-	PredictionHandler   *handler.PredictionHandler
+	ActivityHandler      *handler.ActivityHandler
+	PredictionHandler    *handler.PredictionHandler
 }
