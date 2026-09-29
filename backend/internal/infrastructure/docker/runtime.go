@@ -69,7 +69,7 @@ func (d *DockerRuntime) removeExistingContainer(ctx context.Context, name string
 	return nil
 }
 
-func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.ContainerSpec) (string, error) {
+func (d *DockerRuntime) Create(ctx context.Context, spec domain.ContainerSpec) (string, error) {
 	// The container name is the environment id, so it is the identity here. A
 	// previous container with the same name must be cleared first, otherwise
 	// docker refuses with "the container name is already in use". This bites on
@@ -274,7 +274,7 @@ func (d *DockerRuntime) ensureImage(ctx context.Context, image string) error {
 	return nil
 }
 
-func (d *DockerRuntime) StartSandbox(ctx context.Context, containerID string) error {
+func (d *DockerRuntime) Start(ctx context.Context, containerID string) error {
 	cmd := exec.CommandContext(ctx, "docker", "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -283,7 +283,7 @@ func (d *DockerRuntime) StartSandbox(ctx context.Context, containerID string) er
 	return nil
 }
 
-func (d *DockerRuntime) StopSandbox(ctx context.Context, containerID string) error {
+func (d *DockerRuntime) Stop(ctx context.Context, containerID string) error {
 	cmd := exec.CommandContext(ctx, "docker", "stop", "-t", "10", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -292,7 +292,7 @@ func (d *DockerRuntime) StopSandbox(ctx context.Context, containerID string) err
 	return nil
 }
 
-func (d *DockerRuntime) DeleteSandbox(ctx context.Context, containerID string) error {
+func (d *DockerRuntime) Remove(ctx context.Context, containerID string) error {
 	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", "-v", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

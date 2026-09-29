@@ -16,13 +16,10 @@ type Querier interface {
 	AddProjectCollaborator(ctx context.Context, arg AddProjectCollaboratorParams) (ProjectCollaborator, error)
 	ConfirmRuntimeProfile(ctx context.Context, arg ConfirmRuntimeProfileParams) (RuntimeProfile, error)
 	CountEnvironmentsByStateAndRuntimeProfile(ctx context.Context, arg CountEnvironmentsByStateAndRuntimeProfileParams) (int64, error)
-	CreateBuild(ctx context.Context, arg CreateBuildParams) (Build, error)
-	CreateBuildPlan(ctx context.Context, arg CreateBuildPlanParams) (BuildPlan, error)
 	CreateChangeRequest(ctx context.Context, arg CreateChangeRequestParams) (ChangeRequest, error)
 	CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (Environment, error)
 	CreateEnvironmentEvent(ctx context.Context, arg CreateEnvironmentEventParams) (EnvironmentEvent, error)
 	CreateEnvironmentService(ctx context.Context, arg CreateEnvironmentServiceParams) (EnvironmentService, error)
-	CreateImage(ctx context.Context, arg CreateImageParams) (Image, error)
 	CreateOrganization(ctx context.Context, name string) (Organization, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
 	CreateRuntimeProfile(ctx context.Context, arg CreateRuntimeProfileParams) (RuntimeProfile, error)
@@ -35,20 +32,12 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	CreateWorkspaceMember(ctx context.Context, arg CreateWorkspaceMemberParams) (WorkspaceMember, error)
-	DeleteBuild(ctx context.Context, id uuid.UUID) error
-	DeleteBuildPlan(ctx context.Context, id uuid.UUID) error
 	DeleteChangeRequest(ctx context.Context, id uuid.UUID) error
 	DeleteEnvironmentService(ctx context.Context, id uuid.UUID) error
-	DeleteImage(ctx context.Context, id uuid.UUID) error
 	DeleteRuntimeProfile(ctx context.Context, id uuid.UUID) error
 	DeleteShareLink(ctx context.Context, id uuid.UUID) error
 	DeleteWorkspaceMember(ctx context.Context, arg DeleteWorkspaceMemberParams) error
 	GetActiveEnvironmentsByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Environment, error)
-	GetBuild(ctx context.Context, id uuid.UUID) (Build, error)
-	GetBuildPlan(ctx context.Context, id uuid.UUID) (BuildPlan, error)
-	GetBuildPlanByRuntimeProfile(ctx context.Context, runtimeProfileID uuid.UUID) (BuildPlan, error)
-	GetBuildsByBuildPlan(ctx context.Context, buildPlanID uuid.UUID) ([]Build, error)
-	GetBuildsByWorkspace(ctx context.Context, arg GetBuildsByWorkspaceParams) ([]Build, error)
 	GetCanonicalWorkspace(ctx context.Context, projectID uuid.UUID) (Workspace, error)
 	GetChangeRequest(ctx context.Context, id uuid.UUID) (GetChangeRequestRow, error)
 	GetChangeRequestsByProject(ctx context.Context, arg GetChangeRequestsByProjectParams) ([]GetChangeRequestsByProjectRow, error)
@@ -60,10 +49,6 @@ type Querier interface {
 	GetEnvironmentServices(ctx context.Context, environmentID uuid.UUID) ([]EnvironmentService, error)
 	GetEnvironmentsByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Environment, error)
 	GetForkWorkspaces(ctx context.Context, baseWorkspaceID pgtype.UUID) ([]Workspace, error)
-	GetImage(ctx context.Context, id uuid.UUID) (Image, error)
-	GetImageByTag(ctx context.Context, tag string) (Image, error)
-	GetImagesByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Image, error)
-	GetLatestBuildByWorkspace(ctx context.Context, workspaceID uuid.UUID) (Build, error)
 	GetLatestRuntimeProfileByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (RuntimeProfile, error)
 	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
 	GetOrganizationMember(ctx context.Context, arg GetOrganizationMemberParams) (OrganizationMember, error)
@@ -103,8 +88,6 @@ type Querier interface {
 	RemoveProjectCollaborator(ctx context.Context, arg RemoveProjectCollaboratorParams) error
 	SoftDeleteEnvironment(ctx context.Context, id uuid.UUID) error
 	SoftDeleteWorkspace(ctx context.Context, id uuid.UUID) error
-	UpdateBuild(ctx context.Context, arg UpdateBuildParams) (Build, error)
-	UpdateBuildPlan(ctx context.Context, arg UpdateBuildPlanParams) (BuildPlan, error)
 	UpdateChangeRequest(ctx context.Context, arg UpdateChangeRequestParams) (ChangeRequest, error)
 	UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (Environment, error)
 	UpdateEnvironmentActivity(ctx context.Context, arg UpdateEnvironmentActivityParams) (Environment, error)
@@ -112,7 +95,6 @@ type Querier interface {
 	UpdateEnvironmentImageID(ctx context.Context, arg UpdateEnvironmentImageIDParams) (Environment, error)
 	UpdateEnvironmentService(ctx context.Context, arg UpdateEnvironmentServiceParams) (EnvironmentService, error)
 	UpdateEnvironmentState(ctx context.Context, arg UpdateEnvironmentStateParams) (Environment, error)
-	UpdateImageLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateOrganizationRole(ctx context.Context, arg UpdateOrganizationRoleParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) error
 	UpdateRuntimeProfile(ctx context.Context, arg UpdateRuntimeProfileParams) (RuntimeProfile, error)

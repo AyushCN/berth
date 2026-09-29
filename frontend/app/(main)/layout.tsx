@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { Code2, Brain } from "lucide-react";
+import { Code2 } from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
 import { LogoutButton } from "@/components/LogoutButton";
 import { UserAvatar } from "@/components/UserAvatar";
 
-const links = [
+const links: { href: string; label: string; icon?: React.ComponentType<{ className?: string }> }[] = [
   { href: "/dashboard", label: "Sandboxes" },
   { href: "/projects", label: "Projects" },
-  { href: "/predictions", label: "Predictions", icon: Brain },
 ];
 
 export default function MainLayout({ children }: Readonly<{ children: React.ReactNode }>) {

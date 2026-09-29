@@ -65,7 +65,6 @@ export const api = {
     commit: (id: string, message: string) => fetchAPI(`/api/environments/${id}/git/commit`, { method: 'POST', body: JSON.stringify({ message }) }),
     push: (id: string) => fetchAPI(`/api/environments/${id}/git/push`, { method: 'POST' }),
     log: (id: string) => fetchAPI(`/api/environments/${id}/git/log`),
-    diff: (id: string, filePath: string) => fetchAPI(`/api/environments/${id}/git/diff?file=${encodeURIComponent(filePath)}`),
   },
   files: {
     list: (id: string, path: string = '.') =>
@@ -99,16 +98,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ path }),
       }),
-    move: (id: string, path: string, newPath: string) =>
-      fetchAPI(`/api/environments/${id}/files/move`, {
-        method: 'POST',
-        body: JSON.stringify({ path, new_path: newPath }),
-      }),
-    duplicate: (id: string, path: string) =>
-      fetchAPI(`/api/environments/${id}/files/duplicate`, {
-        method: 'POST',
-        body: JSON.stringify({ path }),
-      }),
   },
   orgs: {
     list: () => fetchAPI('/api/orgs'),
@@ -122,7 +111,6 @@ export const api = {
     create: (data: { name: string; description?: string; owner_organization_id: string; is_public: boolean }) =>
       fetchAPI('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
     sandboxes: (id: string) => fetchAPI(`/api/projects/${id}/sandboxes`),
-    delete: (id: string) => fetchAPI(`/api/projects/${id}`, { method: 'DELETE' }),
     shareLinks: {
       create: (projectId: string, data: { role: 'VIEWER' | 'EDITOR'; expires_at?: string; max_uses?: number }) =>
         fetchAPI(`/api/projects/${projectId}/share-links`, { method: 'POST', body: JSON.stringify(data) }),
@@ -131,69 +119,5 @@ export const api = {
       join: (code: string) => fetchAPI('/api/join', { method: 'POST', body: JSON.stringify({ code }) }),
       validate: (code: string) => fetchAPI(`/api/share-links/validate?code=${encodeURIComponent(code)}`),
     },
-  },
-  predictions: {
-    // Build time prediction
-    predictBuildTime: (workspaceId: string, features: Record<string, any>) =>
-      fetchAPI('/api/predictions/build-time', {
-        method: 'POST',
-        body: JSON.stringify({ workspace_id: workspaceId, features }),
-      }),
-
-    // Image size prediction
-    predictImageSize: (workspaceId: string, features: Record<string, any>) =>
-      fetchAPI('/api/predictions/image-size', {
-        method: 'POST',
-        body: JSON.stringify({ workspace_id: workspaceId, features }),
-      }),
-
-    // Cache hit prediction
-    predictCacheHit: (workspaceId: string, features: Record<string, any>) =>
-      fetchAPI('/api/predictions/cache-hit', {
-        method: 'POST',
-        body: JSON.stringify({ workspace_id: workspaceId, features }),
-      }),
-
-    // Failure risk prediction
-    predictFailureRisk: (workspaceId: string, features: Record<string, any>) =>
-      fetchAPI('/api/predictions/failure-risk', {
-        method: 'POST',
-        body: JSON.stringify({ workspace_id: workspaceId, features }),
-      }),
-
-    // Get prediction history
-    getHistory: (workspaceId: string, type: string, limit?: number, offset?: number) => {
-      const params = new URLSearchParams();
-      params.set('workspace_id', workspaceId);
-      params.set('type', type);
-      if (limit) params.set('limit', limit.toString());
-      if (offset) params.set('offset', offset.toString());
-      return fetchAPI(`/api/predictions/history?${params.toString()}`);
-    },
-
-    // Get model metrics
-    getModelMetrics: (type: string) =>
-      fetchAPI(`/api/predictions/models/metrics?type=${encodeURIComponent(type)}`),
-
-    // Retrain model
-    retrainModel: (type: string, algorithm: string) =>
-      fetchAPI('/api/predictions/models/retrain', {
-        method: 'POST',
-        body: JSON.stringify({ type, algorithm }),
-      }),
-
-    // Export model to ONNX
-    exportModel: (modelId: string) =>
-      fetchAPI('/api/predictions/models/export', {
-        method: 'POST',
-        body: JSON.stringify({ model_id: modelId }),
-      }),
-
-    // Activate model
-    activateModel: (modelId: string) =>
-      fetchAPI('/api/predictions/models/activate', {
-        method: 'POST',
-        body: JSON.stringify({ model_id: modelId }),
-      }),
   },
 };

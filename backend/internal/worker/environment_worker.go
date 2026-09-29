@@ -175,6 +175,21 @@ func (w *Worker) processEnvironment(ctx context.Context, evt domain.EnvironmentC
 		return
 	}
 
+	// The container is up, but did anything actually start listening? Record
+	// that honestly rather than leaving a RUNNING environment with a dead port.
+	if !res.Ready {
+		slog.Warn("environment container started but the application is not listening",
+			"environment_id", env.ID, "port", res.Port, "detail", res.ReadinessErr)
+		_ = w.envRepo.UpdateState(ctx, env.ID, domain.EnvironmentStateCrashed)
+		// The pg* helpers map zero values to NULL and the update query uses
+		// COALESCE throughout, so a struct carrying only the error leaves every
+		// other column untouched.
+		_ = w.envRepo.Update(ctx, &domain.Environment{
+			ID:        env.ID,
+			LastError: res.ReadinessErr,
+		})
+	}
+
 	w.afterProvision(env.ID, res)
 
 	slog.Info("environment provisioned successfully",
@@ -183,6 +198,7 @@ func (w *Worker) processEnvironment(ctx context.Context, evt domain.EnvironmentC
 		"container_id", res.ContainerID,
 		"language", res.Profile.Language,
 		"public_url", res.PublicURL,
+		"app_listening", res.Ready,
 		"timing_metrics", res.Timings,
 	)
 }
@@ -237,7 +253,7 @@ func (w *Worker) handleEnvironmentStop(msg *natsCore.Msg) {
 		return
 	}
 
-	if err := w.runtime.StopSandbox(context.Background(), evt.ContainerID); err != nil {
+	if err := w.runtime.Stop(context.Background(), evt.ContainerID); err != nil {
 		slog.Error("failed to stop environment container", "environment_id", evt.EnvironmentID, "error", err)
 		_ = msg.Nak()
 		return
@@ -277,7 +293,7 @@ func (w *Worker) handleEnvironmentStart(msg *natsCore.Msg) {
 		return
 	}
 
-	if err := w.runtime.StartSandbox(ctx, evt.ContainerID); err != nil {
+	if err := w.runtime.Start(ctx, evt.ContainerID); err != nil {
 		slog.Error("failed to start environment container", "environment_id", evt.EnvironmentID, "error", err)
 		_ = msg.Nak()
 		return
@@ -296,7 +312,7 @@ func (w *Worker) handleEnvironmentDelete(msg *natsCore.Msg) {
 	_ = msg.Ack()
 
 	if evt.ContainerID != "" {
-		if err := w.runtime.DeleteSandbox(context.Background(), evt.ContainerID); err != nil {
+		if err := w.runtime.Remove(context.Background(), evt.ContainerID); err != nil {
 			slog.Error("failed to delete environment container", "environment_id", evt.EnvironmentID, "error", err)
 			_ = msg.Nak()
 			return

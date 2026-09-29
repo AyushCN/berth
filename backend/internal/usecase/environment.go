@@ -198,7 +198,7 @@ func (uc *EnvironmentUsecase) DeleteEnvironment(ctx context.Context, uid uuid.UU
 
 	// Stop and delete container if exists
 	if env.ContainerID != "" && uc.runtime != nil {
-		if err := uc.runtime.DeleteSandbox(ctx, env.ContainerID); err != nil {
+		if err := uc.runtime.Remove(ctx, env.ContainerID); err != nil {
 			return fmt.Errorf("failed to delete environment container: %w", err)
 		}
 	} else if env.ContainerID != "" {
@@ -416,7 +416,7 @@ func (uc *EnvironmentUsecase) StopEnvironment(ctx context.Context, uid uuid.UUID
 
 	workerHandlesStop := false
 	if env.ContainerID != "" && uc.runtime != nil {
-		if err := uc.runtime.StopSandbox(ctx, env.ContainerID); err != nil {
+		if err := uc.runtime.Stop(ctx, env.ContainerID); err != nil {
 			return fmt.Errorf("failed to stop environment container: %w", err)
 		}
 	} else if env.ContainerID != "" {
@@ -463,7 +463,7 @@ func (uc *EnvironmentUsecase) RestartEnvironment(ctx context.Context, uid uuid.U
 	}
 
 	if env.ContainerID != "" && uc.runtime != nil {
-		if err := uc.runtime.DeleteSandbox(ctx, env.ContainerID); err != nil {
+		if err := uc.runtime.Remove(ctx, env.ContainerID); err != nil {
 			slog.Error("failed to delete container for restart", "error", err)
 		}
 	}

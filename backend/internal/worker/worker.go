@@ -11,10 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AyushCN/berth/internal/analyzer"
 	"github.com/AyushCN/berth/internal/domain"
 	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
-	"github.com/AyushCN/berth/internal/usecase"
 	"github.com/AyushCN/berth/pkg/crypto"
 	natsCore "github.com/nats-io/nats.go"
 
@@ -33,7 +31,6 @@ type Worker struct {
 	workspaceRepo domain.WorkspaceRepository
 	runtime       domain.ContainerRuntime
 	natsClient    *natsInfra.Client
-	dataCollector *usecase.DataCollector
 	tokenBox      *crypto.Box
 	wg            sync.WaitGroup
 }
@@ -44,7 +41,7 @@ func NewWorker(
 	workspaceRepo domain.WorkspaceRepository,
 	runtime domain.ContainerRuntime,
 	natsClient *natsInfra.Client,
-	dataCollector *usecase.DataCollector,
+
 	tokenBox *crypto.Box,
 ) *Worker {
 	return &Worker{
@@ -53,7 +50,6 @@ func NewWorker(
 		workspaceRepo: workspaceRepo,
 		runtime:       runtime,
 		natsClient:    natsClient,
-		dataCollector: dataCollector,
 		tokenBox:      tokenBox,
 	}
 }
@@ -108,25 +104,8 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 // afterProvision runs the work that is common to every successfully
-// provisioned container: training-data collection and the interactive shell
-// bridge.
+// provisioned container: the interactive shell bridge.
 func (w *Worker) afterProvision(id uuid.UUID, res *provisionResult) {
-	if w.dataCollector != nil && res.Profile != nil {
-		profile := res.Profile
-		profile.WorkspaceID = &id
-		detection := &analyzer.DetectionResult{
-			RuntimeProfile: profile,
-			Architecture:   profile.Architecture,
-			Framework:      profile.Framework,
-			CacheKey:       "",
-			Lockfiles:      []analyzer.LockfileInfo{},
-			EntryPoints:    []analyzer.EntryPoint{},
-		}
-		if err := w.dataCollector.CollectFromProfile(context.Background(), profile, detection); err != nil {
-			slog.Warn("failed to collect training data", "id", id, "error", err)
-		}
-	}
-
 	if w.natsClient != nil {
 		go w.StartInteractiveShell(context.Background(), id.String(), res.ContainerID)
 	}

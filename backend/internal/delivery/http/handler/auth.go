@@ -36,9 +36,11 @@ func (h *AuthHandler) GithubAuthorize(c *gin.Context) {
 		return
 	}
 
-	// Store verifier in cookie (secure, httpOnly)
-	c.SetCookie("pkce_verifier", verifier, 600, "/", "", true, true)
-	c.SetCookie("oauth_state", state, 600, "/", "", true, true)
+	// Store the PKCE verifier and state. Secure is derived from the request:
+	// hardcoding it broke login on any plain-http deployment, because browsers
+	// silently discard a Secure cookie served over http.
+	setAuthCookie(c, pkceVerifierCookie, verifier, oauthFlowMaxAge)
+	setAuthCookie(c, oauthStateCookie, state, oauthFlowMaxAge)
 
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
@@ -66,8 +68,7 @@ func (h *AuthHandler) GithubCallback(c *gin.Context) {
 		return
 	}
 
-	// Set JWT cookie
-	c.SetCookie("berth_token", token, 86400, "/", "", true, true)
+	setAuthCookie(c, berthTokenCookie, token, sessionMaxAge)
 
 	// Redirect to frontend dashboard
 	c.Redirect(http.StatusTemporaryRedirect, h.frontendURL+"/dashboard")
@@ -98,7 +99,6 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 
 // Logout expires the browser's HttpOnly session cookie.
 func (h *AuthHandler) Logout(c *gin.Context) {
-	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetCookie("berth_token", "", -1, "/", "", secure, true)
+	clearAuthCookie(c, berthTokenCookie)
 	c.Status(http.StatusNoContent)
 }

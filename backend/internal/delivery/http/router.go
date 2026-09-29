@@ -104,17 +104,6 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			authenticated.POST("/change-requests/:id/close", deps.ChangeRequestHandler.CloseChangeRequest)
 			authenticated.GET("/change-requests/:id/diff", deps.ChangeRequestHandler.GetDiff)
 
-			// Predictions
-			authenticated.POST("/predictions/build-time", deps.PredictionHandler.PredictBuildTime)
-			authenticated.POST("/predictions/image-size", deps.PredictionHandler.PredictImageSize)
-			authenticated.POST("/predictions/cache-hit", deps.PredictionHandler.PredictCacheHit)
-			authenticated.POST("/predictions/failure-risk", deps.PredictionHandler.PredictFailureRisk)
-			authenticated.GET("/predictions/history", deps.PredictionHandler.GetPredictionHistory)
-			authenticated.GET("/predictions/models/metrics", deps.PredictionHandler.GetModelMetrics)
-			authenticated.POST("/predictions/models/retrain", deps.PredictionHandler.RetrainModel)
-			authenticated.POST("/predictions/models/export", deps.PredictionHandler.ExportModelONNX)
-			authenticated.POST("/predictions/models/activate", deps.PredictionHandler.ActivateModel)
-
 			// Activity & Suspend/Resume
 			authenticated.POST("/activity", deps.ActivityHandler.RecordActivity)
 			authenticated.POST("/activity/session/start", deps.ActivityHandler.RecordSessionStart)
@@ -156,5 +145,4 @@ type Dependencies struct {
 	ShareLinkHandler     *handler.ShareLinkHandler
 	ChangeRequestHandler *handler.ChangeRequestHandler
 	ActivityHandler      *handler.ActivityHandler
-	PredictionHandler    *handler.PredictionHandler
 }

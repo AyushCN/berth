@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -46,6 +47,12 @@ type provisionResult struct {
 	PublicURL   string
 	Profile     *domain.RuntimeProfile
 	Timings     map[string]time.Duration
+	// Ready reports whether the application accepted a connection inside the
+	// readiness window. False is a real outcome for a repository with no
+	// server to run, not a provisioning failure, so the container is still
+	// returned and the caller decides which state to record.
+	Ready        bool
+	ReadinessErr string
 }
 
 // validateGitURL restricts clones to https github.com URLs and rejects
@@ -153,7 +160,7 @@ func (w *Worker) provision(ctx context.Context, req provisionRequest) (_ *provis
 			go func(id string) {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				_ = w.runtime.DeleteSandbox(cleanupCtx, id)
+				_ = w.runtime.Remove(cleanupCtx, id)
 			}(containerID)
 		}
 	}()
@@ -251,14 +258,14 @@ func (w *Worker) provision(ctx context.Context, req provisionRequest) (_ *provis
 
 	// --- phase 1: keepalive container, so dependencies can be installed ----
 	createStart := time.Now()
-	containerID, err = w.runtime.CreateSandbox(bgCtx, spec(profile.BaseImage, []string{"sleep", "infinity"}))
+	containerID, err = w.runtime.Create(bgCtx, spec(profile.BaseImage, []string{"sleep", "infinity"}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
 	timings["create"] = time.Since(createStart)
 
 	startStart := time.Now()
-	if err := w.runtime.StartSandbox(bgCtx, containerID); err != nil {
+	if err := w.runtime.Start(bgCtx, containerID); err != nil {
 		return nil, fmt.Errorf("failed to start keepalive container: %w", err)
 	}
 	timings["start"] = time.Since(startStart)
@@ -274,7 +281,7 @@ func (w *Worker) provision(ctx context.Context, req provisionRequest) (_ *provis
 	}
 
 	// --- phase 3: commit the installed state to an image -------------------
-	if err := w.runtime.StopSandbox(bgCtx, containerID); err != nil {
+	if err := w.runtime.Stop(bgCtx, containerID); err != nil {
 		return nil, fmt.Errorf("failed to stop container after install: %w", err)
 	}
 	image := fmt.Sprintf("berth-%s:latest", req.ID.String()[:8])
@@ -283,34 +290,87 @@ func (w *Worker) provision(ctx context.Context, req provisionRequest) (_ *provis
 		return nil, fmt.Errorf("failed to commit container: %w", err)
 	}
 	timings["commit"] = time.Since(commitStart)
-	if err := w.runtime.DeleteSandbox(bgCtx, containerID); err != nil {
+	if err := w.runtime.Remove(bgCtx, containerID); err != nil {
 		slog.Warn("failed to delete keepalive container", "id", req.ID, "error", err)
 	}
 
 	// --- phase 4: recreate from the image with the watcher -----------------
 	createStart = time.Now()
-	containerID, err = w.runtime.CreateSandbox(bgCtx, spec(image, WatcherCommand(profile)))
+	containerID, err = w.runtime.Create(bgCtx, spec(image, WatcherCommand(profile)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher container: %w", err)
 	}
 	timings["create_watcher"] = time.Since(createStart)
 
 	startStart = time.Now()
-	if err := w.runtime.StartSandbox(bgCtx, containerID); err != nil {
+	if err := w.runtime.Start(bgCtx, containerID); err != nil {
 		return nil, fmt.Errorf("failed to start watcher container: %w", err)
 	}
 	timings["start_watcher"] = time.Since(startStart)
 
+	// --- readiness --------------------------------------------------------
+	// The container is started but the application inside it is not listening
+	// yet, and a repository with no server never will be. Without this the
+	// environment is reported RUNNING with nothing on its port, which is how a
+	// static site or a broken start command looked identical to a working one.
+	ready, readyErr := waitForListener(ctx, port, readinessTimeout())
+
+	// total is recorded whether or not the app came up, so the timings still
+	// describe the work that was actually done.
 	timings["total"] = time.Since(totalStart)
 	success = true
 
 	return &provisionResult{
-		ContainerID: containerID,
-		Port:        port,
-		PublicURL:   previewURL(req.ID),
-		Profile:     profile,
-		Timings:     timings,
+		ContainerID:  containerID,
+		Port:         port,
+		PublicURL:    previewURL(req.ID),
+		Profile:      profile,
+		Timings:      timings,
+		Ready:        ready,
+		ReadinessErr: readyErr,
 	}, nil
+}
+
+// readinessTimeout is how long to wait for the application to start listening.
+func readinessTimeout() time.Duration {
+	if v := os.Getenv("READINESS_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+		slog.Warn("ignoring invalid READINESS_TIMEOUT", "value", v)
+	}
+	return 60 * time.Second
+}
+
+// waitForListener polls until something accepts a TCP connection on port, or the
+// timeout expires.
+//
+// Containers run with host networking, so the application's port is bound
+// directly on the host and can be dialled from here. A TCP accept is used
+// rather than an HTTP request because the app may not speak HTTP, and a
+// connection refused is the signal we care about, not the response.
+func waitForListener(ctx context.Context, port int, timeout time.Duration) (bool, string) {
+	deadline := time.Now().Add(timeout)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+
+	for {
+		dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", addr)
+		cancel()
+		if err == nil {
+			_ = conn.Close()
+			return true, ""
+		}
+		if time.Now().After(deadline) {
+			return false, fmt.Sprintf(
+				"the application did not start listening on port %d within %s: %v", port, timeout, err)
+		}
+		select {
+		case <-ctx.Done():
+			return false, "cancelled while waiting for the application to start"
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 
 // truncate keeps log output and error messages bounded.

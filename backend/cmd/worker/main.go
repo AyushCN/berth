@@ -96,25 +96,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Prediction repositories
-	modelRepo := repository.NewModelRepository(db.Pool())
-	trainingDataRepo := repository.NewTrainingDataRepository(db.Pool())
-	predictionRepo := repository.NewPredictionRepository(db.Pool())
-
-	// Prediction service
-	_ = os.MkdirAll(cfg.ModelDir, 0755)
-
-	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, cfg.ModelDir)
-	predictionService := usecase.NewPredictionService(modelTrainer, predictionRepo)
-	dataCollector := usecase.NewDataCollector(trainingDataRepo, repository.NewBuildRepository(queries), repository.NewRuntimeProfileRepository(queries))
-
 	w := worker.NewWorker(
 		userRepo,
 		repository.NewEnvironmentRepository(queries),
 		repository.NewWorkspaceRepository(queries),
 		runtime,
 		natsClient,
-		dataCollector,
 		tokenBox,
 	)
 
@@ -122,7 +109,6 @@ func main() {
 	defer cancel()
 
 	// Start scheduled retraining
-	go predictionService.ScheduledRetraining(ctx, 6*time.Hour)
 
 	// Idle-suspend runs here, not in the api: stopping a container needs the
 	// Docker socket, which only the worker has.

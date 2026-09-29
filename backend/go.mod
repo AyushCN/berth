@@ -21,7 +21,6 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/vishvananda/netlink v1.3.1
-	github.com/yalue/onnxruntime_go v1.36.0
 	golang.org/x/sys v0.48.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12

@@ -9,40 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Build struct {
-	ID              uuid.UUID          `json:"id"`
-	BuildPlanID     uuid.UUID          `json:"build_plan_id"`
-	WorkspaceID     uuid.UUID          `json:"workspace_id"`
-	CommitHash      string             `json:"commit_hash"`
-	Status          string             `json:"status"`
-	ImageID         pgtype.UUID        `json:"image_id"`
-	Logs            pgtype.Text        `json:"logs"`
-	StartedAt       pgtype.Timestamptz `json:"started_at"`
-	FinishedAt      pgtype.Timestamptz `json:"finished_at"`
-	Error           pgtype.Text        `json:"error"`
-	CacheHit        pgtype.Bool        `json:"cache_hit"`
-	BuildDurationMs pgtype.Int8        `json:"build_duration_ms"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-}
-
-type BuildPlan struct {
-	ID               uuid.UUID          `json:"id"`
-	RuntimeProfileID uuid.UUID          `json:"runtime_profile_id"`
-	BaseImage        string             `json:"base_image"`
-	Dockerfile       string             `json:"dockerfile"`
-	BuildArgs        []byte             `json:"build_args"`
-	InstallCommand   pgtype.Text        `json:"install_command"`
-	BuildCommand     pgtype.Text        `json:"build_command"`
-	StartCommand     pgtype.Text        `json:"start_command"`
-	WorkingDir       pgtype.Text        `json:"working_dir"`
-	Port             pgtype.Int4        `json:"port"`
-	Confidence       float32            `json:"confidence"`
-	Status           string             `json:"status"`
-	Error            pgtype.Text        `json:"error"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
 type ChangeRequest struct {
 	ID                uuid.UUID          `json:"id"`
 	ProjectID         uuid.UUID          `json:"project_id"`
@@ -109,33 +75,6 @@ type EnvironmentService struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
-type Image struct {
-	ID          uuid.UUID          `json:"id"`
-	BuildID     pgtype.UUID        `json:"build_id"`
-	WorkspaceID uuid.UUID          `json:"workspace_id"`
-	Tag         string             `json:"tag"`
-	Digest      pgtype.Text        `json:"digest"`
-	SizeBytes   pgtype.Int8        `json:"size_bytes"`
-	BaseImage   pgtype.Text        `json:"base_image"`
-	Labels      []byte             `json:"labels"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
-}
-
-type Model struct {
-	ID         uuid.UUID          `json:"id"`
-	Name       string             `json:"name"`
-	Version    string             `json:"version"`
-	Type       string             `json:"type"`
-	Algorithm  string             `json:"algorithm"`
-	Parameters []byte             `json:"parameters"`
-	Metrics    []byte             `json:"metrics"`
-	OnnxPath   pgtype.Text        `json:"onnx_path"`
-	IsActive   pgtype.Bool        `json:"is_active"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-}
-
 type Organization struct {
 	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`
@@ -148,17 +87,6 @@ type OrganizationMember struct {
 	UserID         uuid.UUID          `json:"user_id"`
 	Role           string             `json:"role"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-}
-
-type Prediction struct {
-	ID           uuid.UUID          `json:"id"`
-	Type         string             `json:"type"`
-	WorkspaceID  uuid.UUID          `json:"workspace_id"`
-	Input        []byte             `json:"input"`
-	Output       []byte             `json:"output"`
-	Confidence   float32            `json:"confidence"`
-	ModelVersion pgtype.Text        `json:"model_version"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type Project struct {
@@ -219,19 +147,6 @@ type ShareLink struct {
 	UsesCount pgtype.Int4        `json:"uses_count"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
-}
-
-type TrainingDatum struct {
-	ID           uuid.UUID          `json:"id"`
-	WorkspaceID  uuid.UUID          `json:"workspace_id"`
-	BuildID      pgtype.UUID        `json:"build_id"`
-	Features     []byte             `json:"features"`
-	Labels       []byte             `json:"labels"`
-	Architecture pgtype.Text        `json:"architecture"`
-	Framework    pgtype.Text        `json:"framework"`
-	Language     pgtype.Text        `json:"language"`
-	CacheKey     pgtype.Text        `json:"cache_key"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

@@ -3,7 +3,10 @@
 # with "go.mod requires go >= 1.26.3".
 FROM golang:1.26-alpine AS builder
 
-RUN apk add --no-cache git gcc musl-dev
+# git is needed for `go mod download` and, at runtime, for cloning
+# repositories. The C toolchain is not: the prediction/ONNX stack that required
+# CGO has been removed, so the binaries are pure Go.
+RUN apk add --no-cache git
 
 WORKDIR /app
 
@@ -12,7 +15,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o berth-worker ./cmd/worker
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o berth-worker ./cmd/worker
 
 # Runtime stage
 FROM alpine:3.20

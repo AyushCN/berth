@@ -89,11 +89,6 @@ func main() {
 	changeRequestRepo := repository.NewChangeRequestRepository(queries)
 	envRepo := repository.NewEnvironmentRepository(queries)
 
-	// Prediction repositories
-	modelRepo := repository.NewModelRepository(db.Pool())
-	trainingDataRepo := repository.NewTrainingDataRepository(db.Pool())
-	predictionRepo := repository.NewPredictionRepository(db.Pool())
-
 	// OAuth client
 	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, cfg.FrontendURL+"/api/auth/github/callback")
 
@@ -152,7 +147,7 @@ func main() {
 	changeRequestUC := usecase.NewChangeRequestUsecase(changeRequestRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 	shareLinkUC = usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 
-	// Activity tracker & warm pool.
+	// Activity tracker.
 	//
 	// The api has no container runtime, so it cannot stop or start
 	// containers itself; it asks the worker over NATS instead. The periodic
@@ -169,24 +164,7 @@ func main() {
 		5*time.Minute,
 	)
 
-	warmPool := usecase.NewWarmPool(
-		repository.NewEnvironmentRepository(queries),
-		nil, // unused: WarmPool stores the runtime but never calls it
-		repository.NewRuntimeProfileRepository(queries),
-		map[string]int{"node": 2, "python": 1, "go": 1},
-		10*time.Minute,
-	)
-	go warmPool.Start(context.Background())
-
-	// Prediction service
-	modelDir := cfg.ModelDir
-	_ = os.MkdirAll(modelDir, 0755)
-
-	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, modelDir)
-	predictionService := usecase.NewPredictionService(modelTrainer, predictionRepo)
-
 	// Start scheduled retraining (every 6 hours)
-	go predictionService.ScheduledRetraining(context.Background(), 6*time.Hour)
 
 	// Handlers
 	deps := &berthhttp.Dependencies{
@@ -199,8 +177,7 @@ func main() {
 		ProjectHandler:       handler.NewProjectHandler(projUC),
 		ShareLinkHandler:     handler.NewShareLinkHandler(shareLinkUC),
 		ChangeRequestHandler: handler.NewChangeRequestHandler(changeRequestUC),
-		ActivityHandler:      handler.NewActivityHandler(activityTracker, warmPool),
-		PredictionHandler:    handler.NewPredictionHandler(predictionService),
+		ActivityHandler:      handler.NewActivityHandler(activityTracker),
 	}
 
 	// Router

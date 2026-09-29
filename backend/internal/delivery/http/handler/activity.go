@@ -10,14 +10,10 @@ import (
 
 type ActivityHandler struct {
 	activityUC *usecase.ActivityTracker
-	warmPoolUC *usecase.WarmPool
 }
 
-func NewActivityHandler(activityUC *usecase.ActivityTracker, warmPoolUC *usecase.WarmPool) *ActivityHandler {
-	return &ActivityHandler{
-		activityUC: activityUC,
-		warmPoolUC: warmPoolUC,
-	}
+func NewActivityHandler(activityUC *usecase.ActivityTracker) *ActivityHandler {
+	return &ActivityHandler{activityUC: activityUC}
 }
 
 type recordActivityRequest struct {

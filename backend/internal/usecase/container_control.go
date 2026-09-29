@@ -60,14 +60,14 @@ func (c dockerContainerControl) Stop(ctx context.Context, env *domain.Environmen
 	if env.ContainerID == "" {
 		return nil
 	}
-	return c.runtime.StopSandbox(ctx, env.ContainerID)
+	return c.runtime.Stop(ctx, env.ContainerID)
 }
 
 func (c dockerContainerControl) Start(ctx context.Context, env *domain.Environment) error {
 	if env.ContainerID == "" {
 		return fmt.Errorf("environment has no container to start")
 	}
-	return c.runtime.StartSandbox(ctx, env.ContainerID)
+	return c.runtime.Start(ctx, env.ContainerID)
 }
 
 // natsContainerControl asks the worker to act. Used by the api, which has no

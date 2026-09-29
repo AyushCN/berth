@@ -158,15 +158,14 @@ func ValidateExecutionProfile(profile *ExecutionProfile) error {
 
 // ContainerRuntime is the interface the worker uses to manage containers.
 //
-// The method names still carry the legacy "Sandbox" prefix. They describe
-// containers, not sandboxes, and are worth renaming, but that touches every
-// implementation and call site and is a separate change from removing the
-// sandbox model.
+// These methods were CreateSandbox/StartSandbox/StopSandbox/DeleteSandbox,
+// which described sandboxes. They manage containers, and the sandbox model is
+// gone, so the names no longer match what they do.
 type ContainerRuntime interface {
-	CreateSandbox(ctx context.Context, spec ContainerSpec) (string, error) // returns containerID
-	StartSandbox(ctx context.Context, containerID string) error
-	StopSandbox(ctx context.Context, containerID string) error
-	DeleteSandbox(ctx context.Context, containerID string) error
+	Create(ctx context.Context, spec ContainerSpec) (string, error) // returns containerID
+	Start(ctx context.Context, containerID string) error
+	Stop(ctx context.Context, containerID string) error
+	Remove(ctx context.Context, containerID string) error
 	Exec(ctx context.Context, containerID string, cmd []string) (string, error)
 	ExecWithEnv(ctx context.Context, containerID string, cmd []string, env map[string]string) (string, error)
 	ExecPTY(ctx context.Context, containerID string, cmd []string) (stdin io.WriteCloser, stdout io.Reader, wait func() error, err error)

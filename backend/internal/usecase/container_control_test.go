@@ -32,7 +32,7 @@ type fakeRuntime struct {
 	err     error
 }
 
-func (f *fakeRuntime) StartSandbox(_ context.Context, id string) error {
+func (f *fakeRuntime) Start(_ context.Context, id string) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -40,7 +40,7 @@ func (f *fakeRuntime) StartSandbox(_ context.Context, id string) error {
 	return nil
 }
 
-func (f *fakeRuntime) StopSandbox(_ context.Context, id string) error {
+func (f *fakeRuntime) Stop(_ context.Context, id string) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -49,10 +49,10 @@ func (f *fakeRuntime) StopSandbox(_ context.Context, id string) error {
 }
 
 // The other ContainerRuntime methods are unused by the controllers.
-func (f *fakeRuntime) CreateSandbox(context.Context, domain.ContainerSpec) (string, error) {
+func (f *fakeRuntime) Create(context.Context, domain.ContainerSpec) (string, error) {
 	return "", errors.New("not implemented")
 }
-func (f *fakeRuntime) DeleteSandbox(context.Context, string) error { return nil }
+func (f *fakeRuntime) Remove(context.Context, string) error { return nil }
 func (f *fakeRuntime) Exec(context.Context, string, []string) (string, error) {
 	return "", nil
 }
