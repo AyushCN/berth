@@ -28,7 +28,7 @@ type ChangeRequest struct {
 	Description         string              `json:"description,omitempty"`
 	AuthorID            uuid.UUID           `json:"author_id"`
 	State               ChangeRequestState  `json:"state"`
-	Commits             []CommitInfo        `json:"commits,omitempty"`
+	Commits             []CommitEntry        `json:"commits,omitempty"`
 	FilesChanged        []string            `json:"files_changed,omitempty"`
 	ReviewerID          *uuid.UUID          `json:"reviewer_id,omitempty"`
 	ReviewedAt          *time.Time          `json:"reviewed_at,omitempty"`

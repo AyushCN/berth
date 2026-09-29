@@ -298,3 +298,25 @@ func (uc *SandboxUsecase) RestartEnvironment(ctx context.Context, uid uuid.UUID,
 	_ = uc.repo.UpdateContainerID(ctx, id, "")
 	return uc.repo.UpdateState(ctx, id, domain.StatePending)
 }
+
+func (uc *SandboxUsecase) StartEnvironment(ctx context.Context, uid uuid.UUID, id uuid.UUID) error {
+	sandbox, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if sandbox.OwnerID != uid {
+		if sandbox.ProjectID == uuid.Nil {
+			return fmt.Errorf("unauthorized to start sandbox")
+		}
+		collab, err := uc.projectRepo.GetCollaborator(ctx, sandbox.ProjectID, uid)
+		if err != nil || collab.Role == domain.ProjectRoleViewer {
+			return fmt.Errorf("unauthorized to start sandbox")
+		}
+	}
+	// Only allow starting if stopped or failed
+	if sandbox.State != domain.StateStopped && sandbox.State != domain.StateFailed {
+		return fmt.Errorf("can only start sandbox in stopped or failed state, current state: %s", sandbox.State)
+	}
+	// Reset to pending so worker picks it up
+	return uc.repo.UpdateState(ctx, id, domain.StatePending)
+}

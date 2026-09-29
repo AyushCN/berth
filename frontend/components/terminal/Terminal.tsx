@@ -107,8 +107,14 @@ export function Terminal({ envId, onClose }: TerminalProps) {
     setError(null);
 
     try {
-      // Get auth token
-      const token = localStorage.getItem("access_token");
+      // Get auth token from cookie
+      const getCookie = (name: string) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(';').shift();
+        return null;
+      };
+      const token = getCookie('berth_token');
       if (!token) throw new Error("Not authenticated");
 
       // Connect to WebSocket

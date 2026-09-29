@@ -69,6 +69,42 @@ func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSp
 		args = append(args, "--network", d.networkName)
 	}
 
+	// Network mode from execution profile
+	if spec.ExecutionProfile != nil && spec.ExecutionProfile.NetworkMode != "" {
+		switch spec.ExecutionProfile.NetworkMode {
+		case domain.NetworkModeHost:
+			args = append(args, "--network", "host")
+		case domain.NetworkModeBridge:
+			if d.networkName != "" {
+				args = append(args, "--network", d.networkName)
+			} else {
+				args = append(args, "--network", "bridge")
+			}
+		case domain.NetworkModeNone:
+			args = append(args, "--network", "none")
+		case domain.NetworkModeCNI:
+			// CNI mode would require CNI plugin integration - use bridge as fallback
+			if d.networkName != "" {
+				args = append(args, "--network", d.networkName)
+			} else {
+				args = append(args, "--network", "bridge")
+			}
+		}
+	}
+
+	// Filesystem mode from execution profile
+	if spec.ExecutionProfile != nil && spec.ExecutionProfile.FilesystemMode != "" {
+		switch spec.ExecutionProfile.FilesystemMode {
+		case domain.FilesystemModeOverlay:
+			// Use overlay filesystem - would require additional setup
+			// For now, fall back to bind mount
+		case domain.FilesystemModeRO:
+			// Read-only with explicit writable mounts handled by ReadOnlyRootFS
+		case domain.FilesystemModeBindMount:
+			// Default behavior - already handled by bind mount
+		}
+	}
+
 	// Labels
 	args = append(args, "--label", "berth.sandbox.id="+spec.ID.String())
 
@@ -101,6 +137,55 @@ func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSp
 		"--pids-limit", "256",
 		"--init",
 	)
+
+	// Security profile enforcement
+	if spec.ExecutionProfile != nil {
+		profile := spec.ExecutionProfile
+
+		// Rootless mode (user namespace mapping)
+		if profile.Rootless {
+			args = append(args, "--user", "1000:1000")
+		}
+
+		// Capabilities
+		if len(profile.Capabilities) > 0 {
+			for _, cap := range profile.Capabilities {
+				args = append(args, "--cap-add", cap)
+			}
+		} else {
+			// Drop all capabilities by default
+			args = append(args, "--cap-drop", "ALL")
+		}
+
+		// Read-only root filesystem
+		if profile.ReadOnlyRootFS {
+			args = append(args, "--read-only")
+			// Need tmpfs for writable directories
+			args = append(args, "--tmpfs", "/tmp:rw,noexec,nosuid,size=100m")
+			args = append(args, "--tmpfs", "/var/tmp:rw,noexec,nosuid,size=100m")
+			args = append(args, "--tmpfs", "/run:rw,noexec,nosuid,size=10m")
+		}
+
+		// No new privileges
+		if profile.NoNewPrivileges {
+			args = append(args, "--security-opt", "no-new-privileges:true")
+		}
+
+		// Seccomp profile
+		if profile.SeccompProfile != "" {
+			if profile.SeccompProfile == "default" {
+				args = append(args, "--security-opt", "seccomp=default")
+			} else {
+				// Custom seccomp profile path
+				args = append(args, "--security-opt", fmt.Sprintf("seccomp=%s", profile.SeccompProfile))
+			}
+		}
+
+		// Disk limit (via storage driver quota - best effort)
+		if profile.DiskLimit > 0 {
+			args = append(args, "--storage-opt", fmt.Sprintf("size=%dG", (profile.DiskLimit+1024*1024*1024-1)/(1024*1024*1024)))
+		}
+	}
 
 	// Working directory
 	args = append(args, "--workdir", spec.WorkDir)
@@ -183,6 +268,15 @@ func (d *DockerRuntime) DeleteSandbox(ctx context.Context, containerID string) e
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("docker rm failed: %w, output: %s", err, string(output))
+	}
+	return nil
+}
+
+func (d *DockerRuntime) CommitContainer(ctx context.Context, containerID, imageName string) error {
+	cmd := exec.CommandContext(ctx, "docker", "commit", containerID, imageName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker commit failed: %w, output: %s", err, string(output))
 	}
 	return nil
 }

@@ -77,7 +77,7 @@ func (uc *ChangeRequestUsecase) CreateChangeRequest(ctx context.Context, req Cre
 	// Get commits and files changed from source workspace via git
 	commits, err := uc.gitRepo.GetCommits(ctx, req.SourceWorkspaceID)
 	if err != nil {
-		commits = []domain.CommitInfo{}
+		commits = []domain.CommitEntry{}
 	}
 
 	filesChanged, err := uc.gitRepo.GetChangedFiles(ctx, req.SourceWorkspaceID, req.TargetWorkspaceID)

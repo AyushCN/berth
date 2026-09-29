@@ -300,24 +300,34 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 	analyzeDuration := time.Since(analyzeStart)
 	slog.Info("static analysis completed", "sandbox_id", sandbox.ID, "language", profile.Language, "duration", analyzeDuration)
 
-	// Create container with process watcher for hot reload
-	watcherCmd := WatcherCommand(profile)
-	
+	// Allocate a dynamic port for this sandbox
+	allocatedPort, err := getFreePort()
+	if err != nil {
+		slog.Error("failed to allocate free port", "sandbox_id", sandbox.ID, "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+	slog.Info("allocated dynamic port", "sandbox_id", sandbox.ID, "port", allocatedPort)
+
 	// Set PORT environment variable so the app listens on the exposed port
 	env := map[string]string{
-		"PORT": strconv.Itoa(profile.ExposedPort),
+		"PORT": strconv.Itoa(allocatedPort),
 	}
-	
+
+	// PHASE 1: Create container with sleep infinity to keep it alive for dependency installation
+	keepaliveCmd := []string{"sleep", "infinity"}
+	execProfile := domain.DefaultExecutionProfile()
 	spec := domain.SandboxSpec{
-		ID:           sandbox.ID,
-		BaseImage:    profile.BaseImage,
-		WorkDir:      "/workspace",
-		WorkspaceDir: workspaceDir,
-		Cmd:          watcherCmd,
-		MemoryLimit:  512 * 1024 * 1024,
-		CPULimit:     1000,
-		ExposedPort:  &profile.ExposedPort,
-		Env:          env,
+		ID:               sandbox.ID,
+		BaseImage:        profile.BaseImage,
+		WorkDir:          "/workspace",
+		WorkspaceDir:     workspaceDir,
+		Cmd:              keepaliveCmd,
+		MemoryLimit:      512 * 1024 * 1024,
+		CPULimit:         1000,
+		ExposedPort:      &allocatedPort,
+		Env:              env,
+		ExecutionProfile: execProfile,
 		Labels: map[string]string{
 			"berth.language": profile.Language,
 		},
@@ -332,18 +342,16 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 	createDuration := time.Since(createStart)
-	// Wait to assign port until start
-	// allocatedPort was 43100 as fallback but let's just use what's returned from getFreePort
 
 	startStart := time.Now()
 	if err := w.runtime.StartSandbox(bgCtx, cid); err != nil {
-		slog.Error("worker failed to start container", "sandbox_id", sandbox.ID, "error", err)
+		slog.Error("worker failed to start keepalive container", "sandbox_id", sandbox.ID, "error", err)
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 		return
 	}
 	startDuration := time.Since(startStart)
 
-	// Install dependencies inside container
+	// PHASE 2: Install dependencies inside running container
 	var installDuration time.Duration
 	if profile.InstallCmd != "" {
 		installStart := time.Now()
@@ -359,12 +367,70 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		}
 	}
 
-	// The watcher command (nodemon/uvicorn/air) is the main container process
-	// It will start the application and watch for file changes
-	allocatedPort := profile.ExposedPort
-	if allocatedPort == 0 {
-		allocatedPort = 3000
+	// PHASE 3: Stop container, commit to new image, recreate with watcher command
+	stopStart := time.Now()
+	if err := w.runtime.StopSandbox(bgCtx, cid); err != nil {
+		slog.Error("worker failed to stop container after install", "sandbox_id", sandbox.ID, "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
 	}
+	stopDuration := time.Since(stopStart)
+
+	// Commit container to new image with installed dependencies
+	commitImage := fmt.Sprintf("berth-%s:latest", sandbox.ID.String()[:8])
+	commitStart := time.Now()
+	if err := w.runtime.CommitContainer(bgCtx, cid, commitImage); err != nil {
+		slog.Error("worker failed to commit container", "sandbox_id", sandbox.ID, "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+	commitDuration := time.Since(commitStart)
+	slog.Info("committed container with installed deps", "sandbox_id", sandbox.ID, "image", commitImage)
+
+	// Delete old container
+	if err := w.runtime.DeleteSandbox(bgCtx, cid); err != nil {
+		slog.Warn("failed to delete old container", "sandbox_id", sandbox.ID, "error", err)
+	}
+
+	// PHASE 4: Create new container from committed image with watcher command
+	watcherCmd := WatcherCommand(profile)
+	watcherSpec := domain.SandboxSpec{
+		ID:               sandbox.ID,
+		BaseImage:        commitImage,
+		WorkDir:          "/workspace",
+		WorkspaceDir:     workspaceDir,
+		Cmd:              watcherCmd,
+		MemoryLimit:      512 * 1024 * 1024,
+		CPULimit:         1000,
+		ExposedPort:      &allocatedPort,
+		Env:              env,
+		ExecutionProfile: execProfile,
+		Labels: map[string]string{
+			"berth.language": profile.Language,
+		},
+	}
+
+	createStart2 := time.Now()
+	cid, errCreate = w.runtime.CreateSandbox(bgCtx, watcherSpec)
+	if errCreate != nil {
+		slog.Error("worker failed to create watcher container", "sandbox_id", sandbox.ID, "error", errCreate)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+	createDuration2 := time.Since(createStart2)
+
+	startStart2 := time.Now()
+	if err := w.runtime.StartSandbox(bgCtx, cid); err != nil {
+		slog.Error("worker failed to start watcher container", "sandbox_id", sandbox.ID, "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+	startDuration2 := time.Since(startStart2)
+
+	_ = stopDuration
+	_ = commitDuration
+	_ = createDuration2
+	_ = startDuration2
 
 	apiHost := os.Getenv("API_PUBLIC_HOST")
 	if apiHost == "" {

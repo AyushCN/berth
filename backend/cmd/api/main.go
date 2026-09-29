@@ -73,13 +73,13 @@ func main() {
 	// Repositories
 	queries := repository.New(db.Pool())
 	userRepo := repository.NewUserRepository(queries)
-	sandboxRepo := repository.NewSandboxRepository(queries)
 	orgRepo := repository.NewOrganizationRepository(queries)
 	projRepo := repository.NewProjectRepository(queries)
 	shareLinkRepo := repository.NewShareLinkRepository(queries)
 	workspaceRepo := repository.NewWorkspaceRepository(queries)
 	workspaceMemberRepo := repository.NewWorkspaceMemberRepository(queries)
 	changeRequestRepo := repository.NewChangeRequestRepository(queries)
+	envRepo := repository.NewEnvironmentRepository(queries)
 
 	// Prediction repositories
 	modelRepo := repository.NewModelRepository(db.Pool())
@@ -93,7 +93,7 @@ func main() {
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
 	projUC := usecase.NewProjectUsecase(projRepo, orgRepo, workspaceRepo, workspaceMemberRepo)
 	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, orgUC, projUC)
-	sandboxUC := usecase.NewSandboxUsecase(sandboxRepo, projRepo, nil, natsClient) // runtime nil in API mode
+	envUC := usecase.NewEnvironmentUsecase(envRepo, workspaceRepo, projRepo, orgRepo, nil, natsClient) // runtime nil in API mode
 	shareLinkUC := usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, nil) // gitUC not yet initialized
 
 	if cfg.Env != "production" {
@@ -126,14 +126,14 @@ func main() {
 		workspaceDir = filepath.Join(home, ".local", "state", "berth", "workspaces")
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
-	fileUC := usecase.NewFileUsecase(workspaceDir, sandboxUC)
+	fileUC := usecase.NewFileUsecase(workspaceDir, envUC)
 
 	// Initialize Docker runtime for Git operations in API mode
 	gitRuntime, err := usecase.NewDockerRuntimeForGit(workspaceDir)
 	if err != nil {
 		slog.Warn("failed to init git runtime, git operations will use host filesystem", "error", err)
 	}
-	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, sandboxRepo, gitRuntime)
+	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, envRepo, workspaceRepo, gitRuntime)
 	changeRequestUC := usecase.NewChangeRequestUsecase(changeRequestRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 	shareLinkUC = usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 
@@ -175,7 +175,7 @@ func main() {
 	// Handlers
 	deps := &berthhttp.Dependencies{
 		AuthHandler:         handler.NewAuthHandler(authUC, cfg.FrontendURL),
-		SandboxHandler:      handler.NewSandboxHandler(sandboxUC, cfg.TraefikDomain),
+		EnvironmentHandler:  handler.NewEnvironmentHandler(envUC, cfg.TraefikDomain),
 		FileHandler:         handler.NewFileHandler(fileUC),
 		WSHandler:           handler.NewWSHandler(redisPubSub, cfg.FrontendURL),
 		GitHandler:          handler.NewGitHandler(gitUC),
@@ -207,9 +207,9 @@ func main() {
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	slog.Info("shutting down gracefully...")
+	sig := <-quit
+	
+	slog.Info("received signal, shutting down gracefully...", "signal", sig)
 
 	// Shutdown WebSocket hub
 	if deps.WSHandler != nil {

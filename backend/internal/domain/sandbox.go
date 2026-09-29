@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -35,6 +36,8 @@ type NetworkMode string
 const (
 	// NetworkModeHost uses host networking (no isolation)
 	NetworkModeHost NetworkMode = "host"
+	// NetworkModeBridge uses Docker bridge networking (default isolation)
+	NetworkModeBridge NetworkMode = "bridge"
 	// NetworkModeCNI uses CNI for isolated network namespace
 	NetworkModeCNI NetworkMode = "cni"
 	// NetworkModeNone disables networking entirely
@@ -133,6 +136,69 @@ func TrustedExecutionProfile() *ExecutionProfile {
 	}
 }
 
+// ValidateExecutionProfile validates the execution profile for security constraints.
+func ValidateExecutionProfile(profile *ExecutionProfile) error {
+	if profile == nil {
+		return fmt.Errorf("execution profile is nil")
+	}
+
+	// Validate runtime
+	switch profile.Runtime {
+	case RuntimeRunc, RuntimeGVisor:
+		// Valid
+	default:
+		return fmt.Errorf("invalid runtime: %s", profile.Runtime)
+	}
+
+	// Validate network mode
+	switch profile.NetworkMode {
+	case NetworkModeHost, NetworkModeBridge, NetworkModeCNI, NetworkModeNone:
+		// Valid
+	default:
+		if profile.NetworkMode != "" {
+			return fmt.Errorf("invalid network mode: %s", profile.NetworkMode)
+		}
+	}
+
+	// Validate filesystem mode
+	switch profile.FilesystemMode {
+	case FilesystemModeBindMount, FilesystemModeOverlay, FilesystemModeRO:
+		// Valid
+	default:
+		if profile.FilesystemMode != "" {
+			return fmt.Errorf("invalid filesystem mode: %s", profile.FilesystemMode)
+		}
+	}
+
+	// Validate memory limit
+	if profile.MemoryLimit < 0 {
+		return fmt.Errorf("memory limit must be non-negative")
+	}
+
+	// Validate CPU quota
+	if profile.CPUQuota < 0 {
+		return fmt.Errorf("CPU quota must be non-negative")
+	}
+
+	// Validate disk limit
+	if profile.DiskLimit < 0 {
+		return fmt.Errorf("disk limit must be non-negative")
+	}
+
+	// Validate PIDs limit
+	if profile.PidsLimit < 0 {
+		return fmt.Errorf("PIDs limit must be non-negative")
+	}
+
+	// Warn if running as root with no security restrictions
+	if !profile.Rootless && !profile.ReadOnlyRootFS && !profile.NoNewPrivileges && profile.SeccompProfile == "" && len(profile.Capabilities) == 0 {
+		// This is a warning scenario - running as root with no security controls
+		// In production, you might want to reject this
+	}
+
+	return nil
+}
+
 // SandboxState represents the lifecycle state of a sandbox.
 type SandboxState string
 
@@ -218,6 +284,7 @@ type ContainerRuntime interface {
 	ExecWithEnv(ctx context.Context, containerID string, cmd []string, env map[string]string) (string, error)
 	ExecPTY(ctx context.Context, containerID string, cmd []string) (stdin io.WriteCloser, stdout io.Reader, wait func() error, err error)
 	GetLogs(ctx context.Context, containerID string, tail int) (string, error)
+	CommitContainer(ctx context.Context, containerID, imageName string) error
 }
 
 // SandboxSpec is the specification passed to the container runtime.

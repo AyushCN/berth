@@ -9,16 +9,18 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AyushCN/berth/internal/domain"
 	"github.com/google/uuid"
 )
 
 type FileUsecase struct {
 	workspaceDir string
-	sandboxUC    *SandboxUsecase // optional, used to signal reload via Exec
+	envUC        *EnvironmentUsecase // optional, used to signal reload via Exec
 }
 
-func NewFileUsecase(dir string, sandboxUC *SandboxUsecase) *FileUsecase {
-	return &FileUsecase{workspaceDir: dir, sandboxUC: sandboxUC}
+func NewFileUsecase(dir string, envUC *EnvironmentUsecase) *FileUsecase {
+	return &FileUsecase{workspaceDir: dir, envUC: envUC}
 }
 
 func (uc *FileUsecase) getSandboxDir(sandboxID uuid.UUID) string {
@@ -104,17 +106,17 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 
 	// Signal a hot-reload by touching the file inside the container via exec
 	reloadSignaled := false
-	if uc.sandboxUC != nil && uc.sandboxUC.runtime != nil {
-		sandbox, err := uc.sandboxUC.repo.GetByID(ctx, sandboxID)
-		if err == nil && sandbox.State == "RUNNING" && sandbox.ContainerID != nil {
+	if uc.envUC != nil && uc.envUC.runtime != nil {
+		env, err := uc.envUC.envRepo.GetByID(ctx, sandboxID)
+		if err == nil && env.State == domain.EnvironmentStateRunning && env.ContainerID != "" {
 			inContainerPath := "/workspace/" + strings.TrimPrefix(path, "/")
 			touchCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			_, touchErr := uc.sandboxUC.runtime.Exec(touchCtx, *sandbox.ContainerID, []string{"touch", inContainerPath})
+			_, touchErr := uc.envUC.runtime.Exec(touchCtx, env.ContainerID, []string{"touch", inContainerPath})
 			if touchErr == nil {
 				reloadSignaled = true
 			} else {
-				slog.Warn("touch-on-save failed", "sandbox_id", sandboxID, "path", inContainerPath, "err", touchErr)
+				slog.Warn("touch-on-save failed", "environment_id", sandboxID, "path", inContainerPath, "err", touchErr)
 			}
 		}
 	}
@@ -128,13 +130,9 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 		cmd := exec.CommandContext(backgroundCtx, "git", "add", path)
 		cmd.Dir = sandboxDir
 		if err := cmd.Run(); err != nil {
-			slog.Warn("git add failed on save", "sandbox_id", sandboxID, "path", path, "err", err)
+			slog.Warn("git add failed on save", "environment_id", sandboxID, "path", path, "err", err)
 		}
-		if uc.sandboxUC != nil {
-			if err := uc.sandboxUC.repo.UpdateGitTracking(backgroundCtx, sandboxID, true, nil, nil); err != nil {
-				slog.Warn("failed to update git tracking", "sandbox_id", sandboxID, "err", err)
-			}
-		}
+		// Git tracking is updated via workspace - skip for now
 	}()
 
 	return &SaveResult{ReloadSignaled: reloadSignaled}, nil

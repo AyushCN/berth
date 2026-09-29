@@ -22,8 +22,8 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 	r.GET("/health", handler.HealthCheck)
 
 	// Preview Proxy (no auth, allows wildcards)
-	r.Any("/p/:id/*path", deps.SandboxHandler.PreviewProxy)
-	r.Any("/p/:id", deps.SandboxHandler.PreviewProxy)
+	r.Any("/p/:id/*path", deps.EnvironmentHandler.PreviewProxy)
+	r.Any("/p/:id", deps.EnvironmentHandler.PreviewProxy)
 
 	// API routes
 	api := r.Group("/api")
@@ -63,15 +63,16 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 			authenticated.POST("/join", deps.ShareLinkHandler.JoinViaShareLink)
 
 			// Environments
-			authenticated.GET("/environments", deps.SandboxHandler.ListEnvironments)
-			authenticated.POST("/environments", deps.SandboxHandler.CreateEnvironment)
-			authenticated.POST("/environments/:id/fork", deps.SandboxHandler.ForkEnvironment)
-			authenticated.GET("/environments/:id", deps.SandboxHandler.GetEnvironment)
-			authenticated.DELETE("/environments/:id", deps.SandboxHandler.DeleteEnvironment)
-			authenticated.POST("/environments/:id/stop", deps.SandboxHandler.StopEnvironment)
-			authenticated.POST("/environments/:id/restart", deps.SandboxHandler.RestartEnvironment)
-			authenticated.POST("/environments/:id/exec", deps.SandboxHandler.ExecCommand)
-			authenticated.GET("/environments/:id/logs", deps.SandboxHandler.GetLogs)
+			authenticated.GET("/environments", deps.EnvironmentHandler.ListEnvironments)
+			authenticated.POST("/environments", deps.EnvironmentHandler.CreateEnvironment)
+			authenticated.POST("/environments/:id/fork", deps.EnvironmentHandler.ForkEnvironment)
+			authenticated.GET("/environments/:id", deps.EnvironmentHandler.GetEnvironment)
+			authenticated.DELETE("/environments/:id", deps.EnvironmentHandler.DeleteEnvironment)
+			authenticated.POST("/environments/:id/stop", deps.EnvironmentHandler.StopEnvironment)
+			authenticated.POST("/environments/:id/restart", deps.EnvironmentHandler.RestartEnvironment)
+			authenticated.POST("/environments/:id/start", deps.EnvironmentHandler.StartEnvironment)
+			authenticated.POST("/environments/:id/exec", deps.EnvironmentHandler.ExecCommand)
+			authenticated.GET("/environments/:id/logs", deps.EnvironmentHandler.GetLogs)
 
 			// Files
 			authenticated.GET("/environments/:id/files", deps.FileHandler.ListFiles)
@@ -126,7 +127,9 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 	ws := r.Group("/ws")
 	ws.Use(middleware.WSAuth(cfg.JWTSecret))
 	{
+		ws.GET("/environments/:id", deps.WSHandler.HandleSandboxWS)
 		ws.GET("/sandbox/:id", deps.WSHandler.HandleSandboxWS)
+		ws.GET("/sandboxes/:id", deps.WSHandler.HandleSandboxWS)
 	}
 
 	return r
@@ -134,15 +137,15 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 
 // Dependencies holds all handler dependencies.
 type Dependencies struct {
-	AuthHandler        *handler.AuthHandler
-	SandboxHandler     *handler.SandboxHandler
-	FileHandler        *handler.FileHandler
-	WSHandler          *handler.WSHandler
-	GitHandler         *handler.GitHandler
-	OrgHandler         *handler.OrganizationHandler
-	ProjectHandler     *handler.ProjectHandler
-	ShareLinkHandler   *handler.ShareLinkHandler
+	AuthHandler         *handler.AuthHandler
+	EnvironmentHandler  *handler.EnvironmentHandler
+	FileHandler         *handler.FileHandler
+	WSHandler           *handler.WSHandler
+	GitHandler          *handler.GitHandler
+	OrgHandler          *handler.OrganizationHandler
+	ProjectHandler      *handler.ProjectHandler
+	ShareLinkHandler    *handler.ShareLinkHandler
 	ChangeRequestHandler *handler.ChangeRequestHandler
-	ActivityHandler    *handler.ActivityHandler
-	PredictionHandler  *handler.PredictionHandler
+	ActivityHandler     *handler.ActivityHandler
+	PredictionHandler   *handler.PredictionHandler
 }

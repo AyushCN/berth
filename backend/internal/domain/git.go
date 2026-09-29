@@ -26,7 +26,7 @@ type CommitEntry struct {
 // GitRepository defines the interface for git operations within a sandbox
 type GitRepository interface {
 	// GetCommits returns the commit history for a sandbox
-	GetCommits(ctx context.Context, sandboxID uuid.UUID) ([]CommitInfo, error)
+	GetCommits(ctx context.Context, sandboxID uuid.UUID) ([]CommitEntry, error)
 
 	// GetChangedFiles returns the list of files changed between two sandboxes
 	GetChangedFiles(ctx context.Context, sourceSandboxID, targetSandboxID uuid.UUID) ([]string, error)

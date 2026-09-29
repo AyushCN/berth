@@ -166,12 +166,6 @@ func (h *GitHandler) Commit(c *gin.Context) {
 }
 
 func (h *GitHandler) Push(c *gin.Context) {
-	userID, _ := c.Get("userId")
-	uid, err := uuid.Parse(userID.(string))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
-		return
-	}
 	sandboxID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sandbox id"})
@@ -181,8 +175,14 @@ func (h *GitHandler) Push(c *gin.Context) {
 		return
 	}
 
-	pushedBranch, err := h.gitUC.Push(c.Request.Context(), sandboxID, uid)
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
 	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	if _, err := h.gitUC.Push(c.Request.Context(), sandboxID, uid); err != nil {
 		status := http.StatusInternalServerError
 		if err.Error() == "sandbox not found" {
 			status = http.StatusNotFound
@@ -190,7 +190,7 @@ func (h *GitHandler) Push(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "push successful", "branch": pushedBranch})
+	c.JSON(http.StatusOK, gin.H{"message": "push successful"})
 }
 
 func (h *GitHandler) Log(c *gin.Context) {

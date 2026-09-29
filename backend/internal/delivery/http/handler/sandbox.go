@@ -288,3 +288,25 @@ func (h *SandboxHandler) RestartEnvironment(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// StartEnvironment starts a stopped environment.
+func (h *SandboxHandler) StartEnvironment(c *gin.Context) {
+	userID, _ := c.Get("userId")
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.sandboxUC.StartEnvironment(c.Request.Context(), uid, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}

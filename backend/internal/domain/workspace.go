@@ -59,6 +59,7 @@ type WorkspaceRepository interface {
 	GetCanonical(ctx context.Context, projectID uuid.UUID) (*Workspace, error)
 	Update(ctx context.Context, workspace *Workspace) error
 	Delete(ctx context.Context, id uuid.UUID) error // soft delete
+	GetUserWorkspaces(ctx context.Context, userID uuid.UUID) ([]*Workspace, error)
 }
 
 // WorkspaceMemberRepository defines the interface for workspace member persistence
