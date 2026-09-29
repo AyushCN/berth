@@ -10,6 +10,7 @@ import "github.com/google/uuid"
 const (
 	SubjectEnvironmentCreate = "berth.environment.create"
 	SubjectEnvironmentStop   = "berth.environment.stop"
+	SubjectEnvironmentStart  = "berth.environment.start"
 	SubjectEnvironmentDelete = "berth.environment.delete"
 )
 

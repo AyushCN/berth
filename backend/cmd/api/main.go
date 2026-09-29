@@ -101,7 +101,7 @@ func main() {
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
 	projUC := usecase.NewProjectUsecase(projRepo, orgRepo, workspaceRepo, workspaceMemberRepo)
 	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, tokenBox, orgUC, projUC)
-	envUC := usecase.NewEnvironmentUsecase(envRepo, workspaceRepo, projRepo, orgRepo, nil, natsClient) // runtime nil in API mode
+	envUC := usecase.NewEnvironmentUsecase(envRepo, workspaceRepo, projRepo, orgRepo, nil, natsClient)           // runtime nil in API mode
 	shareLinkUC := usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, nil) // gitUC not yet initialized
 
 	if cfg.Env != "production" {
@@ -145,22 +145,26 @@ func main() {
 	changeRequestUC := usecase.NewChangeRequestUsecase(changeRequestRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 	shareLinkUC = usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 
-	// Activity tracker & warm pool
+	// Activity tracker & warm pool.
+	//
+	// The api has no container runtime, so it cannot stop or start
+	// containers itself; it asks the worker over NATS instead. The periodic
+	// idle-suspend loop runs in the worker, which owns the Docker socket.
+	// Running it in both processes would just race on the same rows.
 	idleTimeout := 30 * time.Minute
 	if cfg.Env == "production" {
 		idleTimeout = 60 * time.Minute
 	}
 	activityTracker := usecase.NewActivityTracker(
 		repository.NewEnvironmentRepository(queries),
-		nil, // worker not available in API mode
+		usecase.NewNATSContainerControl(natsClient),
 		idleTimeout,
 		5*time.Minute,
 	)
-	go activityTracker.Start(context.Background())
 
 	warmPool := usecase.NewWarmPool(
 		repository.NewEnvironmentRepository(queries),
-		nil, // worker not available in API mode
+		nil, // unused: WarmPool stores the runtime but never calls it
 		repository.NewRuntimeProfileRepository(queries),
 		map[string]int{"node": 2, "python": 1, "go": 1},
 		10*time.Minute,
@@ -179,17 +183,17 @@ func main() {
 
 	// Handlers
 	deps := &berthhttp.Dependencies{
-		AuthHandler:         handler.NewAuthHandler(authUC, cfg.FrontendURL),
-		EnvironmentHandler:  handler.NewEnvironmentHandler(envUC, cfg.TraefikDomain),
-		FileHandler:         handler.NewFileHandler(fileUC),
-		WSHandler:           handler.NewWSHandler(redisPubSub, cfg.FrontendURL),
-		GitHandler:          handler.NewGitHandler(gitUC),
-		OrgHandler:          handler.NewOrganizationHandler(orgUC),
-		ProjectHandler:      handler.NewProjectHandler(projUC),
-		ShareLinkHandler:    handler.NewShareLinkHandler(shareLinkUC),
+		AuthHandler:          handler.NewAuthHandler(authUC, cfg.FrontendURL),
+		EnvironmentHandler:   handler.NewEnvironmentHandler(envUC, cfg.TraefikDomain),
+		FileHandler:          handler.NewFileHandler(fileUC),
+		WSHandler:            handler.NewWSHandler(redisPubSub, cfg.FrontendURL),
+		GitHandler:           handler.NewGitHandler(gitUC),
+		OrgHandler:           handler.NewOrganizationHandler(orgUC),
+		ProjectHandler:       handler.NewProjectHandler(projUC),
+		ShareLinkHandler:     handler.NewShareLinkHandler(shareLinkUC),
 		ChangeRequestHandler: handler.NewChangeRequestHandler(changeRequestUC),
-		ActivityHandler:     handler.NewActivityHandler(activityTracker, warmPool),
-		PredictionHandler:   handler.NewPredictionHandler(predictionService),
+		ActivityHandler:      handler.NewActivityHandler(activityTracker, warmPool),
+		PredictionHandler:    handler.NewPredictionHandler(predictionService),
 	}
 
 	// Router
@@ -213,7 +217,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
-	
+
 	slog.Info("received signal, shutting down gracefully...", "signal", sig)
 
 	// Shutdown WebSocket hub

@@ -63,7 +63,15 @@ func (c *Client) Publish(subject string, data []byte) error {
 	return err
 }
 
-// Subscribe creates a consumer subscription. If durable is empty, it creates an ephemeral subscription.
+// Subscribe creates a consumer subscription. If durable is empty, it creates an
+// ephemeral subscription that only receives messages published from now on.
+//
+// Ephemeral consumers previously inherited the JetStream default of
+// DeliverAllPolicy, so every worker restart replayed the entire retained
+// stream (7 days). A stale berth.environment.delete then tore down a live
+// environment on an unrelated restart. Missed work is recovered from the
+// database instead: the api persists what the worker needs and the worker
+// polls for anything still pending, so NATS is only a latency signal.
 func (c *Client) Subscribe(subject, durable string, handler nats.MsgHandler) (*nats.Subscription, error) {
 	opts := []nats.SubOpt{
 		nats.ManualAck(),
@@ -71,6 +79,8 @@ func (c *Client) Subscribe(subject, durable string, handler nats.MsgHandler) (*n
 	}
 	if durable != "" {
 		opts = append(opts, nats.Durable(durable))
+	} else {
+		opts = append(opts, nats.DeliverNew())
 	}
 	sub, err := c.js.Subscribe(subject, handler, opts...)
 	if err != nil {

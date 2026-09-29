@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/AyushCN/berth/internal/config"
-	"github.com/AyushCN/berth/internal/infrastructure/docker"
 	"github.com/AyushCN/berth/internal/infrastructure/db"
+	"github.com/AyushCN/berth/internal/infrastructure/docker"
 	natsInfra "github.com/AyushCN/berth/internal/infrastructure/nats"
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
@@ -119,6 +119,16 @@ func main() {
 
 	// Start scheduled retraining
 	go predictionService.ScheduledRetraining(ctx, 6*time.Hour)
+
+	// Idle-suspend runs here, not in the api: stopping a container needs the
+	// Docker socket, which only the worker has.
+	activityTracker := usecase.NewActivityTracker(
+		repository.NewEnvironmentRepository(queries),
+		usecase.NewDockerContainerControl(runtime),
+		30*time.Minute,
+		5*time.Minute,
+	)
+	go activityTracker.Start(ctx)
 
 	go sandboxWorker.Start(ctx)
 

@@ -12,24 +12,32 @@ import (
 )
 
 type ActivityTracker struct {
-	repo             domain.EnvironmentRepository
-	worker           domain.ContainerRuntime
-	idleTimeout      time.Duration
+	repo                 domain.EnvironmentRepository
+	control              containerControl
+	idleTimeout          time.Duration
 	suspendCheckInterval time.Duration
-	mu               sync.Mutex
-	running          bool
-	stopCh           chan struct{}
+	mu                   sync.Mutex
+	running              bool
+	stopCh               chan struct{}
 }
 
+// NewActivityTracker builds a tracker. control must not be nil: it decides how
+// containers are stopped and started. The worker passes a Docker-backed
+// controller; the api passes one that asks the worker over NATS.
 func NewActivityTracker(
 	repo domain.EnvironmentRepository,
-	worker domain.ContainerRuntime,
+	control containerControl,
 	idleTimeout time.Duration,
 	suspendCheckInterval time.Duration,
 ) *ActivityTracker {
+	if control == nil {
+		// A nil controller here would panic on first use, which is exactly
+		// how this class of bug reached main before.
+		control = natsContainerControl{}
+	}
 	return &ActivityTracker{
 		repo:                 repo,
-		worker:               worker,
+		control:              control,
 		idleTimeout:          idleTimeout,
 		suspendCheckInterval: suspendCheckInterval,
 		stopCh:               make(chan struct{}),
@@ -111,18 +119,18 @@ func (at *ActivityTracker) checkAndSuspendIdleEnvironments(ctx context.Context) 
 		}
 
 		slog.Info("suspending idle environment", "environment_id", env.ID, "idle_since", env.LastActivityAt)
-		
+
 		// Update state to SUSPENDING
 		if err := at.repo.UpdateState(ctx, env.ID, domain.EnvironmentStateSuspending); err != nil {
 			slog.Error("failed to update state to suspending", "environment_id", env.ID, "error", err)
 			continue
 		}
 
-		// Stop the container
+		// Stop the container. If this fails, revert to RUNNING rather than
+		// claiming the environment is suspended while its container lives on.
 		if env.ContainerID != "" {
-			if err := at.worker.StopSandbox(ctx, env.ContainerID); err != nil {
-				slog.Error("failed to stop sandbox", "environment_id", env.ID, "error", err)
-				// Revert state
+			if err := at.control.Stop(ctx, env); err != nil {
+				slog.Error("failed to stop idle environment container", "environment_id", env.ID, "error", err)
 				_ = at.repo.UpdateState(ctx, env.ID, domain.EnvironmentStateRunning)
 				continue
 			}
@@ -131,11 +139,11 @@ func (at *ActivityTracker) checkAndSuspendIdleEnvironments(ctx context.Context) 
 		// Update state to SUSPENDED - keep ContainerID so we can resume later
 		now := time.Now()
 		if err := at.repo.Update(ctx, &domain.Environment{
-			ID:             env.ID,
-			State:          domain.EnvironmentStateSuspended,
-			SuspendedAt:    &now,
+			ID:          env.ID,
+			State:       domain.EnvironmentStateSuspended,
+			SuspendedAt: &now,
 			// ContainerID: keep it for resume
-			UpdatedAt:      now,
+			UpdatedAt: now,
 		}); err != nil {
 			slog.Error("failed to update environment to suspended", "environment_id", env.ID, "error", err)
 		}
@@ -160,8 +168,8 @@ func (at *ActivityTracker) ResumeEnvironment(ctx context.Context, environmentID 
 
 	// Start the container again
 	if env.ContainerID != "" {
-		if err := at.worker.StartSandbox(ctx, env.ContainerID); err != nil {
-			slog.Error("failed to start sandbox", "environment_id", env.ID, "error", err)
+		if err := at.control.Start(ctx, env); err != nil {
+			slog.Error("failed to start suspended environment container", "environment_id", env.ID, "error", err)
 			// Revert state
 			_ = at.repo.UpdateState(ctx, environmentID, domain.EnvironmentStateSuspended)
 			return fmt.Errorf("failed to start sandbox: %w", err)

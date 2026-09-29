@@ -3,12 +3,14 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"log/slog"
 )
@@ -22,17 +24,26 @@ type WSMessage struct {
 }
 
 type WSConnection struct {
-	ID         string
-	UserID     string
-	SandboxID  string
-	Conn       *websocket.Conn
-	Send       chan []byte
-	CloseOnce  sync.Once
+	ID        string
+	UserID    string
+	SandboxID string
+	Conn      *websocket.Conn
+	Send      chan []byte
+	CloseOnce sync.Once
 }
+
+const (
+	// pongWait is how long a connection may go without a pong before the read
+	// pump gives up on it.
+	pongWait = 60 * time.Second
+	// pingPeriod must be comfortably shorter than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+	writeWait  = 10 * time.Second
+)
 
 type WSHub struct {
 	pubsub       *redis.PubSub
-	connections  map[string]*WSConnection // connection ID -> connection
+	connections  map[string]*WSConnection   // connection ID -> connection
 	sandboxConns map[string]map[string]bool // sandbox ID -> connection IDs
 	userConns    map[string]map[string]bool // user ID -> connection IDs
 	mu           sync.RWMutex
@@ -135,6 +146,11 @@ func (h *WSHub) BroadcastToSandbox(sandboxID string, msg WSMessage) error {
 	if err != nil {
 		return err
 	}
+	// Redis is the cross-process fan-out channel. If it is unavailable a
+	// connection must still be registrable, so report rather than dereference.
+	if h.pubsub == nil {
+		return errors.New("websocket broadcast unavailable: redis pubsub not initialised")
+	}
 	return h.pubsub.Publish(context.Background(), "ws:broadcast:"+sandboxID, data)
 }
 
@@ -166,14 +182,23 @@ func (h *WSHub) BroadcastToUser(userID string, msg WSMessage) error {
 
 func (h *WSHub) Register(conn *WSConnection) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	h.connections[conn.ID] = conn
+	// The inner maps are created lazily. NewWSHub only allocated the outer
+	// maps, so writing through h.sandboxConns[conn.SandboxID] was an
+	// assignment into a nil map and panicked on the first connection.
+	if h.sandboxConns[conn.SandboxID] == nil {
+		h.sandboxConns[conn.SandboxID] = make(map[string]bool)
+	}
+	if h.userConns[conn.UserID] == nil {
+		h.userConns[conn.UserID] = make(map[string]bool)
+	}
 	h.sandboxConns[conn.SandboxID][conn.ID] = true
 	h.userConns[conn.UserID][conn.ID] = true
+	sandboxID, userID := conn.SandboxID, conn.UserID
+	h.mu.Unlock()
 
-	// Publish presence event
-	h.publishPresence(conn.SandboxID, conn.UserID, "join")
+	// Publish presence outside the lock: this path goes to redis, not the hub.
+	h.publishPresence(sandboxID, userID, "join")
 }
 
 func (h *WSHub) Unregister(connID string) {
@@ -211,19 +236,29 @@ func (h *WSHub) cleanupRoutine() {
 		case <-h.ctx.Done():
 			return
 		case <-ticker.C:
-			h.mu.Lock()
+			// Liveness is enforced by read deadlines and the pong handler set
+			// in HandleWS, not by reading here. Calling ReadMessage from this
+			// goroutine while the per-connection read pump is also reading is
+			// a concurrent read on the same gorilla websocket, which panics.
+			// This sweep only prunes connections whose send channel the write
+			// pump has already closed.
+			var dead []string
+			h.mu.RLock()
 			for connID, conn := range h.connections {
-				// Check if connection is still alive
-				conn.Conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-				if _, _, err := conn.Conn.ReadMessage(); err != nil {
-					// Connection dead, remove it
-					delete(h.connections, connID)
-					delete(h.sandboxConns[conn.SandboxID], connID)
-					delete(h.userConns[conn.UserID], connID)
-					h.publishPresence(conn.SandboxID, conn.UserID, "leave")
+				select {
+				case _, ok := <-conn.Send:
+					if !ok {
+						dead = append(dead, connID)
+					}
+				default:
 				}
 			}
-			h.mu.Unlock()
+			h.mu.RUnlock()
+
+			for _, connID := range dead {
+				slog.Info("pruning closed websocket connection", "conn_id", connID)
+				h.Unregister(connID)
+			}
 		}
 	}
 }
@@ -246,9 +281,20 @@ func (h *WSHub) Upgrader() *websocket.Upgrader {
 }
 
 func (h *WSHub) HandleWS(c *gin.Context) {
-	sandboxID := c.Param("sandbox_id")
+	// The routes register the parameter as :id (router.go:
+	// /ws/environments/:id, /ws/sandbox/:id, /ws/sandboxes/:id). Reading
+	// "sandbox_id" always returned an empty string, so every terminal
+	// connection was rejected with 400.
+	sandboxID := c.Param("id")
 	if sandboxID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sandbox_id required"})
+		sandboxID = c.Param("sandbox_id")
+	}
+	if sandboxID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "environment id required"})
+		return
+	}
+	if _, err := uuid.Parse(sandboxID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "environment id must be a uuid"})
 		return
 	}
 
@@ -264,6 +310,14 @@ func (h *WSHub) HandleWS(c *gin.Context) {
 		return
 	}
 
+	// Liveness is enforced here and in the read pump below, which is the only
+	// reader on this connection. It fails once the deadline passes without a
+	// pong, which is how dead peers get detected.
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+
 	connID := sandboxID + "-" + userID + "-" + time.Now().Format("20060102150405.000000000")
 	wsConn := &WSConnection{
 		ID:        connID,
@@ -278,6 +332,8 @@ func (h *WSHub) HandleWS(c *gin.Context) {
 	// Write pump
 	go func() {
 		defer h.Unregister(connID)
+		ticker := time.NewTicker(pingPeriod)
+		defer ticker.Stop()
 		for {
 			select {
 			case data, ok := <-wsConn.Send:
@@ -285,8 +341,17 @@ func (h *WSHub) HandleWS(c *gin.Context) {
 					conn.WriteMessage(websocket.CloseMessage, []byte{})
 					return
 				}
+				conn.SetWriteDeadline(time.Now().Add(writeWait))
 				if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 					slog.Error("websocket write failed", "error", err)
+					return
+				}
+			case <-ticker.C:
+				// Without pings a client that never sends anything never
+				// sends a pong, and the read deadline would expire on a
+				// perfectly healthy connection.
+				conn.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 					return
 				}
 			case <-h.ctx.Done():

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/AyushCN/berth/internal/domain"
 	"github.com/google/uuid"
 )
@@ -33,6 +35,22 @@ func (r *WorkspaceRepository) Create(ctx context.Context, w *domain.Workspace) e
 	w.CreatedAt = created.CreatedAt.Time
 	w.UpdatedAt = created.UpdatedAt.Time
 	w.DeletedAt = pgTimestamptzToTimePtr(created.DeletedAt)
+
+	// Record the owner as a member. GetUserWorkspaces, and therefore
+	// EnvironmentUsecase.ListEnvironments, resolves access through
+	// workspace_members rather than workspaces.owner_id. Without this row a
+	// freshly created workspace is invisible to its own owner, so any
+	// environment created in it never appears in the list.
+	if _, err := r.queries.CreateWorkspaceMember(ctx, CreateWorkspaceMemberParams{
+		WorkspaceID: w.ID,
+		UserID:      w.OwnerID,
+		// workspace_members.role is a bare TEXT column documented as
+		// OWNER, EDITOR, VIEWER; there is no CHECK constraint or enum type.
+		Role: "OWNER",
+	}); err != nil {
+		return fmt.Errorf("failed to add workspace owner as member: %w", err)
+	}
+
 	return nil
 }
 
@@ -187,20 +205,20 @@ func (r *WorkspaceRepository) rowToWorkspace(row Workspace) *domain.Workspace {
 
 func (r *WorkspaceRepository) rowToWorkspaceWithRole(row GetUserWorkspacesRow) *domain.Workspace {
 	return &domain.Workspace{
-		ID:        row.ID,
-		ProjectID: row.ProjectID,
-		Name:      row.Name,
-		Type:      domain.WorkspaceType(row.Type),
-		BaseWorkspaceID: pgTypeToUUID(row.BaseWorkspaceID),
-		OwnerID:   row.OwnerID,
-		GitURL:    row.GitUrl,
-		GitBranch: row.GitBranch,
-		CommitHash: row.CommitHash.String,
+		ID:                    row.ID,
+		ProjectID:             row.ProjectID,
+		Name:                  row.Name,
+		Type:                  domain.WorkspaceType(row.Type),
+		BaseWorkspaceID:       pgTypeToUUID(row.BaseWorkspaceID),
+		OwnerID:               row.OwnerID,
+		GitURL:                row.GitUrl,
+		GitBranch:             row.GitBranch,
+		CommitHash:            row.CommitHash.String,
 		HasUncommittedChanges: row.HasUncommittedChanges.Bool,
-		LastSyncedAt: pgTimestamptzToTimePtr(row.LastSyncedAt),
-		CreatedAt: row.CreatedAt.Time,
-		UpdatedAt: row.UpdatedAt.Time,
-		DeletedAt: pgTimestamptzToTimePtr(row.DeletedAt),
+		LastSyncedAt:          pgTimestamptzToTimePtr(row.LastSyncedAt),
+		CreatedAt:             row.CreatedAt.Time,
+		UpdatedAt:             row.UpdatedAt.Time,
+		DeletedAt:             pgTimestamptzToTimePtr(row.DeletedAt),
 	}
 }
 

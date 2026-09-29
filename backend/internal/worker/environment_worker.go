@@ -49,6 +49,7 @@ func (w *SandboxWorker) subscribeEnvironment(ctx context.Context) {
 	}{
 		{domain.SubjectEnvironmentCreate, w.handleEnvironmentCreate, "create"},
 		{domain.SubjectEnvironmentStop, w.handleEnvironmentStop, "stop"},
+		{domain.SubjectEnvironmentStart, w.handleEnvironmentStart, "start"},
 		{domain.SubjectEnvironmentDelete, w.handleEnvironmentDelete, "delete"},
 	}
 
@@ -245,6 +246,46 @@ func (w *SandboxWorker) handleEnvironmentStop(msg *natsCore.Msg) {
 		slog.Error("failed to mark environment STOPPED", "environment_id", evt.EnvironmentID, "error", err)
 	}
 	slog.Info("environment stopped", "environment_id", evt.EnvironmentID, "container_id", evt.ContainerID)
+}
+
+// handleEnvironmentStart restarts an existing container. This is the resume
+// path: the api cannot start containers, so it publishes here and waits for the
+// state transition below.
+func (w *SandboxWorker) handleEnvironmentStart(msg *natsCore.Msg) {
+	evt, ok := w.decodeLifecycle(msg, "start")
+	if !ok {
+		return
+	}
+	_ = msg.Ack()
+
+	ctx := context.Background()
+
+	if evt.ContainerID == "" {
+		env, err := w.envRepo.GetByID(ctx, evt.EnvironmentID)
+		if err != nil {
+			slog.Error("failed to load environment for start", "environment_id", evt.EnvironmentID, "error", err)
+			return
+		}
+		evt.ContainerID = env.ContainerID
+	}
+	if evt.ContainerID == "" {
+		// Nothing to start. Put it back to CREATED so the provisioning
+		// reaper builds it from scratch rather than leaving it wedged.
+		slog.Warn("environment has no container to start, scheduling reprovision",
+			"environment_id", evt.EnvironmentID)
+		_ = w.envRepo.UpdateState(ctx, evt.EnvironmentID, domain.EnvironmentStateCreated)
+		return
+	}
+
+	if err := w.runtime.StartSandbox(ctx, evt.ContainerID); err != nil {
+		slog.Error("failed to start environment container", "environment_id", evt.EnvironmentID, "error", err)
+		_ = msg.Nak()
+		return
+	}
+	if err := w.envRepo.UpdateState(ctx, evt.EnvironmentID, domain.EnvironmentStateRunning); err != nil {
+		slog.Error("failed to mark environment RUNNING", "environment_id", evt.EnvironmentID, "error", err)
+	}
+	slog.Info("environment started", "environment_id", evt.EnvironmentID, "container_id", evt.ContainerID)
 }
 
 func (w *SandboxWorker) handleEnvironmentDelete(msg *natsCore.Msg) {
