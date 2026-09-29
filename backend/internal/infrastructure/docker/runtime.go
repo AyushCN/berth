@@ -64,33 +64,29 @@ func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSp
 	// Name
 	args = append(args, "--name", spec.ID.String())
 
-	// Network
-	if d.networkName != "" {
-		args = append(args, "--network", d.networkName)
-	}
-
-	// Network mode from execution profile
-	if spec.ExecutionProfile != nil && spec.ExecutionProfile.NetworkMode != "" {
+	// Network. Exactly one --network flag may be emitted: docker honours the
+	// last one, so appending both the default network and the profile's mode
+	// silently discarded the default.
+	network := ""
+	if spec.ExecutionProfile != nil {
 		switch spec.ExecutionProfile.NetworkMode {
 		case domain.NetworkModeHost:
-			args = append(args, "--network", "host")
-		case domain.NetworkModeBridge:
-			if d.networkName != "" {
-				args = append(args, "--network", d.networkName)
-			} else {
-				args = append(args, "--network", "bridge")
-			}
+			network = "host"
 		case domain.NetworkModeNone:
-			args = append(args, "--network", "none")
-		case domain.NetworkModeCNI:
-			// CNI mode would require CNI plugin integration - use bridge as fallback
-			if d.networkName != "" {
-				args = append(args, "--network", d.networkName)
-			} else {
-				args = append(args, "--network", "bridge")
-			}
+			network = "none"
+		case domain.NetworkModeBridge, domain.NetworkModeCNI:
+			// CNI mode would require CNI plugin integration - use bridge.
+			network = "bridge"
 		}
 	}
+	if network == "" {
+		if d.networkName != "" {
+			network = d.networkName
+		} else {
+			network = "bridge"
+		}
+	}
+	args = append(args, "--network", network)
 
 	// Filesystem mode from execution profile
 	if spec.ExecutionProfile != nil && spec.ExecutionProfile.FilesystemMode != "" {
@@ -171,14 +167,20 @@ func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSp
 			args = append(args, "--security-opt", "no-new-privileges:true")
 		}
 
-		// Seccomp profile
-		if profile.SeccompProfile != "" {
-			if profile.SeccompProfile == "default" {
-				args = append(args, "--security-opt", "seccomp=default")
-			} else {
-				// Custom seccomp profile path
-				args = append(args, "--security-opt", fmt.Sprintf("seccomp=%s", profile.SeccompProfile))
-			}
+		// Seccomp profile.
+		//
+		// --security-opt seccomp= only accepts "unconfined" or a path to a
+		// JSON profile. Passing "default" makes docker fail with
+		// "opening seccomp profile (default) failed: open default: no such
+		// file or directory". Docker already applies its own default profile
+		// when the option is absent, so the default case emits nothing.
+		switch profile.SeccompProfile {
+		case "", "default":
+			// Implicit docker default.
+		case "unconfined":
+			args = append(args, "--security-opt", "seccomp=unconfined")
+		default:
+			args = append(args, "--security-opt", fmt.Sprintf("seccomp=%s", profile.SeccompProfile))
 		}
 
 		// Disk limit (via storage driver quota - best effort)

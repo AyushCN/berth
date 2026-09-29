@@ -23,6 +23,7 @@ func (r *WorkspaceRepository) Create(ctx context.Context, w *domain.Workspace) e
 		BaseWorkspaceID: uuidPtrToPgType(w.BaseWorkspaceID),
 		OwnerID:         w.OwnerID,
 		GitBranch:       w.GitBranch,
+		GitUrl:          w.GitURL,
 	})
 	if err != nil {
 		return err
@@ -173,6 +174,7 @@ func (r *WorkspaceRepository) rowToWorkspace(row Workspace) *domain.Workspace {
 		Type:                  domain.WorkspaceType(row.Type),
 		BaseWorkspaceID:       pgTypeToUUID(row.BaseWorkspaceID),
 		OwnerID:               row.OwnerID,
+		GitURL:                row.GitUrl,
 		GitBranch:             row.GitBranch,
 		CommitHash:            row.CommitHash.String,
 		HasUncommittedChanges: row.HasUncommittedChanges.Bool,
@@ -191,6 +193,7 @@ func (r *WorkspaceRepository) rowToWorkspaceWithRole(row GetUserWorkspacesRow) *
 		Type:      domain.WorkspaceType(row.Type),
 		BaseWorkspaceID: pgTypeToUUID(row.BaseWorkspaceID),
 		OwnerID:   row.OwnerID,
+		GitURL:    row.GitUrl,
 		GitBranch: row.GitBranch,
 		CommitHash: row.CommitHash.String,
 		HasUncommittedChanges: row.HasUncommittedChanges.Bool,

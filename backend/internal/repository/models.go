@@ -134,6 +134,20 @@ type Image struct {
 	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
 }
 
+type Model struct {
+	ID         uuid.UUID          `json:"id"`
+	Name       string             `json:"name"`
+	Version    string             `json:"version"`
+	Type       string             `json:"type"`
+	Algorithm  string             `json:"algorithm"`
+	Parameters []byte             `json:"parameters"`
+	Metrics    []byte             `json:"metrics"`
+	OnnxPath   pgtype.Text        `json:"onnx_path"`
+	IsActive   pgtype.Bool        `json:"is_active"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Organization struct {
 	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`
@@ -146,6 +160,17 @@ type OrganizationMember struct {
 	UserID         uuid.UUID          `json:"user_id"`
 	Role           string             `json:"role"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type Prediction struct {
+	ID           uuid.UUID          `json:"id"`
+	Type         string             `json:"type"`
+	WorkspaceID  uuid.UUID          `json:"workspace_id"`
+	Input        []byte             `json:"input"`
+	Output       []byte             `json:"output"`
+	Confidence   float32            `json:"confidence"`
+	ModelVersion pgtype.Text        `json:"model_version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type Project struct {
@@ -259,6 +284,19 @@ type ShareLink struct {
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }
 
+type TrainingDatum struct {
+	ID           uuid.UUID          `json:"id"`
+	WorkspaceID  uuid.UUID          `json:"workspace_id"`
+	BuildID      pgtype.UUID        `json:"build_id"`
+	Features     []byte             `json:"features"`
+	Labels       []byte             `json:"labels"`
+	Architecture pgtype.Text        `json:"architecture"`
+	Framework    pgtype.Text        `json:"framework"`
+	Language     pgtype.Text        `json:"language"`
+	CacheKey     pgtype.Text        `json:"cache_key"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type User struct {
 	ID                   uuid.UUID          `json:"id"`
 	Email                string             `json:"email"`
@@ -287,6 +325,7 @@ type Workspace struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	GitUrl                string             `json:"git_url"`
 }
 
 type WorkspaceMember struct {

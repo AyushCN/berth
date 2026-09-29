@@ -103,7 +103,16 @@ func main() {
 	dataCollector := usecase.NewDataCollector(trainingDataRepo, repository.NewBuildRepository(queries), repository.NewRuntimeProfileRepository(queries))
 
 	// Inject data collector into sandbox worker
-	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, userRepo, runtime, natsClient, dataCollector, tokenBox)
+	sandboxWorker := worker.NewSandboxWorker(
+		sandboxRepo,
+		userRepo,
+		repository.NewEnvironmentRepository(queries),
+		repository.NewWorkspaceRepository(queries),
+		runtime,
+		natsClient,
+		dataCollector,
+		tokenBox,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

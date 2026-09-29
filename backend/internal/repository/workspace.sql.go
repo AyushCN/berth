@@ -14,10 +14,10 @@ import (
 
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (
-    project_id, name, type, base_workspace_id, owner_id, git_branch
+    project_id, name, type, base_workspace_id, owner_id, git_branch, git_url
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) RETURNING id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at, git_url
 `
 
 type CreateWorkspaceParams struct {
@@ -27,6 +27,7 @@ type CreateWorkspaceParams struct {
 	BaseWorkspaceID pgtype.UUID `json:"base_workspace_id"`
 	OwnerID         uuid.UUID   `json:"owner_id"`
 	GitBranch       string      `json:"git_branch"`
+	GitUrl          string      `json:"git_url"`
 }
 
 func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error) {
@@ -37,6 +38,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		arg.BaseWorkspaceID,
 		arg.OwnerID,
 		arg.GitBranch,
+		arg.GitUrl,
 	)
 	var i Workspace
 	err := row.Scan(
@@ -53,6 +55,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GitUrl,
 	)
 	return i, err
 }
@@ -98,7 +101,7 @@ func (q *Queries) DeleteWorkspaceMember(ctx context.Context, arg DeleteWorkspace
 }
 
 const getCanonicalWorkspace = `-- name: GetCanonicalWorkspace :one
-SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at FROM workspaces 
+SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at, git_url FROM workspaces 
 WHERE project_id = $1 AND type = 'CANONICAL' AND deleted_at IS NULL
 `
 
@@ -119,12 +122,13 @@ func (q *Queries) GetCanonicalWorkspace(ctx context.Context, projectID uuid.UUID
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GitUrl,
 	)
 	return i, err
 }
 
 const getForkWorkspaces = `-- name: GetForkWorkspaces :many
-SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at FROM workspaces 
+SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at, git_url FROM workspaces 
 WHERE base_workspace_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 `
@@ -152,6 +156,7 @@ func (q *Queries) GetForkWorkspaces(ctx context.Context, baseWorkspaceID pgtype.
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GitUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -164,7 +169,7 @@ func (q *Queries) GetForkWorkspaces(ctx context.Context, baseWorkspaceID pgtype.
 }
 
 const getUserWorkspaces = `-- name: GetUserWorkspaces :many
-SELECT w.id, w.project_id, w.name, w.type, w.base_workspace_id, w.owner_id, w.git_branch, w.commit_hash, w.has_uncommitted_changes, w.last_synced_at, w.created_at, w.updated_at, w.deleted_at, wm.role as member_role
+SELECT w.id, w.project_id, w.name, w.type, w.base_workspace_id, w.owner_id, w.git_branch, w.commit_hash, w.has_uncommitted_changes, w.last_synced_at, w.created_at, w.updated_at, w.deleted_at, w.git_url, wm.role as member_role
 FROM workspaces w
 JOIN workspace_members wm ON w.id = wm.workspace_id
 WHERE wm.user_id = $1 AND w.deleted_at IS NULL
@@ -185,6 +190,7 @@ type GetUserWorkspacesRow struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	GitUrl                string             `json:"git_url"`
 	MemberRole            string             `json:"member_role"`
 }
 
@@ -211,6 +217,7 @@ func (q *Queries) GetUserWorkspaces(ctx context.Context, userID uuid.UUID) ([]Ge
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GitUrl,
 			&i.MemberRole,
 		); err != nil {
 			return nil, err
@@ -224,7 +231,7 @@ func (q *Queries) GetUserWorkspaces(ctx context.Context, userID uuid.UUID) ([]Ge
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at FROM workspaces WHERE id = $1 AND deleted_at IS NULL
+SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at, git_url FROM workspaces WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error) {
@@ -244,6 +251,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, id uuid.UUID) (Workspace, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GitUrl,
 	)
 	return i, err
 }
@@ -386,7 +394,7 @@ func (q *Queries) GetWorkspaceMembersByUser(ctx context.Context, userID uuid.UUI
 }
 
 const getWorkspacesByProject = `-- name: GetWorkspacesByProject :many
-SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at FROM workspaces 
+SELECT id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at, git_url FROM workspaces 
 WHERE project_id = $1 AND deleted_at IS NULL
 ORDER BY 
     CASE type WHEN 'CANONICAL' THEN 0 ELSE 1 END,
@@ -416,6 +424,7 @@ func (q *Queries) GetWorkspacesByProject(ctx context.Context, projectID uuid.UUI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GitUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -445,7 +454,7 @@ UPDATE workspaces SET
     last_synced_at = COALESCE($6, last_synced_at),
     updated_at = NOW()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at
+RETURNING id, project_id, name, type, base_workspace_id, owner_id, git_branch, commit_hash, has_uncommitted_changes, last_synced_at, created_at, updated_at, deleted_at, git_url
 `
 
 type UpdateWorkspaceParams struct {
@@ -481,6 +490,7 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GitUrl,
 	)
 	return i, err
 }

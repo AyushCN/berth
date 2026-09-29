@@ -90,6 +90,7 @@ func (uc *EnvironmentUsecase) CreateEnvironment(ctx context.Context, uid uuid.UU
 		Type:                  domain.WorkspaceTypeCanonical,
 		BaseWorkspaceID:       nil,
 		OwnerID:               uid,
+		GitURL:                req.GitURL,
 		GitBranch:             req.GitBranch,
 		CommitHash:            "",
 		HasUncommittedChanges: false,
@@ -119,10 +120,22 @@ func (uc *EnvironmentUsecase) CreateEnvironment(ctx context.Context, uid uuid.UU
 		return nil, fmt.Errorf("failed to create environment: %w", err)
 	}
 
-	// Publish NATS event for worker
+	// Publish NATS event for worker.
+	//
+	// The URL is also persisted on the workspace, so a worker that misses this
+	// message (or starts later) can still recover by polling environments in
+	// CREATED. Prefer the persisted copy so the two can never disagree.
 	if uc.natsClient != nil {
-		payload := fmt.Sprintf(`{"environment_id":"%s","workspace_id":"%s","git_url":"%s","git_branch":"%s","owner_id":"%s"}`, env.ID, ws.ID, req.GitURL, req.GitBranch, uid)
-		if err := uc.natsClient.Publish("berth.environment.create", []byte(payload)); err != nil {
+		payload, err := json.Marshal(domain.EnvironmentCreateEvent{
+			EnvironmentID: env.ID,
+			WorkspaceID:   ws.ID,
+			GitURL:        ws.GitURL,
+			GitBranch:     ws.GitBranch,
+			OwnerID:       uid,
+		})
+		if err != nil {
+			slog.Warn("failed to marshal environment create event", "error", err)
+		} else if err := uc.natsClient.Publish(domain.SubjectEnvironmentCreate, payload); err != nil {
 			slog.Warn("failed to publish environment create event to NATS", "error", err)
 		} else {
 			slog.Info("published environment create event to NATS", "environment_id", env.ID)
@@ -192,8 +205,12 @@ func (uc *EnvironmentUsecase) DeleteEnvironment(ctx context.Context, uid uuid.UU
 		if uc.natsClient == nil {
 			return fmt.Errorf("worker cleanup is unavailable")
 		}
-		payload, _ := json.Marshal(map[string]string{"environment_id": id.String(), "container_id": env.ContainerID})
-		if err := uc.natsClient.Publish("berth.environment.delete", payload); err != nil {
+		payload, _ := json.Marshal(domain.EnvironmentLifecycleEvent{
+			EnvironmentID: id,
+			WorkspaceID:   ws.ID,
+			ContainerID:   env.ContainerID,
+		})
+		if err := uc.natsClient.Publish(domain.SubjectEnvironmentDelete, payload); err != nil {
 			return fmt.Errorf("failed to request environment cleanup: %w", err)
 		}
 	}
@@ -327,6 +344,7 @@ func (uc *EnvironmentUsecase) ForkEnvironment(ctx context.Context, uid uuid.UUID
 		Type:                  domain.WorkspaceTypeFork,
 		BaseWorkspaceID:       &ws.ID,
 		OwnerID:               uid,
+		GitURL:                ws.GitURL,
 		GitBranch:             ws.GitBranch,
 		CommitHash:            ws.CommitHash,
 		HasUncommittedChanges: false,
@@ -351,10 +369,20 @@ func (uc *EnvironmentUsecase) ForkEnvironment(ctx context.Context, uid uuid.UUID
 		return nil, fmt.Errorf("failed to create fork environment: %w", err)
 	}
 
-	// Publish NATS event for worker
+	// Publish NATS event for worker.
+	// Include GitURL: it was previously omitted here, so a fork reached the
+	// worker with no repository to clone even once a subscriber existed.
 	if uc.natsClient != nil {
-		payload := fmt.Sprintf(`{"environment_id":"%s","workspace_id":"%s","git_branch":"%s","owner_id":"%s"}`, newEnv.ID, newWS.ID, ws.GitBranch, uid)
-		if err := uc.natsClient.Publish("berth.environment.create", []byte(payload)); err != nil {
+		payload, err := json.Marshal(domain.EnvironmentCreateEvent{
+			EnvironmentID: newEnv.ID,
+			WorkspaceID:   newWS.ID,
+			GitURL:        ws.GitURL,
+			GitBranch:     newWS.GitBranch,
+			OwnerID:       uid,
+		})
+		if err != nil {
+			slog.Warn("failed to marshal fork environment create event", "error", err)
+		} else if err := uc.natsClient.Publish(domain.SubjectEnvironmentCreate, payload); err != nil {
 			slog.Warn("failed to publish fork environment create event to NATS", "error", err)
 		} else {
 			slog.Info("published fork environment create event to NATS", "environment_id", newEnv.ID)
@@ -395,8 +423,12 @@ func (uc *EnvironmentUsecase) StopEnvironment(ctx context.Context, uid uuid.UUID
 		if uc.natsClient == nil {
 			return fmt.Errorf("worker stop service is unavailable")
 		}
-		payload, _ := json.Marshal(map[string]string{"environment_id": id.String(), "container_id": env.ContainerID})
-		if err := uc.natsClient.Publish("berth.environment.stop", payload); err != nil {
+		payload, _ := json.Marshal(domain.EnvironmentLifecycleEvent{
+			EnvironmentID: id,
+			WorkspaceID:   ws.ID,
+			ContainerID:   env.ContainerID,
+		})
+		if err := uc.natsClient.Publish(domain.SubjectEnvironmentStop, payload); err != nil {
 			return fmt.Errorf("failed to request environment stop: %w", err)
 		}
 		workerHandlesStop = true

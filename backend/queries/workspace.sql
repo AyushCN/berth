@@ -1,8 +1,8 @@
 -- name: CreateWorkspace :one
 INSERT INTO workspaces (
-    project_id, name, type, base_workspace_id, owner_id, git_branch
+    project_id, name, type, base_workspace_id, owner_id, git_branch, git_url
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 ) RETURNING *;
 
 -- name: GetWorkspace :one

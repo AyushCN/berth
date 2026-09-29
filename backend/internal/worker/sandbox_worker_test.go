@@ -26,7 +26,7 @@ func (s *stubUserRepo) GetByID(context.Context, uuid.UUID) (*domain.User, error)
 	return s.user, nil
 }
 func (s *stubUserRepo) GetByGithubID(context.Context, string) (*domain.User, error) { return nil, nil }
-func (s *stubUserRepo) Update(context.Context, *domain.User) error                    { return nil }
+func (s *stubUserRepo) Update(context.Context, *domain.User) error                  { return nil }
 
 // resolveGitToken is the fix for the hand-rolled decryptor that expected
 // hex(nonce || ciphertext) with a 32-byte nonce. That format was never

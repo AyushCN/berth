@@ -19,7 +19,7 @@ func NewEnvironmentRepository(q *Queries) *EnvironmentRepository {
 }
 
 func (r *EnvironmentRepository) Create(ctx context.Context, env *domain.Environment) error {
-	_, err := r.queries.CreateEnvironment(ctx, CreateEnvironmentParams{
+	created, err := r.queries.CreateEnvironment(ctx, CreateEnvironmentParams{
 		WorkspaceID:      env.WorkspaceID,
 		RuntimeProfileID: uuidPtrToPgType(env.RuntimeProfileID),
 		Name:             env.Name,
@@ -31,7 +31,15 @@ func (r *EnvironmentRepository) Create(ctx context.Context, env *domain.Environm
 		MemoryLimit:      pgInt8(env.MemoryLimit),
 		CpuLimit:         pgInt8(env.CPULimit),
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// The INSERT omits id, so the database generates it via
+	// uuid_generate_v4(). The caller had pre-generated a UUID on the struct
+	// that was never written; copy the real row back or the caller ends up
+	// holding an ID that does not exist in the database.
+	*env = *r.rowToEnvironment(created)
+	return nil
 }
 
 func (r *EnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Environment, error) {

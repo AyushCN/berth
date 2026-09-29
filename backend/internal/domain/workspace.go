@@ -32,6 +32,7 @@ type Workspace struct {
 	Type                WorkspaceType  `json:"type"` // CANONICAL, FORK
 	BaseWorkspaceID     *uuid.UUID     `json:"base_workspace_id,omitempty"` // for forks
 	OwnerID             uuid.UUID      `json:"owner_id"` // workspace owner
+	GitURL              string         `json:"git_url"`
 	GitBranch           string         `json:"git_branch"`
 	CommitHash          string         `json:"commit_hash,omitempty"`
 	HasUncommittedChanges bool         `json:"has_uncommitted_changes"`
