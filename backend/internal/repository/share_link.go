@@ -61,8 +61,8 @@ func (r *ShareLinkRepository) GetByID(ctx context.Context, id uuid.UUID) (*domai
 
 func (r *ShareLinkRepository) Update(ctx context.Context, link *domain.ShareLink) error {
 	_, err := r.queries.UpdateShareLink(ctx, UpdateShareLinkParams{
-		ID:         link.ID,
-		RevokedAt:  pgTimestamptz(link.RevokedAt),
+		ID:        link.ID,
+		RevokedAt: pgTimestamptz(link.RevokedAt),
 	})
 	return err
 }

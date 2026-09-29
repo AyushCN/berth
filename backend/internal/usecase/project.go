@@ -10,22 +10,22 @@ import (
 )
 
 var (
-	ErrProjectNotFound    = errors.New("project not found")
+	ErrProjectNotFound     = errors.New("project not found")
 	ErrProjectUnauthorized = errors.New("unauthorized project action")
 )
 
 type ProjectUsecase struct {
-	projRepo         domain.ProjectRepository
-	orgRepo          domain.OrganizationRepository
-	workspaceRepo    domain.WorkspaceRepository
+	projRepo            domain.ProjectRepository
+	orgRepo             domain.OrganizationRepository
+	workspaceRepo       domain.WorkspaceRepository
 	workspaceMemberRepo domain.WorkspaceMemberRepository
 }
 
 func NewProjectUsecase(projRepo domain.ProjectRepository, orgRepo domain.OrganizationRepository, workspaceRepo domain.WorkspaceRepository, workspaceMemberRepo domain.WorkspaceMemberRepository) *ProjectUsecase {
 	return &ProjectUsecase{
-		projRepo:          projRepo,
-		orgRepo:           orgRepo,
-		workspaceRepo:     workspaceRepo,
+		projRepo:            projRepo,
+		orgRepo:             orgRepo,
+		workspaceRepo:       workspaceRepo,
 		workspaceMemberRepo: workspaceMemberRepo,
 	}
 }
@@ -62,14 +62,14 @@ func (u *ProjectUsecase) Create(ctx context.Context, userID uuid.UUID, orgID uui
 
 	// Create canonical workspace for the project
 	canonicalWorkspace := &domain.Workspace{
-		ID:               uuid.New(),
-		ProjectID:        p.ID,
-		Name:             "canonical",
-		Type:             domain.WorkspaceTypeCanonical,
-		OwnerID:          userID,
-		GitBranch:        "main",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		ID:        uuid.New(),
+		ProjectID: p.ID,
+		Name:      "canonical",
+		Type:      domain.WorkspaceTypeCanonical,
+		OwnerID:   userID,
+		GitBranch: "main",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 	if err := u.workspaceRepo.Create(ctx, canonicalWorkspace); err != nil {
 		// Log error but don't fail project creation

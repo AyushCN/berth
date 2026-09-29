@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrOrgNotFound    = errors.New("organization not found")
+	ErrOrgNotFound     = errors.New("organization not found")
 	ErrOrgUnauthorized = errors.New("unauthorized organization action")
 )
 

@@ -2,9 +2,9 @@ package repository
 
 import (
 	"context"
+	"github.com/AyushCN/berth/internal/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/AyushCN/berth/internal/domain"
 )
 
 var _ domain.UserRepository = (*UserRepository)(nil)
@@ -20,12 +20,12 @@ func NewUserRepository(q *Queries) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	_, err := r.queries.CreateUser(ctx, CreateUserParams{
-		ID:                 u.ID,
-		Email:              u.Email,
-		Username:           pgtype.Text{String: u.Username, Valid: true},
-		GithubID:           pgtype.Text{String: u.GithubID, Valid: true},
-		GithubUsername:     pgtype.Text{String: u.GithubUsername, Valid: true},
-		AvatarUrl:          pgtype.Text{String: u.AvatarURL, Valid: true},
+		ID:             u.ID,
+		Email:          u.Email,
+		Username:       pgtype.Text{String: u.Username, Valid: true},
+		GithubID:       pgtype.Text{String: u.GithubID, Valid: true},
+		GithubUsername: pgtype.Text{String: u.GithubUsername, Valid: true},
+		AvatarUrl:      pgtype.Text{String: u.AvatarURL, Valid: true},
 	})
 	return err
 }

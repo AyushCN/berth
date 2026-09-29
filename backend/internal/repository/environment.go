@@ -76,28 +76,28 @@ func (r *EnvironmentRepository) GetActiveByWorkspace(ctx context.Context, worksp
 
 func (r *EnvironmentRepository) Update(ctx context.Context, env *domain.Environment) error {
 	_, err := r.queries.UpdateEnvironment(ctx, UpdateEnvironmentParams{
-		ID:                env.ID,
-		Name:              pgText(env.Name),
-		RuntimeProfileID:  uuidPtrToPgType(env.RuntimeProfileID),
-		ContainerID:       pgText(env.ContainerID),
-		ImageID:           uuidPtrToPgType(env.ImageID),
-		PublicUrl:         pgText(env.PublicURL),
-		Port:              pgInt4(env.Port),
-		MemoryLimit:       pgInt8(env.MemoryLimit),
-		CpuLimit:          pgInt8(env.CPULimit),
-		LastActivityAt:    pgTimestamptz(env.LastActivityAt),
-		ActiveSessions:    pgInt4(env.ActiveSessions),
-		SuspendedAt:       pgTimestamptz(env.SuspendedAt),
-		LastError:         pgText(env.LastError),
-		RestartCount:      pgInt4(env.RestartCount),
+		ID:               env.ID,
+		Name:             pgText(env.Name),
+		RuntimeProfileID: uuidPtrToPgType(env.RuntimeProfileID),
+		ContainerID:      pgText(env.ContainerID),
+		ImageID:          uuidPtrToPgType(env.ImageID),
+		PublicUrl:        pgText(env.PublicURL),
+		Port:             pgInt4(env.Port),
+		MemoryLimit:      pgInt8(env.MemoryLimit),
+		CpuLimit:         pgInt8(env.CPULimit),
+		LastActivityAt:   pgTimestamptz(env.LastActivityAt),
+		ActiveSessions:   pgInt4(env.ActiveSessions),
+		SuspendedAt:      pgTimestamptz(env.SuspendedAt),
+		LastError:        pgText(env.LastError),
+		RestartCount:     pgInt4(env.RestartCount),
 	})
 	return err
 }
 
 func (r *EnvironmentRepository) UpdateState(ctx context.Context, id uuid.UUID, state domain.EnvironmentState) error {
 	_, err := r.queries.UpdateEnvironmentState(ctx, UpdateEnvironmentStateParams{
-		ID:       id,
-		State:    string(state),
+		ID:        id,
+		State:     string(state),
 		LastError: pgText(""),
 	})
 	return err
@@ -105,8 +105,8 @@ func (r *EnvironmentRepository) UpdateState(ctx context.Context, id uuid.UUID, s
 
 func (r *EnvironmentRepository) UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error {
 	_, err := r.queries.UpdateEnvironmentContainerID(ctx, UpdateEnvironmentContainerIDParams{
-		ID:           id,
-		ContainerID:  pgText(containerID),
+		ID:          id,
+		ContainerID: pgText(containerID),
 	})
 	return err
 }
@@ -121,8 +121,8 @@ func (r *EnvironmentRepository) UpdateImageID(ctx context.Context, id uuid.UUID,
 
 func (r *EnvironmentRepository) UpdateActivity(ctx context.Context, id uuid.UUID, activeSessions int) error {
 	_, err := r.queries.UpdateEnvironmentActivity(ctx, UpdateEnvironmentActivityParams{
-		ID:              id,
-		ActiveSessions:  pgInt4(activeSessions),
+		ID:             id,
+		ActiveSessions: pgInt4(activeSessions),
 	})
 	return err
 }
@@ -240,10 +240,10 @@ func (r *EnvironmentRepository) GetService(ctx context.Context, id uuid.UUID) (*
 
 func (r *EnvironmentRepository) UpdateService(ctx context.Context, svc *domain.EnvironmentService) error {
 	_, err := r.queries.UpdateEnvironmentService(ctx, UpdateEnvironmentServiceParams{
-		ID:        svc.ID,
-		State:     pgText(svc.State),
+		ID:          svc.ID,
+		State:       pgText(svc.State),
 		ContainerID: pgText(svc.ContainerID),
-		Config:    mapToJSONB(svc.Config),
+		Config:      mapToJSONB(svc.Config),
 	})
 	return err
 }

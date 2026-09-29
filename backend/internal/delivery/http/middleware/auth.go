@@ -13,7 +13,7 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var tokenString string
 		authHeader := c.GetHeader("Authorization")
-		
+
 		if authHeader != "" {
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) == 2 && parts[0] == "Bearer" {
@@ -65,7 +65,7 @@ func WSAuth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Priority 1: ?token= query param
 		tokenString := c.Query("token")
-		
+
 		// Priority 2: berth_token cookie
 		if tokenString == "" {
 			cookie, err := c.Cookie("berth_token")
@@ -85,7 +85,7 @@ func WSAuth(jwtSecret string) gin.HandlerFunc {
 			}
 			return []byte(jwtSecret), nil
 		})
-		
+
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return

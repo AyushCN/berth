@@ -584,17 +584,17 @@ func TestArchitectureDetector_HasWorkspacesField(t *testing.T) {
 // Helper to create a mock runtime profile
 func createMockProfile() *domain.RuntimeProfile {
 	return &domain.RuntimeProfile{
-		ID:              uuid.New(),
-		Language:        "node",
-		Framework:       "next",
-		Architecture:    "WEB_APP",
-		BaseImage:       "node:20-alpine",
-		InstallCmd:      "npm ci",
-		BuildCommand:    "npm run build",
-		StartCmd:        "npm start",
-		ExposedPort:     3000,
-		WorkDir:         "/app",
+		ID:               uuid.New(),
+		Language:         "node",
+		Framework:        "next",
+		Architecture:     "WEB_APP",
+		BaseImage:        "node:20-alpine",
+		InstallCmd:       "npm ci",
+		BuildCommand:     "npm run build",
+		StartCmd:         "npm start",
+		ExposedPort:      3000,
+		WorkDir:          "/app",
 		DockerfileSource: "GENERATED",
-		Confidence:      0.9,
+		Confidence:       0.9,
 	}
 }

@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"log/slog"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -14,7 +14,7 @@ import (
 
 // EnvironmentHandler handles environment HTTP requests.
 type EnvironmentHandler struct {
-	envUC        *usecase.EnvironmentUsecase
+	envUC         *usecase.EnvironmentUsecase
 	traefikDomain string
 }
 

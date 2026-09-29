@@ -9,7 +9,7 @@ import (
 func GetMe(c *gin.Context) {
 	userID, _ := c.Get("userId")
 	c.JSON(http.StatusOK, gin.H{
-		"id": userID,
+		"id":      userID,
 		"message": "user profile endpoint stub",
 	})
 }

@@ -5,8 +5,8 @@ import "github.com/gin-gonic/gin"
 func CORS(frontendURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		allowed := []string{frontendURL, "http://localhost:3000"} 
-		
+		allowed := []string{frontendURL, "http://localhost:3000"}
+
 		allowedOrigin := ""
 		for _, a := range allowed {
 			if origin == a {
@@ -14,7 +14,7 @@ func CORS(frontendURL string) gin.HandlerFunc {
 				break
 			}
 		}
-		
+
 		if allowedOrigin != "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -22,7 +22,7 @@ func CORS(frontendURL string) gin.HandlerFunc {
 			// Fallback for non-credentialed public requests
 			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
-		
+
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		if c.Request.Method == "OPTIONS" {

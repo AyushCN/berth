@@ -23,22 +23,22 @@ import (
 )
 
 const (
-	defaultAPIBase   = "http://localhost:8080"
-	defaultFrontend  = "http://localhost:3000"
-	maxPollAttempts  = 120
-	pollInterval     = 1 * time.Second
-	defaultTimeout   = 120 * time.Second
+	defaultAPIBase  = "http://localhost:8080"
+	defaultFrontend = "http://localhost:3000"
+	maxPollAttempts = 120
+	pollInterval    = 1 * time.Second
+	defaultTimeout  = 120 * time.Second
 )
 
 type Config struct {
-	APIBase      string
-	Concurrency  int
-	Iterations   int
-	Warmup       int
-	Cleanup      bool
-	Timeout      time.Duration
-	OutputJSON   string
-	OutputCSV    string
+	APIBase     string
+	Concurrency int
+	Iterations  int
+	Warmup      int
+	Cleanup     bool
+	Timeout     time.Duration
+	OutputJSON  string
+	OutputCSV   string
 }
 
 type Result struct {
@@ -53,18 +53,18 @@ type Result struct {
 }
 
 type Summary struct {
-	TotalRuns      int     `json:"total_runs"`
-	Successful     int     `json:"successful"`
-	Failed         int     `json:"failed"`
-	TimeoutCount   int     `json:"timeout_count"`
-	ThroughputRPS  float64 `json:"throughput_rps"`
-	P50Ms          float64 `json:"p50_ms"`
-	P95Ms          float64 `json:"p95_ms"`
-	P99Ms          float64 `json:"p99_ms"`
-	MeanMs         float64 `json:"mean_ms"`
-	StdDevMs       float64 `json:"stddev_ms"`
-	APILatencyP50  float64 `json:"api_latency_p50_ms"`
-	APILatencyP95  float64 `json:"api_latency_p95_ms"`
+	TotalRuns     int     `json:"total_runs"`
+	Successful    int     `json:"successful"`
+	Failed        int     `json:"failed"`
+	TimeoutCount  int     `json:"timeout_count"`
+	ThroughputRPS float64 `json:"throughput_rps"`
+	P50Ms         float64 `json:"p50_ms"`
+	P95Ms         float64 `json:"p95_ms"`
+	P99Ms         float64 `json:"p99_ms"`
+	MeanMs        float64 `json:"mean_ms"`
+	StdDevMs      float64 `json:"stddev_ms"`
+	APILatencyP50 float64 `json:"api_latency_p50_ms"`
+	APILatencyP95 float64 `json:"api_latency_p95_ms"`
 }
 
 func main() {

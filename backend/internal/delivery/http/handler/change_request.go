@@ -25,8 +25,8 @@ type createChangeRequestRequest struct {
 }
 
 type updateChangeRequestRequest struct {
-	Title       *string                   `json:"title"`
-	Description *string                   `json:"description"`
+	Title       *string                    `json:"title"`
+	Description *string                    `json:"description"`
 	State       *domain.ChangeRequestState `json:"state"`
 }
 
@@ -46,11 +46,11 @@ func (h *ChangeRequestHandler) CreateChangeRequest(c *gin.Context) {
 	}
 
 	cr, err := h.changeRequestUC.CreateChangeRequest(c.Request.Context(), usecase.CreateChangeRequestRequest{
-		SourceWorkspaceID:  req.SourceWorkspaceID,
-		TargetWorkspaceID:  req.TargetWorkspaceID,
-		Title:              req.Title,
-		Description:        req.Description,
-		AuthorID:           uid,
+		SourceWorkspaceID: req.SourceWorkspaceID,
+		TargetWorkspaceID: req.TargetWorkspaceID,
+		Title:             req.Title,
+		Description:       req.Description,
+		AuthorID:          uid,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

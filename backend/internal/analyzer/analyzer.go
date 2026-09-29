@@ -18,13 +18,13 @@ import (
 type ArchitectureType string
 
 const (
-	ArchWebApp     = "WEB_APP"
-	ArchAPI        = "API"
-	ArchCLI        = "CLI"
-	ArchFullStack  = "FULL_STACK"
-	ArchMonorepo   = "MONOREPO"
-	ArchLibrary    = "LIBRARY"
-	ArchUnknown    = "UNKNOWN"
+	ArchWebApp    = "WEB_APP"
+	ArchAPI       = "API"
+	ArchCLI       = "CLI"
+	ArchFullStack = "FULL_STACK"
+	ArchMonorepo  = "MONOREPO"
+	ArchLibrary   = "LIBRARY"
+	ArchUnknown   = "UNKNOWN"
 )
 
 // FrameworkType represents the detected framework
@@ -45,31 +45,31 @@ const (
 	FrameworkSalvo  = "salvo"
 
 	// Python frameworks
-	FrameworkDjango     = "django"
-	FrameworkFastAPI    = "fastapi"
-	FrameworkFlask      = "flask"
-	FrameworkStarlette  = "starlette"
-	FrameworkQuart      = "quart"
-	FrameworkTornado    = "tornado"
-	FrameworkBottle     = "bottle"
+	FrameworkDjango    = "django"
+	FrameworkFastAPI   = "fastapi"
+	FrameworkFlask     = "flask"
+	FrameworkStarlette = "starlette"
+	FrameworkQuart     = "quart"
+	FrameworkTornado   = "tornado"
+	FrameworkBottle    = "bottle"
 
 	// Node frameworks
-	FrameworkNext       = "next"
-	FrameworkVite       = "vite"
-	FrameworkExpress    = "express"
-	FrameworkNest       = "nest"
-	FrameworkKoa        = "koa"
-	FrameworkFastify    = "fastify"
-	FrameworkNuxt       = "nuxt"
-	FrameworkRemix      = "remix"
-	FrameworkSvelteKit  = "sveltekit"
-	FrameworkAstro      = "astro"
+	FrameworkNext      = "next"
+	FrameworkVite      = "vite"
+	FrameworkExpress   = "express"
+	FrameworkNest      = "nest"
+	FrameworkKoa       = "koa"
+	FrameworkFastify   = "fastify"
+	FrameworkNuxt      = "nuxt"
+	FrameworkRemix     = "remix"
+	FrameworkSvelteKit = "sveltekit"
+	FrameworkAstro     = "astro"
 
 	// Java frameworks
-	FrameworkSpring     = "spring"
-	FrameworkQuarkus    = "quarkus"
-	FrameworkMicronaut  = "micronaut"
-	FrameworkVertx      = "vertx"
+	FrameworkSpring    = "spring"
+	FrameworkQuarkus   = "quarkus"
+	FrameworkMicronaut = "micronaut"
+	FrameworkVertx     = "vertx"
 
 	FrameworkUnknown = "unknown"
 )
@@ -490,10 +490,10 @@ func (d *FrameworkDetector) detectJava() (string, map[string]float64) {
 		return "unknown", confidences
 	}
 	frameworks := map[string][]string{
-		"spring":     {"spring-boot", "spring-boot-starter", "org.springframework"},
-		"quarkus":    {"quarkus", "io.quarkus"},
-		"micronaut":  {"micronaut", "io.micronaut"},
-		"vertx":      {"vertx", "io.vertx"},
+		"spring":    {"spring-boot", "spring-boot-starter", "org.springframework"},
+		"quarkus":   {"quarkus", "io.quarkus"},
+		"micronaut": {"micronaut", "io.micronaut"},
+		"vertx":     {"vertx", "io.vertx"},
 	}
 	maxConf := 0.0
 	var detected string = "unknown"
@@ -528,13 +528,13 @@ func (d *FrameworkDetector) detectPython() (string, map[string]float64) {
 		return "unknown", confidences
 	}
 	frameworks := map[string][]string{
-		"django":     {"django", "django.contrib"},
-		"fastapi":    {"fastapi"},
-		"flask":      {"flask"},
-		"starlette":  {"starlette"},
-		"quart":      {"quart"},
-		"tornado":    {"tornado"},
-		"bottle":     {"bottle"},
+		"django":    {"django", "django.contrib"},
+		"fastapi":   {"fastapi"},
+		"flask":     {"flask"},
+		"starlette": {"starlette"},
+		"quart":     {"quart"},
+		"tornado":   {"tornado"},
+		"bottle":    {"bottle"},
 	}
 	maxConf := 0.0
 	var detected string = "unknown"
@@ -577,16 +577,16 @@ func (d *FrameworkDetector) detectNode() (string, map[string]float64) {
 		}
 	}
 	frameworks := map[string][]string{
-		"next":       {"next"},
-		"vite":       {"vite"},
-		"express":    {"express"},
-		"nest":       {"@nestjs/core", "@nestjs/common"},
-		"koa":        {"koa"},
-		"fastify":    {"fastify"},
-		"nuxt":       {"nuxt"},
-		"remix":      {"@remix-run/react", "@remix-run/node"},
-		"sveltekit":  {"@sveltejs/kit"},
-		"astro":      {"astro"},
+		"next":      {"next"},
+		"vite":      {"vite"},
+		"express":   {"express"},
+		"nest":      {"@nestjs/core", "@nestjs/common"},
+		"koa":       {"koa"},
+		"fastify":   {"fastify"},
+		"nuxt":      {"nuxt"},
+		"remix":     {"@remix-run/react", "@remix-run/node"},
+		"sveltekit": {"@sveltejs/kit"},
+		"astro":     {"astro"},
 	}
 	maxConf := 0.0
 	var detected string = "unknown"
@@ -736,26 +736,26 @@ func (e *EnhancedAnalyzer) detectEntryPoints() ([]EntryPoint, bool) {
 
 	// Check for main entry points
 	entryCandidates := map[string]string{
-		"main.py":        "python",
-		"app.py":         "python",
-		"manage.py":      "python",
-		"main.go":        "go",
-		"main.rs":        "rust",
-		"Cargo.toml":     "rust",
-		"main.java":      "java",
-		"pom.xml":        "java",
-		"build.gradle":   "java",
-		"main.js":        "node",
-		"index.js":       "node",
-		"server.js":      "node",
-		"app.js":         "node",
-		"package.json":   "node",
+		"main.py":          "python",
+		"app.py":           "python",
+		"manage.py":        "python",
+		"main.go":          "go",
+		"main.rs":          "rust",
+		"Cargo.toml":       "rust",
+		"main.java":        "java",
+		"pom.xml":          "java",
+		"build.gradle":     "java",
+		"main.js":          "node",
+		"index.js":         "node",
+		"server.js":        "node",
+		"app.js":           "node",
+		"package.json":     "node",
 		"requirements.txt": "python",
-		"pyproject.toml": "python",
-		"setup.py":       "python",
-		"Pipfile":        "python",
-		"poetry.lock":    "python",
-		"go.mod":         "go",
+		"pyproject.toml":   "python",
+		"setup.py":         "python",
+		"Pipfile":          "python",
+		"poetry.lock":      "python",
+		"go.mod":           "go",
 	}
 
 	found := []string{}
@@ -851,8 +851,8 @@ func (e *EnhancedAnalyzer) parseDockerCompose() *DockerComposeConfig {
 
 func (e *EnhancedAnalyzer) detectLockfiles() []LockfileInfo {
 	lockfiles := []struct {
-		path          string
-		lockfileType  string
+		path         string
+		lockfileType string
 	}{
 		{"package-lock.json", "npm"},
 		{"yarn.lock", "yarn"},

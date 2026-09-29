@@ -10,12 +10,12 @@ import (
 )
 
 type CreateChangeRequestRequest struct {
-	ProjectID          uuid.UUID
-	SourceWorkspaceID  uuid.UUID
-	TargetWorkspaceID  uuid.UUID
-	Title              string
-	Description        string
-	AuthorID           uuid.UUID
+	ProjectID         uuid.UUID
+	SourceWorkspaceID uuid.UUID
+	TargetWorkspaceID uuid.UUID
+	Title             string
+	Description       string
+	AuthorID          uuid.UUID
 }
 
 type UpdateChangeRequestRequest struct {
@@ -27,10 +27,10 @@ type UpdateChangeRequestRequest struct {
 }
 
 type ChangeRequestUsecase struct {
-	changeRequestRepo domain.ChangeRequestRepository
-	workspaceRepo     domain.WorkspaceRepository
+	changeRequestRepo   domain.ChangeRequestRepository
+	workspaceRepo       domain.WorkspaceRepository
 	workspaceMemberRepo domain.WorkspaceMemberRepository
-	gitRepo           domain.GitRepository
+	gitRepo             domain.GitRepository
 }
 
 func NewChangeRequestUsecase(
@@ -40,10 +40,10 @@ func NewChangeRequestUsecase(
 	gitRepo domain.GitRepository,
 ) *ChangeRequestUsecase {
 	return &ChangeRequestUsecase{
-		changeRequestRepo:     changeRequestRepo,
-		workspaceRepo:         workspaceRepo,
-		workspaceMemberRepo:   workspaceMemberRepo,
-		gitRepo:               gitRepo,
+		changeRequestRepo:   changeRequestRepo,
+		workspaceRepo:       workspaceRepo,
+		workspaceMemberRepo: workspaceMemberRepo,
+		gitRepo:             gitRepo,
 	}
 }
 
@@ -86,18 +86,18 @@ func (uc *ChangeRequestUsecase) CreateChangeRequest(ctx context.Context, req Cre
 	}
 
 	cr := &domain.ChangeRequest{
-		ID:                  uuid.New(),
-		ProjectID:           sourceWorkspace.ProjectID,
-		SourceWorkspaceID:   req.SourceWorkspaceID,
-		TargetWorkspaceID:   req.TargetWorkspaceID,
-		Title:               req.Title,
-		Description:         req.Description,
-		AuthorID:            req.AuthorID,
-		State:               domain.ChangeRequestStateOpen,
-		Commits:             commits,
-		FilesChanged:        filesChanged,
-		CreatedAt:           time.Now(),
-		UpdatedAt:           time.Now(),
+		ID:                uuid.New(),
+		ProjectID:         sourceWorkspace.ProjectID,
+		SourceWorkspaceID: req.SourceWorkspaceID,
+		TargetWorkspaceID: req.TargetWorkspaceID,
+		Title:             req.Title,
+		Description:       req.Description,
+		AuthorID:          req.AuthorID,
+		State:             domain.ChangeRequestStateOpen,
+		Commits:           commits,
+		FilesChanged:      filesChanged,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	if err := uc.changeRequestRepo.Create(ctx, cr); err != nil {

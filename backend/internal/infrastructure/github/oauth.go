@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	
+
 	"github.com/AyushCN/berth/internal/domain"
 )
 
@@ -115,14 +115,14 @@ func (c *OAuthClient) GetUser(token string) (*domain.ExternalUser, error) {
 	if err := json.Unmarshal(body, &user); err != nil {
 		return nil, fmt.Errorf("failed to parse user: %w", err)
 	}
-	
+
 	extUser := &domain.ExternalUser{
 		ID:        fmt.Sprint(user.ID),
 		Username:  user.Login,
 		Email:     user.Email,
 		AvatarURL: user.AvatarURL,
 	}
-	
+
 	return extUser, nil
 }
 
