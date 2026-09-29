@@ -16,8 +16,6 @@ type User struct {
 	GithubUsername       string    `json:"github_username"`
 	GithubTokenEncrypted string    `json:"-"`
 	AvatarURL            string    `json:"avatar_url"`
-	MaxSandboxes         int       `json:"max_sandboxes"`
-	MaxBuildsPerHour     int       `json:"max_builds_per_hour"`
 	CreatedAt            time.Time `json:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at"`
 }

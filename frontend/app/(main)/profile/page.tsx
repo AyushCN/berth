@@ -2,7 +2,7 @@
 
 import { useAuthStore } from "@/stores/auth";
 import { motion } from "framer-motion";
-import { Github, Mail, Shield, Zap, Box, Clock } from "lucide-react";
+import { Github, Mail, Shield, Clock } from "lucide-react";
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
@@ -57,32 +57,6 @@ export default function ProfilePage() {
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-surface-container-low border border-outline-variant p-6 rounded-3xl"
-        >
-          <div className="w-10 h-10 rounded-xl bg-primary-fixed/10 flex items-center justify-center mb-4">
-            <Box className="w-5 h-5 text-primary-fixed" />
-          </div>
-          <p className="text-sm font-medium text-on-surface-variant mb-1">Max Sandboxes</p>
-          <p className="text-3xl font-bold text-on-surface">{user.max_sandboxes || "∞"}</p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-surface-container-low border border-outline-variant p-6 rounded-3xl"
-        >
-          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center mb-4">
-            <Zap className="w-5 h-5 text-orange-400" />
-          </div>
-          <p className="text-sm font-medium text-on-surface-variant mb-1">Max Builds / Hour</p>
-          <p className="text-3xl font-bold text-on-surface">{user.max_builds_per_hour || "∞"}</p>
-        </motion.div>
-
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

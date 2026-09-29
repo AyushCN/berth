@@ -157,8 +157,6 @@ type User struct {
 	GithubUsername       pgtype.Text        `json:"github_username"`
 	GithubTokenEncrypted pgtype.Text        `json:"github_token_encrypted"`
 	AvatarUrl            pgtype.Text        `json:"avatar_url"`
-	MaxSandboxes         pgtype.Int4        `json:"max_sandboxes"`
-	MaxBuildsPerHour     pgtype.Int4        `json:"max_builds_per_hour"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }

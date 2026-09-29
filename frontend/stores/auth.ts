@@ -5,8 +5,6 @@ interface User {
   email: string;
   username: string;
   avatar_url: string;
-  max_sandboxes?: number;
-  max_builds_per_hour?: number;
   created_at?: string;
 }
 
