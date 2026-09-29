@@ -52,7 +52,34 @@ func (d *DockerRuntime) Close() error {
 	return nil
 }
 
+// removeExistingContainer force-removes any container already using this name.
+// A missing container is not an error.
+func (d *DockerRuntime) removeExistingContainer(ctx context.Context, name string) error {
+	rmCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(rmCtx, "docker", "rm", "-f", name).CombinedOutput()
+	if err != nil {
+		// `docker rm` exits non-zero when there is nothing to remove, which is
+		// the common case.
+		if strings.Contains(string(out), "No such container") {
+			return nil
+		}
+		return fmt.Errorf("failed to clear existing container %q: %w: %s", name, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.ContainerSpec) (string, error) {
+	// The container name is the environment id, so it is the identity here. A
+	// previous container with the same name must be cleared first, otherwise
+	// docker refuses with "the container name is already in use". This bites on
+	// every re-provision of an environment that was stopped rather than deleted:
+	// stop leaves the container in place, and starting reprovisions under the
+	// same name. Treat create as idempotent by name.
+	if err := d.removeExistingContainer(ctx, spec.ID.String()); err != nil {
+		return "", err
+	}
+
 	// Pull image if not present
 	if err := d.ensureImage(ctx, spec.BaseImage); err != nil {
 		return "", fmt.Errorf("failed to ensure image: %w", err)

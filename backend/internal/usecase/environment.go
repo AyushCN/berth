@@ -23,12 +23,12 @@ type EnvironmentCreateRequest struct {
 }
 
 type EnvironmentUsecase struct {
-	envRepo        domain.EnvironmentRepository
-	workspaceRepo  domain.WorkspaceRepository
-	projectRepo    domain.ProjectRepository
-	orgRepo        domain.OrganizationRepository
-	runtime        domain.ContainerRuntime
-	natsClient     *natsInfra.Client
+	envRepo       domain.EnvironmentRepository
+	workspaceRepo domain.WorkspaceRepository
+	projectRepo   domain.ProjectRepository
+	orgRepo       domain.OrganizationRepository
+	runtime       domain.ContainerRuntime
+	natsClient    *natsInfra.Client
 }
 
 func NewEnvironmentUsecase(envRepo domain.EnvironmentRepository, workspaceRepo domain.WorkspaceRepository, projectRepo domain.ProjectRepository, orgRepo domain.OrganizationRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client) *EnvironmentUsecase {
@@ -495,12 +495,38 @@ func (uc *EnvironmentUsecase) StartEnvironment(ctx context.Context, uid uuid.UUI
 		}
 	}
 
-	// Only allow starting if stopped or failed
-	if env.State != domain.EnvironmentStateStopped && env.State != domain.EnvironmentStateBuildFailed {
-		return fmt.Errorf("can only start environment in stopped or failed state, current state: %s", env.State)
+	// Only allow starting from a state that has nothing running. CRASHED is
+	// included because a crashed container is exactly what the user wants back.
+	// SUSPENDED is handled by the separate resume endpoint.
+	switch env.State {
+	case domain.EnvironmentStateStopped, domain.EnvironmentStateBuildFailed, domain.EnvironmentStateCrashed:
+	case domain.EnvironmentStateRunning, domain.EnvironmentStateStarting, domain.EnvironmentStateBuilding,
+		domain.EnvironmentStateCreated, domain.EnvironmentStateReady:
+		return fmt.Errorf("environment is already %s", env.State)
+	default:
+		return fmt.Errorf("can only start environment in stopped, failed or crashed state, current state: %s", env.State)
 	}
 
-	// Reset to pending so worker picks it up
+	// Prefer restarting the existing container. Resetting to CREATED instead
+	// makes the worker rebuild from scratch: re-clone, reinstall every
+	// dependency, recommit the image. The container is still present after a
+	// stop, so ask the worker to start it.
+	if env.ContainerID != "" && uc.natsClient != nil {
+		payload, err := json.Marshal(domain.EnvironmentLifecycleEvent{
+			EnvironmentID: env.ID,
+			WorkspaceID:   ws.ID,
+			ContainerID:   env.ContainerID,
+		})
+		if err != nil {
+			slog.Warn("failed to marshal environment start request", "error", err)
+		} else if err := uc.natsClient.Publish(domain.SubjectEnvironmentStart, payload); err != nil {
+			slog.Warn("failed to request environment start, falling back to rebuild", "error", err)
+		} else {
+			return nil
+		}
+	}
+
+	// No container, or no message bus: rebuild from scratch.
 	return uc.envRepo.UpdateState(ctx, id, domain.EnvironmentStateCreated)
 }
 
