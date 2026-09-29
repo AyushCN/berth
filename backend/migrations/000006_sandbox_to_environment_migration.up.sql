@@ -8,11 +8,18 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================
 -- First, ensure we have runtime profiles for the languages used in sandboxes
 -- We'll create default profiles for each language
+--
+-- detection_evidence is JSONB NOT NULL with no default (migrations/000004), so
+-- it has to be supplied. This INSERT omitted it, which made the migration abort
+-- with 'null value in column "detection_evidence"' on any database that already
+-- had rows in sandboxes. Fresh databases only passed because the table was
+-- empty.
 
-INSERT INTO runtime_profiles (id, workspace_id, language, version, framework, package_manager, architecture, entrypoint, build_command, start_command, port, dockerfile_source, dockerfile_content, requires_database, requires_redis, confidence, status, created_at, updated_at)
+INSERT INTO runtime_profiles (id, workspace_id, detection_evidence, language, version, framework, package_manager, architecture, entrypoint, build_command, start_command, port, dockerfile_source, dockerfile_content, requires_database, requires_redis, confidence, status, created_at, updated_at)
 SELECT 
     uuid_generate_v4(),
     NULL, -- workspace_id will be set after workspace creation
+    jsonb_build_object('migratedFrom', 'sandboxes', 'sandboxId', s.id, 'language', s.runtime_language),
     s.runtime_language,
     '',
     '',

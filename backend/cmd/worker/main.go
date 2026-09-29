@@ -52,6 +52,13 @@ func main() {
 	}
 	defer db.Close()
 
+	// Apply any pending schema migrations. Embedded in the binary, so a fresh
+	// deployment provisions itself instead of needing a manual psql step.
+	if _, err := db.Migrate(cfg.DatabaseURL); err != nil {
+		slog.Error("failed to migrate database schema", "error", err)
+		os.Exit(1)
+	}
+
 	if err := redis.Init(cfg.RedisURL); err != nil {
 		slog.Error("failed to init redis", "error", err)
 		os.Exit(1)

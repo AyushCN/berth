@@ -1,0 +1,8 @@
+-- Migrations are embedded in the binary and applied on startup.
+--
+-- Previously nothing ran them: internal/infrastructure/db.Init only opened a
+-- connection pool, so the schema had to be applied by hand with psql. A fresh
+-- deployment therefore started against an empty database and failed every
+-- query, and docs/DEVELOPMENT.md told you to run a `make migrate-up` target
+-- that did not exist while listing three migration filenames that did not
+-- either.

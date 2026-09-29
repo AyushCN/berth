@@ -42,6 +42,13 @@ func main() {
 	}
 	defer db.Close()
 
+	// Apply any pending schema migrations. Embedded in the binary, so a fresh
+	// deployment provisions itself instead of needing a manual psql step.
+	if _, err := db.Migrate(cfg.DatabaseURL); err != nil {
+		slog.Error("failed to migrate database schema", "error", err)
+		os.Exit(1)
+	}
+
 	if cfg.Mode != "api" {
 		slog.Error("api binary requires MODE=api", "mode", cfg.Mode)
 		os.Exit(1)

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/AyushCN/berth/migrations"
 )
 
 var pool *pgxpool.Pool
@@ -43,6 +45,20 @@ func Init(dsn string) error {
 
 	slog.Info("database connection established")
 	return nil
+}
+
+// Migrate applies any pending schema migrations using dsn.
+//
+// The schema is embedded in the binary and applied on every boot. This used to
+// be a manual `psql` step, which meant a fresh deployment started against an
+// empty database and failed every query.
+func Migrate(dsn string) (uint, error) {
+	version, err := migrations.Migrate(dsn)
+	if err != nil {
+		return version, err
+	}
+	slog.Info("schema migrations up to date", "version", version)
+	return version, nil
 }
 
 // Pool returns the connection pool.
