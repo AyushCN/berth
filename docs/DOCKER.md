@@ -1,391 +1,280 @@
-# Docker & Containerd Setup
+# Docker Setup
 
 ## Overview
 
-Berth uses **containerd** as the container runtime with **rootless** configuration for development. Docker is used for image building and local development infrastructure.
+Berth uses **Docker** (not containerd) as the container runtime. The worker manages container lifecycle via the host Docker socket.
 
 ---
 
-## Containerd Configuration
+## Development Setup
 
-### Rootless Setup (Development)
+### Prerequisites
+- Docker 24+ with Compose v2
+- Linux (or macOS with Docker Desktop)
 
+No local containerd/k8s installation needed — `docker-compose.dev.yml` provides:
+- PostgreSQL 16
+- Redis 7
+- NATS 2.10 with JetStream
+- Traefik v2.11
+
+### Start Development Stack
 ```bash
-# Install containerd
-sudo apt-get update && sudo apt-get install -y containerd
+docker compose -f docker-compose.dev.yml up -d --build
 
-# Enable rootless
-mkdir -p ~/.config/containerd
-containerd config default | sed 's/root = "\/var\/lib\/containerd"/root = "\/home\/$USER\/.local\/share\/containerd"/' > ~/.config/containerd/config.toml
-
-# Start containerd
-systemctl --user enable --now containerd
+# Verify
+docker compose -f docker-compose.dev.yml ps
+# Frontend: http://localhost:3000
+# API: http://api.localhost
+# Traefik: http://localhost:8080
 ```
 
-### Containerd Config (`~/.config/containerd/config.toml`)
-```toml
-version = 2
-root = "/home/user/.local/share/containerd"
-state = "/run/user/1000/containerd"
-
-[grpc]
-  address = "/run/user/1000/containerd/containerd.sock"
-
-[metrics]
-  address = "127.0.0.1:1338"
-
-[plugins."io.containerd.grpc.v1.cri"]
-  sandbox_image = "registry.k8s.io/pause:3.9"
-  enable_unprivileged_ports = true
-  enable_unprivileged_icmp = true
-
-[plugins."io.containerd.grpc.v1.cri".containerd]
-  snapshotter = "native"
-  default_runtime_name = "runc"
-  
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-  runtime_type = "io.containerd.runc.v2"
-  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-    SystemdCgroup = false
-    BinaryName = "runc"
-```
-
-### Verify Installation
+### Manual Run (without compose)
 ```bash
-# Check containerd
-ctr --address /run/user/1000/containerd/containerd.sock version
+# Terminal 1: API
+cd backend
+export DATABASE_URL="postgres://berth:berth@localhost:5432/berth?sslmode=disable"
+export REDIS_URL=redis://localhost:6379
+export NATS_URL=nats://localhost:4222
+export ENCRYPTION_KEY=0d71f78929e8b688442387dd10478006998c1fa490c42c02c627a3e5ec8a3bed
+export JWT_SECRET=dev_secret_change_in_production_at_least_32_chars_long
+export GITHUB_CLIENT_ID=dev_client_id
+export GITHUB_CLIENT_SECRET=dev_client_secret
+export FRONTEND_URL=http://localhost:3000
+export WORKSPACE_ROOT=/tmp/berth-workspaces
+export DOCKER_HOST=unix:///var/run/docker.sock
+export DOCKER_NETWORK=berth
+export TRAEFIK_DOMAIN=localhost
+export ENV=development
+export MODE=api
+export PORT=8080
+go run ./cmd/api
 
-# Check runc
-runc --version
+# Terminal 2: Worker
+export MODE=worker
+go run ./cmd/worker
 
-# Test container
-ctr run --rm docker.io/library/alpine:latest test echo hello
+# Terminal 3: Frontend
+cd frontend && npm install && npm run dev
 ```
 
 ---
 
-## Docker Infrastructure
+## Docker Compose Files
 
-### Development Docker Compose (`docker-compose.dev.yml`)
+### Development (`docker-compose.dev.yml`)
 ```yaml
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: berth
       POSTGRES_USER: berth
       POSTGRES_PASSWORD: berth
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: berth
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - berth_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U berth"]
+      test: ["CMD-SHELL", "pg_isready -U berth -d berth"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks: [berth]
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+    volumes: [berth_redis:/data]
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 5}
+    networks: [berth]
 
   nats:
     image: nats:2.10-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["-js", "-m", "8222"]
-    healthcheck:
-      test: ["CMD", "nats", "server", "check"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    command: ["--jetstream", "--store_dir", "/data/jetstream", "--http_port", "8222"]
+    volumes: [berth_nats:/data/jetstream]
+    healthcheck: {test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"], interval: 5s, timeout: 3s, retries: 5}
+    networks: [berth]
 
-volumes:
-  postgres_data:
-  redis_data:
+  traefik:
+    image: traefik:v2.11
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports: ["80:80", "8080:8080"]
+    volumes: [/var/run/docker.sock:/var/run/docker.sock:ro]
+    networks: [berth]
+    labels: ["traefik.enable=true", "traefik.http.routers.api.rule=Host(`api.localhost`)", "traefik.http.services.api.loadbalancer.server.port=8080"]
+
+  api:
+    build: {context: ./backend, dockerfile: Dockerfile.api}
+    environment:
+      MODE: api
+      PORT: "8080"
+      DATABASE_URL: postgres://berth:berth@postgres:5432/berth?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      FRONTEND_URL: http://localhost:3000
+      WORKSPACE_ROOT: /workspaces
+      MODEL_DIR: /models
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DOCKER_NETWORK: berth
+      TRAEFIK_DOMAIN: localhost
+      ENV: development
+    volumes: [/var/run/docker.sock:/var/run/docker.sock, ${BERTH_WORKSPACES:-./data/workspaces}:/workspaces, berth_models:/models]
+    networks: [berth]
+    depends_on: {postgres: {condition: service_healthy}, redis: {condition: service_healthy}, nats: {condition: service_healthy}}
+    labels: ["traefik.enable=true", "traefik.http.routers.api.rule=Host(`api.localhost`)", "traefik.http.services.api.loadbalancer.server.port=8080"]
+
+  worker:
+    build: {context: ./backend, dockerfile: Dockerfile.worker}
+    environment:
+      MODE: worker
+      DATABASE_URL: postgres://berth:berth@postgres:5432/berth?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      FRONTEND_URL: http://localhost:3000
+      WORKSPACE_ROOT: /workspaces
+      MODEL_DIR: /models
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DOCKER_NETWORK: berth
+      TRAEFIK_DOMAIN: localhost
+      ENV: development
+    volumes: [/var/run/docker.sock:/var/run/docker.sock, ${BERTH_WORKSPACES:-./data/workspaces}:/workspaces, berth_models:/models]
+    networks: [berth]
+    depends_on: {postgres: {condition: service_healthy}, redis: {condition: service_healthy}, nats: {condition: service_healthy}}
+
+  frontend:
+    build: {context: ./frontend, dockerfile: Dockerfile}
+    environment: {NEXT_PUBLIC_API_URL: http://api.localhost}
+    ports: ["3000:3000"]
+    networks: [berth]
+    depends_on: [api]
+
+volumes: {berth_pg:, berth_redis:, berth_nats:, berth_models:}
+networks: {berth: {driver: bridge}}
 ```
 
-### Start Infrastructure
-```bash
-# Start all services
-docker compose -f docker-compose.dev.yml up -d
+---
 
-# Check status
-docker compose -f docker-compose.dev.yml ps
+## Dockerfiles
+
+### API (`backend/Dockerfile.api`)
+```dockerfile
+# Build stage
+FROM golang:1.26-alpine AS builder
+RUN apk add --no-cache git
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o berth-api ./cmd/api
+
+# Runtime stage
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates git curl bash
+WORKDIR /app
+COPY --from=builder /app/berth-api /usr/local/bin/
+RUN mkdir -p /app/workspaces
+EXPOSE 8080
+ENTRYPOINT ["berth-api"]
+```
+
+### Worker (`backend/Dockerfile.worker`)
+```dockerfile
+# Build stage
+FROM golang:1.26-alpine AS builder
+RUN apk add --no-cache git
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o berth-worker ./cmd/worker
+
+# Runtime stage
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates git curl bash docker-cli
+WORKDIR /app
+COPY --from=builder /app/berth-worker /usr/local/bin/
+RUN mkdir -p /app/workspaces
+ENTRYPOINT ["berth-worker"]
+```
+
+### Frontend (`frontend/Dockerfile`)
+```dockerfile
+# Build stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ARG NEXT_PUBLIC_API_URL=http://api.localhost
+ARG NEXT_PUBLIC_WS_URL=ws://api.localhost
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+RUN npm run build
+
+# Runtime stage
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+CMD ["node", "server.js"]
+```
+
+---
+
+## Key Points
+
+| Aspect | Detail |
+|--------|--------|
+| **Runtime** | Docker (not containerd) |
+| **Networking** | Host networking (`--network host`) |
+| **Security** | `--read-only`, `--cap-drop ALL`, `--init`, `--user 1000:1000`, `no-new-privileges` |
+| **Registry** | Images built locally; no external registry needed for dev |
+| **CGO** | Disabled (`CGO_ENABLED=0`) — pure Go binaries |
+| **Base Images** | `golang:1.26-alpine` (build), `alpine:3.20` (runtime) |
+
+---
+
+## Common Commands
+
+```bash
+# Start dev stack
+docker compose -f docker-compose.dev.yml up -d --build
 
 # View logs
-docker compose -f docker-compose.dev.yml logs -f
+docker compose -f docker-compose.dev.yml logs -f api
+docker compose -f docker-compose.dev.yml logs -f worker
 
 # Stop
 docker compose -f docker-compose.dev.yml down
 
-# Stop with volumes (clean slate)
+# Clean slate
 docker compose -f docker-compose.dev.yml down -v
+
+# Build images manually
+docker build -f backend/Dockerfile.api -t berth-api ./backend
+docker build -f backend/Dockerfile.worker -t berth-worker ./backend
+docker build -f frontend/Dockerfile -t berth-frontend ./frontend
+
+# Rebuild single service
+docker compose -f docker-compose.dev.yml up -d --build --force-recreate api
 ```
 
 ---
 
-## Containerd Integration in Berth
+## Production Notes
 
-### Runtime Interface
-```go
-// internal/domain/sandbox.go
-type ContainerRuntime interface {
-    CreateSandbox(ctx context.Context, spec SandboxSpec) (string, error)
-    StartSandbox(ctx context.Context, containerID string) error
-    StopSandbox(ctx context.Context, containerID string) error
-    DeleteSandbox(ctx context.Context, containerID string) error
-    Exec(ctx context.Context, containerID string, cmd []string) (string, error)
-    ExecPTY(ctx context.Context, containerID string, cmd []string) (io.WriteCloser, io.Reader, func() error, error)
-}
-```
-
-### Implementation (`internal/infrastructure/containerd/`)
-```go
-// runtime.go - Main client
-func NewDockerRuntime(dockerHost, network, traefikDomain string) (domain.ContainerRuntime, error)
-
-// layer.go - Layer operations
-func (r *DockerRuntime) CommitLayer(ctx context.Context, containerID, imageName string) error
-func (r *DockerRuntime) ExportLayer(ctx context.Context, imageName string) (io.ReadCloser, error)
-
-// network.go - Network setup
-func (r *DockerRuntime) SetupNetwork(ctx context.Context) error
-```
-
-### Key Features
-| Feature | Implementation |
-|---------|----------------|
-| **Layer Commit** | `containerd` diff + commit to new image |
-| **Tar Export** | `ctr image export` for image portability |
-| **Network** | `go-iptables` for port mapping |
-| **Warm Pool** | Exact-image reuse via image digest |
-| **Rootless** | User namespace mapping |
-
----
-
-## Image Building
-
-### Multi-stage Dockerfiles
-
-#### API Server
-```dockerfile
-# Dockerfile.api
-FROM golang:1.23-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /berth-api ./cmd/api
-
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata
-COPY --from=builder /berth-api /berth-api
-EXPOSE 8080
-ENTRYPOINT ["/berth-api"]
-```
-
-#### Worker
-```dockerfile
-# Dockerfile.worker
-FROM golang:1.23-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /berth-worker ./cmd/worker
-
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata git
-COPY --from=builder /berth-worker /berth-worker
-ENTRYPOINT ["/berth-worker"]
-```
-
-### Build Commands
-```bash
-# Build API
-docker build -f Dockerfile.api -t berth/api:latest .
-
-# Build Worker
-docker build -f Dockerfile.worker -t berth/worker:latest .
-
-# Build all
-make build
-```
-
----
-
-## Development Workflow
-
-### Local Development with Docker
-
-```bash
-# Start infrastructure only
-docker compose -f docker-compose.dev.yml up -d
-
-# Run API locally (hot reload with air)
-cd backend && air
-
-# Run Worker locally
-MODE=worker go run ./cmd/worker
-
-# Frontend
-cd frontend && npm run dev
-```
-
-### Full Docker Stack (Production-like)
-
-```yaml
-# docker-compose.prod.yml
-version: '3.8'
-
-services:
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.api
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgres://berth:berth@postgres:5432/berth
-      - REDIS_URL=redis://redis:6379
-      - NATS_URL=nats://nats:4222
-      - JWT_SECRET=${JWT_SECRET}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - FRONTEND_URL=https://app.example.com
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
-    environment:
-      - DATABASE_URL=postgres://berth:berth@postgres:5432/berth
-      - REDIS_URL=redis://redis:6379
-      - NATS_URL=nats://nats:4222
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - MODE=worker
-    depends_on:
-      - api
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=https://api.example.com
-
-  postgres:
-    image: postgres:16-alpine
-    # ... (same as dev)
-
-  redis:
-    image: redis:7-alpine
-    # ...
-
-  nats:
-    image: nats:2.10-alpine
-    # ...
-```
-
----
-
-## Containerd Operations
-
-### Common Commands
-```bash
-# List containers
-ctr -n k8s.io containers list
-
-# List images
-ctr images list
-
-# Pull image
-ctr images pull docker.io/library/node:20-alpine
-
-# Create container
-ctr run --rm -t docker.io/library/alpine:latest test sh
-
-# Exec into container
-ctr task exec --exec-id exec-1 -t <container-id> sh
-
-# Checkpoint/Restore (experimental)
-ctr checkpoint <container-id>
-ctr restore <checkpoint>
-```
-
-### Logs
-```bash
-# Container logs
-ctr -n k8s.io tasks ls
-ctr -n k8s.io task logs <task-id>
-
-# System logs
-journalctl -u containerd -f
-```
-
----
-
-## Networking
-
-### Port Mapping (Development)
-| Service | Host Port | Container Port |
-|---------|-----------|----------------|
-| PostgreSQL | 5432 | 5432 |
-| Redis | 6379 | 6379 |
-| NATS | 4222, 8222 | 4222, 8222 |
-| API | 8080 | 8080 |
-| Frontend | 3000 | 3000 |
-
-### Production Networking
-- **Traefik** - Reverse proxy with Let's Encrypt
-- **CNI** - Cilium/Calico for pod networking
-- **Service Mesh** - Istio/Linkerd for mTLS
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| `permission denied` on socket | `sudo chown $USER:$USER /run/user/1000/containerd/containerd.sock` |
-| `image not found` | `ctr images pull <image>` |
-| `no space left` | `ctr images prune`, `docker system prune` |
-| `runc not found` | `apt-get install runc` |
-| `iptables` permission | `sudo usermod -aG docker $USER` |
-
-### Cleanup
-```bash
-# Remove all containers
-ctr containers delete $(ctr containers list -q)
-
-# Remove all images
-ctr images remove $(ctr images list -q)
-
-# Prune containerd
-ctr content prune
-
-# Full Docker cleanup
-docker system prune -a --volumes
-```
+See [DEPLOYMENT.md](DEPLOYMENT.md) for production deployment with Traefik, Let's Encrypt, and production-grade resource limits.

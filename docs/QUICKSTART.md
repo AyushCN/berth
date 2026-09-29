@@ -1,24 +1,51 @@
-# Berth single-host quickstart
+# Quick Start
 
-Berth runs its API and worker as host processes. PostgreSQL, Redis, and NATS can run in Docker Compose. The worker needs access to the host containerd socket and a Linux machine; the full sandbox path does not run on Windows.
+```bash
+# 1. Start everything
+docker compose -f docker-compose.dev.yml up -d --build
 
-## Local development
+# 2. Wait ~10s, then open:
+#    Frontend: http://localhost:3000
+#    API: http://api.localhost
+#    Traefik: http://localhost:8080
 
-Prerequisites: Go 1.23, Node.js/npm, Docker Compose, `migrate`, and a Linux host with containerd. Configure containerd for the `runc` runtime (the verified default) and ensure the worker user can access its socket.
+# 3. Click "Continue with GitHub" (or GET /api/auth/dev-login in dev)
+```
 
-1. Start dependencies: `make up`.
-2. Create `backend/.env` or export environment variables. At minimum set `JWT_SECRET`, `ENCRYPTION_KEY` (32 raw bytes or 64 hex characters), `DATABASE_URL`, `REDIS_URL`, `NATS_URL`, `CONTAINERD_SOCK`, and `FRONTEND_URL`. Set the GitHub OAuth client variables to enable GitHub login and push.
-3. Apply schema: `make migrate-up`.
-4. In one terminal run `cd backend && go run ./cmd/api`.
-5. In another run `cd backend && MODE=worker go run ./cmd/worker`.
-6. In a third run `cd frontend && npm install && npm run dev`, then open `http://localhost:3000`.
+### Prerequisites
+- Docker 24+ with Compose v2
+- Linux (or macOS with Docker Desktop)
 
-In development, the API exposes a dev-login route. Production requires a strong `JWT_SECRET`, `ENCRYPTION_KEY`, and GitHub OAuth credentials. Do not reuse the development credentials from `infra/docker-compose.yml` in a public environment.
+### Manual env (if not using compose)
+```bash
+export DATABASE_URL=postgres://berth:berth@localhost:5432/berth?sslmode=disable
+export REDIS_URL=redis://localhost:6379
+export NATS_URL=nats://localhost:4222
+export ENCRYPTION_KEY=0d71f78929e8b688442387dd10478006998c1fa490c42c02c627a3e5ec8a3bed
+export JWT_SECRET=dev_secret_change_in_production_at_least_32_chars_long
+export GITHUB_CLIENT_ID=dev_client_id
+export GITHUB_CLIENT_SECRET=dev_client_secret
+export FRONTEND_URL=http://localhost:3000
+export WORKSPACE_ROOT=/tmp/berth-workspaces
+export DOCKER_HOST=unix:///var/run/docker.sock
+export DOCKER_NETWORK=berth
+export TRAEFIK_DOMAIN=localhost
+export ENV=development
+export MODE=api
+export PORT=8080
 
-## Single-host VPS services
+cd backend && go run ./cmd/api
+# Terminal 2:
+export MODE=worker
+go run ./cmd/worker
+# Terminal 3:
+cd frontend && npm install && npm run dev
+```
 
-Install Docker Compose, Go 1.23, `migrate`, Git, and containerd on a Linux VPS. Configure containerd and create a dedicated Berth host account with access to the containerd socket. Keep the database and Redis ports bound to loopback; expose only the API and frontend through your TLS reverse proxy.
-
-Create a root `.env` with unique `POSTGRES_PASSWORD` and `REDIS_PASSWORD`, then run `make prod` to start the stateful dependencies. Export `DATABASE_URL`, `REDIS_URL` (including its password), `NATS_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `FRONTEND_URL`, `CONTAINERD_SOCK`, `WORKSPACE_ROOT`, and `ENV=production` for the API and worker. Run `make migrate-up`, build with `make build`, and manage `backend/bin/berth-api` and `backend/bin/berth-worker` with systemd. Build and serve the Next.js frontend with `cd frontend && npm ci && npm run build && npm run start`.
-
-Check `GET /health` before sending traffic. It returns HTTP 503 if PostgreSQL or Redis is unhealthy. Berth is intended for trusted users on one host: sandbox processes currently use host networking, so do not expose this as a multi-tenant service.
+### Test with a sample repo
+```bash
+curl -X POST http://api.localhost/api/environments \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test","git_url":"https://github.com/octocat/Hello-World.git","git_branch":"main"}'
+```

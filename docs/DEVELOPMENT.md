@@ -4,20 +4,19 @@
 
 ### System Requirements
 - **OS**: Linux (Ubuntu 22.04+, Fedora 39+, Arch) or macOS (with Docker Desktop)
-- **Go**: 1.21+
+- **Go**: 1.26+
 - **Node.js**: 20+ (LTS)
 - **Docker**: 24+ with Compose v2
-- **containerd**: 1.7+ (rootless)
 - **PostgreSQL**: 16+
-- **NATS**: 2.10+
+- **NATS**: 2.10+ with JetStream
 - **Redis**: 7+
 - **Git**: 2.40+
 
 ### Install on Ubuntu/Debian
 ```bash
 # Go
-wget https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+wget https://go.dev/dl/go1.26.3.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.26.3.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
 
 # Node.js (via nvm)
@@ -27,9 +26,6 @@ nvm install 20
 # Docker
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
-
-# containerd rootless
-# See DOCKER.md
 
 # PostgreSQL
 sudo apt-get install postgresql-16 postgresql-client-16
@@ -69,11 +65,6 @@ go mod download
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 sqlc generate
 
-# Generate gRPC code
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-protoc --go_out=. --go-grpc_out=. proto/prediction.proto
-
 # Set environment
 export ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 export DATABASE_URL=postgres://berth:berth@localhost:5432/berth?sslmode=disable
@@ -85,7 +76,14 @@ export GITHUB_CLIENT_SECRET=your-github-client-secret
 export FRONTEND_URL=http://localhost:3000
 export MODE=api
 export PORT=8080
-export MODEL_DIR=/tmp/berth/models
+export ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+export WORKSPACE_ROOT=/tmp/berth-workspaces
+export DOCKER_HOST=unix:///var/run/docker.sock
+export DOCKER_NETWORK=berth
+export TRAEFIK_DOMAIN=localhost
+export ENV=development
+export MODE=api
+export PORT=8080
 ```
 
 ### Frontend Setup
@@ -96,7 +94,8 @@ cd frontend
 npm install
 
 # Environment
-echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
+echo "NEXT_PUBLIC_API_URL=http://api.localhost" > .env.local
+echo "NEXT_PUBLIC_WS_URL=ws://api.localhost" >> .env.local
 ```
 
 ### Database Setup
@@ -104,23 +103,12 @@ echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
 # Create database
 createdb -U berth berth
 
-# Run migrations
-cd backend
-make migrate-up
-
-# Or manually
-psql -U berth -d berth -f migrations/000001_init.up.sql
-psql -U berth -d berth -f migrations/000002_add_github_oauth.up.sql
-psql -U berth -d berth -f migrations/000003_add_share_links.up.sql
-psql -U berth -d berth -f migrations/000004_collaborative_platform.up.sql
-psql -U berth -d berth -f migrations/000005_prediction_engine.up.sql
+# Migrations run automatically on boot - no manual step needed
 ```
 
 ### Infrastructure
 ```bash
-# Start PostgreSQL, Redis, NATS
-make up
-# or
+# Start PostgreSQL, Redis, NATS, Traefik, API, Worker, Frontend
 docker compose -f docker-compose.dev.yml up -d
 
 # Verify
@@ -131,27 +119,55 @@ docker compose -f docker-compose.dev.yml ps
 
 ## Running the Application
 
-### Option 1: Make Commands
+### Option 1: Docker Compose (Recommended)
 ```bash
 # Start everything (infra + API + Worker + Frontend)
-make dev
+docker compose -f docker-compose.dev.yml up -d --build
 
-# Or individually:
-make up              # Start infra only
-make migrate-up      # Run migrations
-cd backend && go run ./cmd/api    # API server
-MODE=worker go run ./cmd/worker   # Worker
-cd frontend && npm run dev        # Frontend
+# Frontend:          http://localhost:3000
+# API (via Traefik): http://api.localhost
+# Traefik dashboard: http://localhost:8080
+```
+
+### Manual Run (without docker-compose)
+```bash
+# Terminal 1: API
+cd backend
+export DATABASE_URL="postgres://berth:berth@localhost:5432/berth?sslmode=disable"
+export REDIS_URL=redis://localhost:6379
+export NATS_URL=nats://localhost:4222
+export ENCRYPTION_KEY=0d71f78929e8b688442387dd10478006998c1fa490c42c02c627a3e5ec8a3bed
+export JWT_SECRET=dev_secret_change_in_production_at_least_32_chars_long
+export GITHUB_CLIENT_ID=dev_client_id
+export GITHUB_CLIENT_SECRET=dev_client_secret
+export FRONTEND_URL=http://localhost:3000
+export WORKSPACE_ROOT=/tmp/berth-workspaces
+export DOCKER_HOST=unix:///var/run/docker.sock
+export DOCKER_NETWORK=berth
+export TRAEFIK_DOMAIN=localhost
+export ENV=development
+export MODE=api
+export PORT=8080
+go run ./cmd/api
+
+# In another terminal: Worker (same env, except MODE=worker)
+export MODE=worker
+go run ./cmd/worker
+
+# In another terminal: Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
 ### Access URLs
 | Service | URL |
 |---------|-----|
 | Frontend | http://localhost:3000 |
-| API | http://localhost:8080 |
-| API Health | http://localhost:8080/health |
+| API (via Traefik) | http://api.localhost |
+| API Health | http://api.localhost/health |
 | NATS Monitor | http://localhost:8222 |
-| Traefik Dashboard | http://localhost:8080 (if enabled) |
+| Traefik Dashboard | http://localhost:8080 |
 
 ### Development Credentials
 ```bash
@@ -170,14 +186,12 @@ curl -X GET http://localhost:8080/api/auth/dev-login
 ```bash
 # Go formatting
 go fmt ./...
-goimports -w .
 
-# Go linting
-golangci-lint run ./...
+# Go linting (vet + gofmt)
+go vet ./...
 
-# Frontend formatting
+# Frontend typechecking + lint
 cd frontend && npm run lint
-cd frontend && npm run format
 ```
 
 ### Git Workflow
@@ -197,322 +211,92 @@ git push origin feat/your-feature
 <type>(<scope>): <description>
 
 [optional body]
-
-[optional footer]
 ```
 
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`
-
----
-
-## Running Tests
-
-### Backend Tests
+### SQLC Regeneration
 ```bash
-# All tests
-cd backend
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef go test ./... -v
-
-# Specific packages
-go test ./internal/analyzer/... -v
-go test ./internal/usecase/... -v
-go test ./internal/integration/... -v -timeout 2m
-
-# With race detector
-go test -race ./...
-
-# Coverage
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-### Frontend Tests
-```bash
-cd frontend
-
-# Unit tests
-npm test
-
-# Type checking
-npm run type-check
-
-# E2E (Playwright)
-npm run test:e2e
-```
-
-### Integration Tests
-```bash
-# Requires Docker for testcontainers
-cd backend
-ENCRYPTION_KEY=... go test ./internal/integration/... -v -timeout 5m
-```
-
----
-
-## Code Generation
-
-### SQLC (Database)
-```bash
-# After modifying SQL migrations
 cd backend
 sqlc generate
 ```
+Run this after modifying any `.sql` file in `queries/`.
 
-### gRPC (Protocol Buffers)
+### Tests
 ```bash
-# After modifying proto files
-cd backend
-protoc --go_out=. --go-grpc_out=. proto/prediction.proto
-```
+# Backend unit/integration tests
+cd backend && ENCRYPTION_KEY=0d71f78929e8b688442387dd10478006998c1fa490c42c02c627a3e5ec8a3bed go test ./... -count=1
 
-### OpenAPI/Swagger (Planned)
-```bash
-# Generate from Gin routes
-# swag init -g cmd/api/main.go
+# Migration tests (needs a server with CREATE DATABASE permission)
+BERTH_MIGRATION_TEST_DSN="postgres://berth:berth@localhost:5432/postgres?sslmode=disable" go test ./migrations/ -count=1 -v
+
+# Frontend
+cd frontend && npm run lint && npm run build
 ```
 
 ---
 
-## Debugging
+## Architecture Overview
 
-### Backend Debugging (Delve)
+- **API** (`backend/cmd/api`) — Gin HTTP server, JWT + GitHub OAuth, REST + WebSocket
+- **Worker** (`backend/cmd/worker`) — Consumes NATS `berth.environment.*`, provisions containers via Docker
+- **PostgreSQL 16** — SQLC-generated queries, embedded migrations applied on boot
+- **NATS 2.10** — JetStream for async job orchestration (`berth.environment.*`)
+- **Redis 7** — PubSub for WebSocket real-time updates
+- **Docker** — Container lifecycle via host Docker socket
+- **Frontend** — Next.js 15 + React 18, Zustand, Monaco editor, xterm.js, Monaco editor, Git panel
+
+### Key Commands
 ```bash
-# Install dlv
-go install github.com/go-delve/delve/cmd/dlv@latest
+# Build
+go build -o /tmp/berth-api ./cmd/api
+go build -o /tmp/berth-worker ./cmd/worker
+cd frontend && npm run build
 
-# Debug API
-dlv debug ./cmd/api --headless --listen=:2345 --api-version=2 --accept-multiclient
+# Run tests
+cd backend && ENCRYPTION_KEY=... go test ./... -count=1
+cd frontend && npm run lint && npm run build
 
-# Debug Worker
-dlv debug ./cmd/worker --headless --listen=:2346 -- -MODE=worker
-```
+# End-to-end smoke test (requires running stack)
+./scripts/smoke-e2e.sh
 
-### VS Code Launch Config
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Debug API",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/backend/cmd/api",
-      "env": {
-        "ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "DATABASE_URL": "postgres://berth:berth@localhost:5432/berth?sslmode=disable"
-      }
-    },
-    {
-      "name": "Debug Worker",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/backend/cmd/worker",
-      "env": {
-        "MODE": "worker",
-        "ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-      }
-    }
-  ]
-}
-```
-
-### Frontend Debugging
-```bash
-# Next.js dev server with debugging
-cd frontend
-npm run dev
-
-# In VS Code: Debug > Add Configuration > Next.js
-```
-
-### Logs
-```bash
-# API logs
-cd backend && go run ./cmd/api 2>&1 | jq .
-
-# Worker logs
-MODE=worker go run ./cmd/worker 2>&1 | jq .
-
-# NATS logs
-nats log stream
-
-# Database logs
-tail -f /var/log/postgresql/postgresql-16-main.log
+# Migration tests (needs BERTH_MIGRATION_TEST_DSN)
+BERTH_MIGRATION_TEST_DSN="postgres://berth:berth@localhost:5432/postgres?sslmode=disable" go test ./migrations/ -count=1 -v
 ```
 
 ---
 
-## Hot Reloading
+## Environment Variables
 
-### Backend (Air)
-```bash
-# Install air
-go install github.com/air-verse/air@latest
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | ✅ | — | Postgres DSN |
+| `REDIS_URL` | ✅ | — | Redis URL |
+| `NATS_URL` | ✅ | — | NATS JetStream URL |
+| `ENCRYPTION_KEY` | ✅ | — | 32 raw bytes or 64 hex chars (GitHub token encryption) |
+| `JWT_SECRET` | ✅ | — | ≥32 chars (JWT signing) |
+| `GITHUB_CLIENT_ID` | ✅ | — | GitHub OAuth client ID |
+| `GITHUB_CLIENT_SECRET` | ✅ | — | GitHub OAuth client secret |
+| `FRONTEND_URL` | ✅ | `http://localhost:3000` | CORS origin + OAuth redirect |
+| `WORKSPACE_ROOT` | — | `~/.local/state/berth/workspaces` | Host path for workspace checkouts |
+| `DOCKER_HOST` | — | `unix:///var/run/docker.sock` | Docker socket |
+| `DOCKER_NETWORK` | — | `berth` | Docker network name |
+| `TRAEFIK_DOMAIN` | — | `""` | Traefik base domain |
+| `ENV` | — | `development` | `development` or `production` (`dev-login` not registered in production) |
+| `MODE` | — | `api` | `api` or `worker` |
+| `PORT` | — | `8080` | API port |
+| `RATE_LIMIT_REQUESTS_PER_MINUTE` | — | `200` | Per-IP+path limit for `/api` |
+| `RATE_LIMIT_AUTHENTICATED_PER_MINUTE` | — | `120` | Shared per-user bucket for authenticated routes |
+| `READINESS_TIMEOUT` | — | `60s` | How long provisioning waits for the app to listen |
 
-# Config (.air.toml)
-root = "."
-testdata_dir = "tmp"
-tmp_dir = "tmp"
-
-[build]
-  cmd = "go build -o ./tmp/api ./cmd/api"
-  bin = "./tmp/api"
-  full_bin = ""
-  watch = true
-  poll = false
-  poll_interval = 1000
-  delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "frontend"]
-  include_ext = ["go", "tpl", "tmpl", "html"]
-  exclude_file = []
-  exclude_regex = ["_test.go"]
-  include_dir = []
-  log = "build-errors.log"
-  follow = false
-
-# Run
-cd backend && air
-```
-
-### Frontend (Next.js Fast Refresh)
-```bash
-# Automatic with `npm run dev`
-# Fast Refresh enabled by default
-```
+`MODEL_DIR` is still read by `config` but nothing consumes it (leftover from the removed prediction stack).
 
 ---
 
-## Database Management
+## Known Limitations
 
-### Migrations
-```bash
-# Create new migration
-cd backend
-sqlc generate  # After adding SQL files to migrations/
-
-# Or create manually
-cat > migrations/000006_new_feature.up.sql << 'EOF'
--- Your SQL here
-EOF
-
-cat > migrations/000006_new_feature.down.sql << 'EOF'
--- Rollback SQL
-EOF
-```
-
-### Seed Data
-```bash
-# Insert dev user
-psql -U berth -d berth << 'EOF'
-INSERT INTO users (id, email, username, github_id, github_username, avatar_url)
-VALUES ('00000000-0000-0000-0000-000000000001', 'dev@berth.local', 'dev_user', '0', 'dev_user', '')
-ON CONFLICT DO NOTHING;
-EOF
-```
-
-### Query Database
-```bash
-# Interactive
-psql -U berth -d berth
-
-# Query
-psql -U berth -d berth -c "SELECT * FROM environments WHERE state = 'RUNNING';"
-
-# JSON output
-psql -U berth -d berth -c "SELECT json_agg(t) FROM (SELECT * FROM projects) t;"
-```
-
----
-
-## Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| `go: module not found` | `go mod tidy` |
-| `sqlc: command not found` | `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest` |
-| `protoc: command not found` | `apt-get install protobuf-compiler` |
-| `ENCRYPTION_KEY not set` | Export 32-byte hex key |
-| `go-iptables` missing | `apt-get install libiptables-dev` |
-| `libonnxruntime.so` missing | Install ONNX Runtime or disable ONNX |
-| Port 8080 in use | `lsof -i :8080` then kill |
-| DB connection refused | Check PostgreSQL running, `DATABASE_URL` correct |
-| NATS connection failed | Check NATS running, `NATS_URL` correct |
-| Frontend CORS error | Check `FRONTEND_URL` matches origin |
-
----
-
-## IDE Setup
-
-### VS Code Extensions
-```json
-{
-  "recommendations": [
-    "golang.go",
-    "bradlc.vscode-tailwindcss",
-    "esbenp.prettier-vscode",
-    "dbaeumer.vscode-eslint",
-    "formulahendry.auto-rename-tag",
-    "github.copilot",
-    "golang.go",
-    "ms-vscode.go",
-    "redhat.vscode-yaml"
-  ]
-}
-```
-
-### Go Settings
-```json
-{
-  "go.lintTool": "golangci-lint",
-  "go.formatTool": "goimports",
-  "go.testFlags": ["-v"],
-  "go.testEnvVars": {
-    "ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  }
-}
-```
-
----
-
-## Performance Profiling
-
-```bash
-# CPU Profile
-go test -cpuprofile=cpu.prof -bench=. ./internal/analyzer
-go tool pprof cpu.prof
-
-# Memory Profile
-go test -memprofile=mem.prof -bench=. ./internal/usecase
-go tool pprof mem.prof
-
-# HTTP Profile (if pprof enabled)
-go tool pprof http://localhost:8080/debug/pprof/heap
-go tool pprof http://localhost:8080/debug/pprof/profile
-```
-
----
-
-## Useful Commands Cheatsheet
-
-```bash
-# Quick test run
-make test
-
-# Build all
-make build
-
-# Clean build artifacts
-make clean
-
-# Regenerate all code
-sqlc generate
-protoc --go_out=. --go-grpc_out=. proto/prediction.proto
-
-# Database reset
-make migrate-down && make migrate-up
-
-# Full clean rebuild
-make clean && make build && make migrate-up
-```
+- Single-host only; no multi-node support
+- No readiness probing for apps that don't listen on a port (static sites report `CRASHED`)
+- No gVisor/Cilium/mTLS; rootless Docker only
+- Preview URLs work on `*.localhost` via Traefik; not routable externally without DNS
+- No collaborative editing (presence only)
+- Migrations require manual `psql` for down (000009, 000010 are irreversible)
+- No CI/CD pipeline
