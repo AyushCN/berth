@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
+	"github.com/AyushCN/berth/internal/usecase"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/AyushCN/berth/internal/usecase"
 )
 
 type ProjectHandler struct {
@@ -111,6 +111,13 @@ func (h *ProjectHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"project": proj})
 }
 
+// GetSandboxes returns the environments in a project.
+//
+// The route and the `sandboxes` response key are kept for frontend
+// compatibility, but the data comes from the environments table via the
+// project's workspaces. The previous implementation read the legacy `sandboxes`
+// table, whose project_id column was never written, so this endpoint always
+// returned an empty list.
 func (h *ProjectHandler) GetSandboxes(c *gin.Context) {
 	userID, _ := c.Get("userId")
 	uid, err := uuid.Parse(userID.(string))
@@ -125,7 +132,7 @@ func (h *ProjectHandler) GetSandboxes(c *gin.Context) {
 		return
 	}
 
-	sandboxes, err := h.projUC.ListSandboxes(c.Request.Context(), uid, projectID)
+	environments, err := h.projUC.ListEnvironments(c.Request.Context(), uid, projectID)
 	if err != nil {
 		if err == usecase.ErrProjectUnauthorized {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -134,5 +141,5 @@ func (h *ProjectHandler) GetSandboxes(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"sandboxes": sandboxes})
+	c.JSON(http.StatusOK, gin.H{"sandboxes": environments})
 }

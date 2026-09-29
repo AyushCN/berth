@@ -18,21 +18,21 @@ const (
 
 // BuildPlan represents the plan for building a container image
 type BuildPlan struct {
-	ID              uuid.UUID       `json:"id"`
-	RuntimeProfileID uuid.UUID      `json:"runtime_profile_id"`
-	BaseImage       string          `json:"base_image"`
-	Dockerfile      string          `json:"dockerfile"`
-	BuildArgs       map[string]string `json:"build_args"`
-	InstallCommand  string          `json:"install_command,omitempty"`
-	BuildCommand    string          `json:"build_command,omitempty"`
-	StartCommand    string          `json:"start_command"`
-	WorkingDir      string          `json:"working_dir"`
-	Port            int             `json:"port"`
-	Confidence      float64         `json:"confidence"`
-	Status          BuildPlanStatus `json:"status"`
-	Error           string          `json:"error,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ID               uuid.UUID         `json:"id"`
+	RuntimeProfileID uuid.UUID         `json:"runtime_profile_id"`
+	BaseImage        string            `json:"base_image"`
+	Dockerfile       string            `json:"dockerfile"`
+	BuildArgs        map[string]string `json:"build_args"`
+	InstallCommand   string            `json:"install_command,omitempty"`
+	BuildCommand     string            `json:"build_command,omitempty"`
+	StartCommand     string            `json:"start_command"`
+	WorkingDir       string            `json:"working_dir"`
+	Port             int               `json:"port"`
+	Confidence       float64           `json:"confidence"`
+	Status           BuildPlanStatus   `json:"status"`
+	Error            string            `json:"error,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
+	UpdatedAt        time.Time         `json:"updated_at"`
 }
 
 // BuildPlanRepository defines the interface for build plan persistence
@@ -48,11 +48,11 @@ type BuildPlanRepository interface {
 type BuildStatus string
 
 const (
-	BuildStatusQueued     BuildStatus = "QUEUED"
-	BuildStatusBuilding   BuildStatus = "BUILDING"
-	BuildStatusSuccess    BuildStatus = "SUCCESS"
-	BuildStatusFailed     BuildStatus = "FAILED"
-	BuildStatusCancelled  BuildStatus = "CANCELLED"
+	BuildStatusQueued    BuildStatus = "QUEUED"
+	BuildStatusBuilding  BuildStatus = "BUILDING"
+	BuildStatusSuccess   BuildStatus = "SUCCESS"
+	BuildStatusFailed    BuildStatus = "FAILED"
+	BuildStatusCancelled BuildStatus = "CANCELLED"
 )
 
 // Build represents a container image build
@@ -85,16 +85,16 @@ type BuildRepository interface {
 
 // Image represents a built container image
 type Image struct {
-	ID          uuid.UUID `json:"id"`
-	BuildID     *uuid.UUID `json:"build_id,omitempty"`
-	WorkspaceID uuid.UUID `json:"workspace_id"`
-	Tag         string    `json:"tag"`
-	Digest      string    `json:"digest,omitempty"`
-	SizeBytes   int64     `json:"size_bytes,omitempty"`
-	BaseImage   string    `json:"base_image"`
+	ID          uuid.UUID         `json:"id"`
+	BuildID     *uuid.UUID        `json:"build_id,omitempty"`
+	WorkspaceID uuid.UUID         `json:"workspace_id"`
+	Tag         string            `json:"tag"`
+	Digest      string            `json:"digest,omitempty"`
+	SizeBytes   int64             `json:"size_bytes,omitempty"`
+	BaseImage   string            `json:"base_image"`
 	Labels      map[string]string `json:"labels,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	LastUsedAt  *time.Time        `json:"last_used_at,omitempty"`
 }
 
 // ImageRepository defines the interface for image persistence

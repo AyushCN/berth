@@ -17,12 +17,12 @@ import (
 // inside every sandbox and environment container.
 const containerWorkspaceDir = "/workspace"
 
-// defaultCPUMilliCores is 1 CPU. domain.SandboxSpec measures CPU in
+// defaultCPUMilliCores is 1 CPU. domain.ContainerSpec measures CPU in
 // milli-cores while domain.Environment measures it in nanocpus.
 const defaultCPUMilliCores = 1000
 
 // cpuMilliCores converts the nanocpus used by domain.Environment (where
-// 1e9 means one CPU) into the milli-cores domain.SandboxSpec expects.
+// 1e9 means one CPU) into the milli-cores domain.ContainerSpec expects.
 func cpuMilliCores(nanocores int64) int64 {
 	if nanocores <= 0 {
 		return 0
@@ -36,7 +36,7 @@ func cpuMilliCores(nanocores int64) int64 {
 // every environment created over HTTP sat in CREATED forever: no clone, no
 // container, no logs, no exec. Stop and delete were worse, because the api
 // logged success and returned 204 while the container kept running.
-func (w *SandboxWorker) subscribeEnvironment(ctx context.Context) {
+func (w *Worker) subscribeEnvironment(ctx context.Context) {
 	if w.natsClient == nil {
 		slog.Warn("no NATS client; environment provisioning disabled")
 		return
@@ -64,7 +64,7 @@ func (w *SandboxWorker) subscribeEnvironment(ctx context.Context) {
 	_ = ctx
 }
 
-func (w *SandboxWorker) handleEnvironmentCreate(msg *natsCore.Msg) {
+func (w *Worker) handleEnvironmentCreate(msg *natsCore.Msg) {
 	var evt domain.EnvironmentCreateEvent
 	if err := json.Unmarshal(msg.Data, &evt); err != nil {
 		slog.Error("invalid environment create event", "error", err)
@@ -90,7 +90,7 @@ func (w *SandboxWorker) handleEnvironmentCreate(msg *natsCore.Msg) {
 // The workspace is the source of truth for the repository: the NATS payload
 // only accelerates delivery. That means a missed message is recoverable via
 // reapPendingEnvironments, which is what makes the pipeline survive restarts.
-func (w *SandboxWorker) processEnvironment(ctx context.Context, evt domain.EnvironmentCreateEvent) {
+func (w *Worker) processEnvironment(ctx context.Context, evt domain.EnvironmentCreateEvent) {
 	env, err := w.envRepo.GetByID(ctx, evt.EnvironmentID)
 	if err != nil {
 		slog.Error("failed to load environment", "environment_id", evt.EnvironmentID, "error", err)
@@ -190,7 +190,7 @@ func (w *SandboxWorker) processEnvironment(ctx context.Context, evt domain.Envir
 // reapPendingEnvironments is the recovery path for environments that were
 // created while no worker was listening, or whose NATS message was lost.
 // Safe to call on a timer: it only touches environments still in CREATED.
-func (w *SandboxWorker) reapPendingEnvironments(ctx context.Context) {
+func (w *Worker) reapPendingEnvironments(ctx context.Context) {
 	pending, err := w.envRepo.ListByState(ctx, domain.EnvironmentStateCreated)
 	if err != nil {
 		slog.Warn("failed to list pending environments", "error", err)
@@ -215,7 +215,7 @@ func (w *SandboxWorker) reapPendingEnvironments(ctx context.Context) {
 	}
 }
 
-func (w *SandboxWorker) handleEnvironmentStop(msg *natsCore.Msg) {
+func (w *Worker) handleEnvironmentStop(msg *natsCore.Msg) {
 	evt, ok := w.decodeLifecycle(msg, "stop")
 	if !ok {
 		return
@@ -251,7 +251,7 @@ func (w *SandboxWorker) handleEnvironmentStop(msg *natsCore.Msg) {
 // handleEnvironmentStart restarts an existing container. This is the resume
 // path: the api cannot start containers, so it publishes here and waits for the
 // state transition below.
-func (w *SandboxWorker) handleEnvironmentStart(msg *natsCore.Msg) {
+func (w *Worker) handleEnvironmentStart(msg *natsCore.Msg) {
 	evt, ok := w.decodeLifecycle(msg, "start")
 	if !ok {
 		return
@@ -288,7 +288,7 @@ func (w *SandboxWorker) handleEnvironmentStart(msg *natsCore.Msg) {
 	slog.Info("environment started", "environment_id", evt.EnvironmentID, "container_id", evt.ContainerID)
 }
 
-func (w *SandboxWorker) handleEnvironmentDelete(msg *natsCore.Msg) {
+func (w *Worker) handleEnvironmentDelete(msg *natsCore.Msg) {
 	evt, ok := w.decodeLifecycle(msg, "delete")
 	if !ok {
 		return
@@ -318,7 +318,7 @@ func (w *SandboxWorker) handleEnvironmentDelete(msg *natsCore.Msg) {
 	slog.Info("environment deleted", "environment_id", evt.EnvironmentID)
 }
 
-func (w *SandboxWorker) decodeLifecycle(msg *natsCore.Msg, event string) (domain.EnvironmentLifecycleEvent, bool) {
+func (w *Worker) decodeLifecycle(msg *natsCore.Msg, event string) (domain.EnvironmentLifecycleEvent, bool) {
 	var evt domain.EnvironmentLifecycleEvent
 	if err := json.Unmarshal(msg.Data, &evt); err != nil {
 		slog.Error("invalid environment event", "event", event, "error", err)

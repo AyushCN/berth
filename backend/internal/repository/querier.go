@@ -16,7 +16,6 @@ type Querier interface {
 	AddProjectCollaborator(ctx context.Context, arg AddProjectCollaboratorParams) (ProjectCollaborator, error)
 	ConfirmRuntimeProfile(ctx context.Context, arg ConfirmRuntimeProfileParams) (RuntimeProfile, error)
 	CountEnvironmentsByStateAndRuntimeProfile(ctx context.Context, arg CountEnvironmentsByStateAndRuntimeProfileParams) (int64, error)
-	CountSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CreateBuild(ctx context.Context, arg CreateBuildParams) (Build, error)
 	CreateBuildPlan(ctx context.Context, arg CreateBuildPlanParams) (BuildPlan, error)
 	CreateChangeRequest(ctx context.Context, arg CreateChangeRequestParams) (ChangeRequest, error)
@@ -27,10 +26,12 @@ type Querier interface {
 	CreateOrganization(ctx context.Context, name string) (Organization, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
 	CreateRuntimeProfile(ctx context.Context, arg CreateRuntimeProfileParams) (RuntimeProfile, error)
-	CreateSandbox(ctx context.Context, arg CreateSandboxParams) (Sandbox, error)
-	CreateSandboxActivity(ctx context.Context, arg CreateSandboxActivityParams) (SandboxActivity, error)
-	CreateSandboxChange(ctx context.Context, arg CreateSandboxChangeParams) (SandboxChange, error)
 	CreateShareLink(ctx context.Context, arg CreateShareLinkParams) (ShareLink, error)
+	// User queries.
+	//
+	// These lived in queries/sandbox.sql until the legacy sandbox model was
+	// removed, which meant deleting the sandbox queries silently deleted the user
+	// queries too. They are unrelated to sandboxes and belong here.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	CreateWorkspaceMember(ctx context.Context, arg CreateWorkspaceMemberParams) (WorkspaceMember, error)
@@ -40,7 +41,6 @@ type Querier interface {
 	DeleteEnvironmentService(ctx context.Context, id uuid.UUID) error
 	DeleteImage(ctx context.Context, id uuid.UUID) error
 	DeleteRuntimeProfile(ctx context.Context, id uuid.UUID) error
-	DeleteSandbox(ctx context.Context, id uuid.UUID) error
 	DeleteShareLink(ctx context.Context, id uuid.UUID) error
 	DeleteWorkspaceMember(ctx context.Context, arg DeleteWorkspaceMemberParams) error
 	GetActiveEnvironmentsByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Environment, error)
@@ -74,7 +74,6 @@ type Querier interface {
 	GetRuntimeProfile(ctx context.Context, id uuid.UUID) (RuntimeProfile, error)
 	GetRuntimeProfilesByProject(ctx context.Context, projectID pgtype.UUID) ([]RuntimeProfile, error)
 	GetRuntimeProfilesByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]RuntimeProfile, error)
-	GetSandboxByID(ctx context.Context, id uuid.UUID) (Sandbox, error)
 	GetShareLinkByCode(ctx context.Context, code string) (ShareLink, error)
 	GetShareLinkByID(ctx context.Context, id uuid.UUID) (ShareLink, error)
 	GetShareLinksByProject(ctx context.Context, projectID uuid.UUID) ([]ShareLink, error)
@@ -89,6 +88,9 @@ type Querier interface {
 	GetWorkspaceMembersByUser(ctx context.Context, userID uuid.UUID) ([]GetWorkspaceMembersByUserRow, error)
 	GetWorkspacesByProject(ctx context.Context, projectID uuid.UUID) ([]Workspace, error)
 	IncrementShareLinkUses(ctx context.Context, id uuid.UUID) error
+	// Replaces the legacy ListSandboxesByProject, which read `sandboxes` where the
+	// project_id column was never populated, so it always returned an empty set.
+	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]Environment, error)
 	ListEnvironmentsByState(ctx context.Context, state string) ([]Environment, error)
 	ListIdleRunningEnvironments(ctx context.Context, lastActivityAt pgtype.Timestamptz) ([]Environment, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
@@ -96,10 +98,7 @@ type Querier interface {
 	ListProjectCollaborators(ctx context.Context, projectID uuid.UUID) ([]ListProjectCollaboratorsRow, error)
 	ListProjectsForOrg(ctx context.Context, ownerOrganizationID uuid.UUID) ([]Project, error)
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserRow, error)
-	ListSandboxesByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sandbox, error)
-	ListSandboxesByProject(ctx context.Context, projectID pgtype.UUID) ([]Sandbox, error)
 	ListSuspendedEnvironments(ctx context.Context, suspendedAt pgtype.Timestamptz) ([]Environment, error)
-	PopPendingSandbox(ctx context.Context) (Sandbox, error)
 	RemoveOrganizationMember(ctx context.Context, arg RemoveOrganizationMemberParams) error
 	RemoveProjectCollaborator(ctx context.Context, arg RemoveProjectCollaboratorParams) error
 	SoftDeleteEnvironment(ctx context.Context, id uuid.UUID) error
@@ -107,7 +106,6 @@ type Querier interface {
 	UpdateBuild(ctx context.Context, arg UpdateBuildParams) (Build, error)
 	UpdateBuildPlan(ctx context.Context, arg UpdateBuildPlanParams) (BuildPlan, error)
 	UpdateChangeRequest(ctx context.Context, arg UpdateChangeRequestParams) (ChangeRequest, error)
-	UpdateContainerID(ctx context.Context, arg UpdateContainerIDParams) error
 	UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (Environment, error)
 	UpdateEnvironmentActivity(ctx context.Context, arg UpdateEnvironmentActivityParams) (Environment, error)
 	UpdateEnvironmentContainerID(ctx context.Context, arg UpdateEnvironmentContainerIDParams) (Environment, error)
@@ -118,9 +116,6 @@ type Querier interface {
 	UpdateOrganizationRole(ctx context.Context, arg UpdateOrganizationRoleParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) error
 	UpdateRuntimeProfile(ctx context.Context, arg UpdateRuntimeProfileParams) (RuntimeProfile, error)
-	UpdateSandboxContainer(ctx context.Context, arg UpdateSandboxContainerParams) error
-	UpdateSandboxGitTracking(ctx context.Context, arg UpdateSandboxGitTrackingParams) error
-	UpdateSandboxState(ctx context.Context, arg UpdateSandboxStateParams) error
 	UpdateShareLink(ctx context.Context, arg UpdateShareLinkParams) (ShareLink, error)
 	UpdateUserToken(ctx context.Context, arg UpdateUserTokenParams) error
 	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)

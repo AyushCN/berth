@@ -5,21 +5,9 @@
 package repository
 
 import (
-	"net/netip"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type AuditLog struct {
-	ID           uuid.UUID          `json:"id"`
-	UserID       uuid.UUID          `json:"user_id"`
-	Action       string             `json:"action"`
-	ResourceType string             `json:"resource_type"`
-	ResourceID   pgtype.UUID        `json:"resource_id"`
-	IpAddress    *netip.Addr        `json:"ip_address"`
-	Timestamp    pgtype.Timestamptz `json:"timestamp"`
-}
 
 type Build struct {
 	ID              uuid.UUID          `json:"id"`
@@ -218,57 +206,6 @@ type RuntimeProfile struct {
 	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-}
-
-type Sandbox struct {
-	ID                    uuid.UUID          `json:"id"`
-	ProjectID             pgtype.UUID        `json:"project_id"`
-	OwnerID               uuid.UUID          `json:"owner_id"`
-	Name                  string             `json:"name"`
-	GitUrl                string             `json:"git_url"`
-	GitBranch             string             `json:"git_branch"`
-	State                 string             `json:"state"`
-	RuntimeLanguage       pgtype.Text        `json:"runtime_language"`
-	RuntimeBaseImage      pgtype.Text        `json:"runtime_base_image"`
-	RuntimePort           pgtype.Int4        `json:"runtime_port"`
-	NeedsDb               pgtype.Bool        `json:"needs_db"`
-	ContainerID           pgtype.Text        `json:"container_id"`
-	PublicUrl             pgtype.Text        `json:"public_url"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
-	HasUncommittedChanges pgtype.Bool        `json:"has_uncommitted_changes"`
-	LastModifiedAt        pgtype.Timestamptz `json:"last_modified_at"`
-	ModifiedByUserID      pgtype.UUID        `json:"modified_by_user_id"`
-	CommitHash            pgtype.Text        `json:"commit_hash"`
-}
-
-type SandboxActivity struct {
-	ID           uuid.UUID          `json:"id"`
-	SandboxID    pgtype.UUID        `json:"sandbox_id"`
-	ActivityType string             `json:"activity_type"`
-	Data         []byte             `json:"data"`
-	UserID       pgtype.UUID        `json:"user_id"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-}
-
-type SandboxChange struct {
-	ID          uuid.UUID          `json:"id"`
-	SandboxID   uuid.UUID          `json:"sandbox_id"`
-	FilePath    string             `json:"file_path"`
-	ChangeType  string             `json:"change_type"`
-	UserID      uuid.UUID          `json:"user_id"`
-	Diff        pgtype.Text        `json:"diff"`
-	CommittedAt pgtype.Timestamptz `json:"committed_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-}
-
-type SandboxLog struct {
-	ID        uuid.UUID          `json:"id"`
-	SandboxID uuid.UUID          `json:"sandbox_id"`
-	Message   string             `json:"message"`
-	Level     string             `json:"level"`
-	Timestamp pgtype.Timestamptz `json:"timestamp"`
 }
 
 type ShareLink struct {

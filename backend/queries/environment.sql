@@ -9,6 +9,16 @@ INSERT INTO environments (
 -- name: GetEnvironment :one
 SELECT * FROM environments WHERE id = $1 AND deleted_at IS NULL;
 
+-- name: ListEnvironmentsByProject :many
+-- Replaces the legacy ListSandboxesByProject, which read `sandboxes` where the
+-- project_id column was never populated, so it always returned an empty set.
+SELECT e.* FROM environments e
+JOIN workspaces w ON w.id = e.workspace_id
+WHERE w.project_id = sqlc.arg('project_id')::uuid
+  AND e.deleted_at IS NULL
+  AND w.deleted_at IS NULL
+ORDER BY e.created_at DESC;
+
 -- name: GetEnvironmentsByWorkspace :many
 SELECT * FROM environments 
 WHERE workspace_id = $1 AND deleted_at IS NULL

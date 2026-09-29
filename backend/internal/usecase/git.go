@@ -31,8 +31,14 @@ func NewGitUsecase(dir string, userRepo domain.UserRepository, envRepo domain.En
 	}
 }
 
-func (uc *GitUsecase) getSandboxDir(environmentID uuid.UUID) string {
-	return filepath.Join(uc.workspaceDir, environmentID.String())
+// workspaceDirFor resolves the host checkout directory for an environment.
+// The directory is keyed by workspace id, matching what the worker provisions.
+func (uc *GitUsecase) workspaceDirFor(ctx context.Context, environmentID uuid.UUID) (string, error) {
+	wsID, err := workspaceIDFor(ctx, uc.envRepo, environmentID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(uc.workspaceDir, wsID.String()), nil
 }
 
 func (uc *GitUsecase) Authorize(ctx context.Context, environmentID, userID uuid.UUID) error {
@@ -54,7 +60,10 @@ func (uc *GitUsecase) Authorize(ctx context.Context, environmentID, userID uuid.
 
 // runGitCmdOnHost runs git command on host filesystem (for workspace operations)
 func (uc *GitUsecase) runGitCmdOnHost(ctx context.Context, environmentID uuid.UUID, args ...string) (string, error) {
-	dir := uc.getSandboxDir(environmentID)
+	dir, err := uc.workspaceDirFor(ctx, environmentID)
+	if err != nil {
+		return "", err
+	}
 
 	// Fail cleanly before spawning git. exec would otherwise fail inside
 	// chdir and wrap the absolute host path (WORKSPACE_ROOT/<id>) in the
@@ -73,7 +82,7 @@ func (uc *GitUsecase) runGitCmdOnHost(ctx context.Context, environmentID uuid.UU
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		// git's own stderr is safe to surface; the exec error is not, because
 		// it embeds the host path.
@@ -136,10 +145,13 @@ func (uc *GitUsecase) runGitCmdInContainerWithToken(ctx context.Context, environ
 }
 
 func (uc *GitUsecase) GetChangedFilesHost(ctx context.Context, sourceEnvironmentID, targetEnvironmentID uuid.UUID) ([]string, error) {
-	sourceDir := uc.getSandboxDir(sourceEnvironmentID)
+	sourceDir, err := uc.workspaceDirFor(ctx, sourceEnvironmentID)
+	if err != nil {
+		return nil, err
+	}
 
 	// First, fetch changes from source
-	_, err := uc.runGitCmdOnHost(ctx, targetEnvironmentID, "fetch", sourceDir)
+	_, err = uc.runGitCmdOnHost(ctx, targetEnvironmentID, "fetch", sourceDir)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +177,10 @@ func (uc *GitUsecase) GetChangedFilesHost(ctx context.Context, sourceEnvironment
 }
 
 func (uc *GitUsecase) GetDiffHost(ctx context.Context, sourceEnvironmentID, targetEnvironmentID uuid.UUID) (string, error) {
-	sourceDir := uc.getSandboxDir(sourceEnvironmentID)
+	sourceDir, err := uc.workspaceDirFor(ctx, sourceEnvironmentID)
+	if err != nil {
+		return "", err
+	}
 
 	branchOut, err := uc.runGitCmdOnHost(ctx, targetEnvironmentID, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
@@ -177,7 +192,10 @@ func (uc *GitUsecase) GetDiffHost(ctx context.Context, sourceEnvironmentID, targ
 }
 
 func (uc *GitUsecase) MergeHost(ctx context.Context, sourceEnvironmentID, targetEnvironmentID uuid.UUID) (string, error) {
-	sourceDir := uc.getSandboxDir(sourceEnvironmentID)
+	sourceDir, err := uc.workspaceDirFor(ctx, sourceEnvironmentID)
+	if err != nil {
+		return "", err
+	}
 
 	branchOut, err := uc.runGitCmdOnHost(ctx, targetEnvironmentID, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {

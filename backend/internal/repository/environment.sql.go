@@ -331,6 +331,57 @@ func (q *Queries) GetEnvironmentsByWorkspace(ctx context.Context, workspaceID uu
 	return items, nil
 }
 
+const listEnvironmentsByProject = `-- name: ListEnvironmentsByProject :many
+SELECT e.id, e.workspace_id, e.runtime_profile_id, e.name, e.state, e.container_id, e.image_id, e.public_url, e.port, e.memory_limit, e.cpu_limit, e.last_activity_at, e.active_sessions, e.suspended_at, e.last_error, e.restart_count, e.created_at, e.updated_at, e.deleted_at FROM environments e
+JOIN workspaces w ON w.id = e.workspace_id
+WHERE w.project_id = $1::uuid
+  AND e.deleted_at IS NULL
+  AND w.deleted_at IS NULL
+ORDER BY e.created_at DESC
+`
+
+// Replaces the legacy ListSandboxesByProject, which read `sandboxes` where the
+// project_id column was never populated, so it always returned an empty set.
+func (q *Queries) ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]Environment, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Environment{}
+	for rows.Next() {
+		var i Environment
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.RuntimeProfileID,
+			&i.Name,
+			&i.State,
+			&i.ContainerID,
+			&i.ImageID,
+			&i.PublicUrl,
+			&i.Port,
+			&i.MemoryLimit,
+			&i.CpuLimit,
+			&i.LastActivityAt,
+			&i.ActiveSessions,
+			&i.SuspendedAt,
+			&i.LastError,
+			&i.RestartCount,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironmentsByState = `-- name: ListEnvironmentsByState :many
 SELECT id, workspace_id, runtime_profile_id, name, state, container_id, image_id, public_url, port, memory_limit, cpu_limit, last_activity_at, active_sessions, suspended_at, last_error, restart_count, created_at, updated_at, deleted_at FROM environments 
 WHERE state = $1 AND deleted_at IS NULL

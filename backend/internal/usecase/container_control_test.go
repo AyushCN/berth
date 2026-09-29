@@ -49,7 +49,7 @@ func (f *fakeRuntime) StopSandbox(_ context.Context, id string) error {
 }
 
 // The other ContainerRuntime methods are unused by the controllers.
-func (f *fakeRuntime) CreateSandbox(context.Context, domain.SandboxSpec) (string, error) {
+func (f *fakeRuntime) CreateSandbox(context.Context, domain.ContainerSpec) (string, error) {
 	return "", errors.New("not implemented")
 }
 func (f *fakeRuntime) DeleteSandbox(context.Context, string) error { return nil }

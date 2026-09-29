@@ -78,7 +78,6 @@ func main() {
 	}
 
 	queries := repository.New(db.Pool())
-	sandboxRepo := repository.NewSandboxRepository(queries)
 	userRepo := repository.NewUserRepository(queries)
 
 	// Token encryption box, used to decrypt the stored GitHub OAuth token so
@@ -102,9 +101,7 @@ func main() {
 	predictionService := usecase.NewPredictionService(modelTrainer, predictionRepo)
 	dataCollector := usecase.NewDataCollector(trainingDataRepo, repository.NewBuildRepository(queries), repository.NewRuntimeProfileRepository(queries))
 
-	// Inject data collector into sandbox worker
-	sandboxWorker := worker.NewSandboxWorker(
-		sandboxRepo,
+	w := worker.NewWorker(
 		userRepo,
 		repository.NewEnvironmentRepository(queries),
 		repository.NewWorkspaceRepository(queries),
@@ -130,7 +127,7 @@ func main() {
 	)
 	go activityTracker.Start(ctx)
 
-	go sandboxWorker.Start(ctx)
+	go w.Start(ctx)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

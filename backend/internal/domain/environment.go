@@ -11,18 +11,18 @@ import (
 type EnvironmentState string
 
 const (
-	EnvironmentStateCreated      EnvironmentState = "CREATED"
-	EnvironmentStateBuilding     EnvironmentState = "BUILDING"
-	EnvironmentStateBuildFailed  EnvironmentState = "BUILD_FAILED"
-	EnvironmentStateReady        EnvironmentState = "READY"
-	EnvironmentStateStarting     EnvironmentState = "STARTING"
-	EnvironmentStateRunning      EnvironmentState = "RUNNING"
-	EnvironmentStateStopping     EnvironmentState = "STOPPING"
-	EnvironmentStateStopped      EnvironmentState = "STOPPED"
-	EnvironmentStateSuspending   EnvironmentState = "SUSPENDING"
-	EnvironmentStateSuspended    EnvironmentState = "SUSPENDED"
-	EnvironmentStateCrashed      EnvironmentState = "CRASHED"
-	EnvironmentStateDeleting     EnvironmentState = "DELETING"
+	EnvironmentStateCreated     EnvironmentState = "CREATED"
+	EnvironmentStateBuilding    EnvironmentState = "BUILDING"
+	EnvironmentStateBuildFailed EnvironmentState = "BUILD_FAILED"
+	EnvironmentStateReady       EnvironmentState = "READY"
+	EnvironmentStateStarting    EnvironmentState = "STARTING"
+	EnvironmentStateRunning     EnvironmentState = "RUNNING"
+	EnvironmentStateStopping    EnvironmentState = "STOPPING"
+	EnvironmentStateStopped     EnvironmentState = "STOPPED"
+	EnvironmentStateSuspending  EnvironmentState = "SUSPENDING"
+	EnvironmentStateSuspended   EnvironmentState = "SUSPENDED"
+	EnvironmentStateCrashed     EnvironmentState = "CRASHED"
+	EnvironmentStateDeleting    EnvironmentState = "DELETING"
 )
 
 // IsTerminal returns true if the state is terminal (no further transitions without explicit action)
@@ -62,40 +62,40 @@ func (s EnvironmentState) CanBuild() bool {
 
 // Environment represents a runnable instance
 type Environment struct {
-	ID                  uuid.UUID         `json:"id"`
-	WorkspaceID         uuid.UUID         `json:"workspace_id"`
-	RuntimeProfileID    *uuid.UUID        `json:"runtime_profile_id,omitempty"`
-	Name                string            `json:"name"`
-	State               EnvironmentState  `json:"state"`
-	ContainerID         string            `json:"container_id,omitempty"`
-	ImageID             *uuid.UUID        `json:"image_id,omitempty"`
-	PublicURL           string            `json:"public_url,omitempty"`
-	Port                int               `json:"port,omitempty"`
-	MemoryLimit         int64             `json:"memory_limit"`  // bytes
-	CPULimit            int64             `json:"cpu_limit"`     // nanocpus
-	LastActivityAt      *time.Time        `json:"last_activity_at,omitempty"`
-	ActiveSessions      int               `json:"active_sessions"`
-	SuspendedAt         *time.Time        `json:"suspended_at,omitempty"`
-	LastError           string            `json:"last_error,omitempty"`
-	RestartCount        int               `json:"restart_count"`
-	CreatedAt           time.Time         `json:"created_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
-	DeletedAt           *time.Time        `json:"deleted_at,omitempty"`
+	ID               uuid.UUID        `json:"id"`
+	WorkspaceID      uuid.UUID        `json:"workspace_id"`
+	RuntimeProfileID *uuid.UUID       `json:"runtime_profile_id,omitempty"`
+	Name             string           `json:"name"`
+	State            EnvironmentState `json:"state"`
+	ContainerID      string           `json:"container_id,omitempty"`
+	ImageID          *uuid.UUID       `json:"image_id,omitempty"`
+	PublicURL        string           `json:"public_url,omitempty"`
+	Port             int              `json:"port,omitempty"`
+	MemoryLimit      int64            `json:"memory_limit"` // bytes
+	CPULimit         int64            `json:"cpu_limit"`    // nanocpus
+	LastActivityAt   *time.Time       `json:"last_activity_at,omitempty"`
+	ActiveSessions   int              `json:"active_sessions"`
+	SuspendedAt      *time.Time       `json:"suspended_at,omitempty"`
+	LastError        string           `json:"last_error,omitempty"`
+	RestartCount     int              `json:"restart_count"`
+	CreatedAt        time.Time        `json:"created_at"`
+	UpdatedAt        time.Time        `json:"updated_at"`
+	DeletedAt        *time.Time       `json:"deleted_at,omitempty"`
 }
 
 // EnvironmentService represents a sidecar service (database, cache, etc.)
 type EnvironmentService struct {
-	ID              uuid.UUID `json:"id"`
-	EnvironmentID   uuid.UUID `json:"environment_id"`
-	Name            string    `json:"name"`            // postgres, redis, mysql, etc.
-	Type            string    `json:"type"`            // DATABASE, CACHE, MESSAGE_QUEUE, OTHER
-	Image           string    `json:"image"`
-	Port            int       `json:"port,omitempty"`
-	Config          map[string]any `json:"config"`    // env vars, credentials
-	State           string    `json:"state"`           // CREATED, RUNNING, STOPPED, FAILED
-	ContainerID     string    `json:"container_id,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID            uuid.UUID      `json:"id"`
+	EnvironmentID uuid.UUID      `json:"environment_id"`
+	Name          string         `json:"name"` // postgres, redis, mysql, etc.
+	Type          string         `json:"type"` // DATABASE, CACHE, MESSAGE_QUEUE, OTHER
+	Image         string         `json:"image"`
+	Port          int            `json:"port,omitempty"`
+	Config        map[string]any `json:"config"` // env vars, credentials
+	State         string         `json:"state"`  // CREATED, RUNNING, STOPPED, FAILED
+	ContainerID   string         `json:"container_id,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 // EnvironmentRepository defines the interface for environment persistence

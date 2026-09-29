@@ -20,43 +20,43 @@ const (
 
 // Prediction represents a model prediction
 type Prediction struct {
-	ID          uuid.UUID      `json:"id"`
-	Type        PredictionType `json:"type"`
-	WorkspaceID uuid.UUID      `json:"workspace_id"`
-	Input       map[string]any `json:"input"`
-	Output      map[string]any `json:"output"`
-	Confidence  float64        `json:"confidence"`
-	ModelVersion string        `json:"model_version"`
-	CreatedAt   time.Time      `json:"created_at"`
+	ID           uuid.UUID      `json:"id"`
+	Type         PredictionType `json:"type"`
+	WorkspaceID  uuid.UUID      `json:"workspace_id"`
+	Input        map[string]any `json:"input"`
+	Output       map[string]any `json:"output"`
+	Confidence   float64        `json:"confidence"`
+	ModelVersion string         `json:"model_version"`
+	CreatedAt    time.Time      `json:"created_at"`
 }
 
 // TrainingData represents a single training data point
 type TrainingData struct {
-	ID           uuid.UUID       `json:"id"`
-	WorkspaceID  uuid.UUID       `json:"workspace_id"`
-	BuildID      *uuid.UUID      `json:"build_id,omitempty"`
-	Features     map[string]any  `json:"features"`
-	Labels       map[string]any  `json:"labels"`
-	Architecture string          `json:"architecture"`
-	Framework    string          `json:"framework"`
-	Language     string          `json:"language"`
-	CacheKey     string          `json:"cache_key"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID           uuid.UUID      `json:"id"`
+	WorkspaceID  uuid.UUID      `json:"workspace_id"`
+	BuildID      *uuid.UUID     `json:"build_id,omitempty"`
+	Features     map[string]any `json:"features"`
+	Labels       map[string]any `json:"labels"`
+	Architecture string         `json:"architecture"`
+	Framework    string         `json:"framework"`
+	Language     string         `json:"language"`
+	CacheKey     string         `json:"cache_key"`
+	CreatedAt    time.Time      `json:"created_at"`
 }
 
 // Model represents a trained ML model
 type Model struct {
-	ID          uuid.UUID       `json:"id"`
-	Name        string          `json:"name"`
-	Version     string          `json:"version"`
-	Type        PredictionType  `json:"type"`
-	Algorithm   string          `json:"algorithm"`
-	Parameters  map[string]any  `json:"parameters"`
-	Metrics     map[string]float64 `json:"metrics"`
-	ONNXPath    string          `json:"onnx_path,omitempty"`
-	IsActive    bool            `json:"is_active"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID         uuid.UUID          `json:"id"`
+	Name       string             `json:"name"`
+	Version    string             `json:"version"`
+	Type       PredictionType     `json:"type"`
+	Algorithm  string             `json:"algorithm"`
+	Parameters map[string]any     `json:"parameters"`
+	Metrics    map[string]float64 `json:"metrics"`
+	ONNXPath   string             `json:"onnx_path,omitempty"`
+	IsActive   bool               `json:"is_active"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
 // ModelRepository defines the interface for model persistence

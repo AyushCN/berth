@@ -123,7 +123,7 @@ func previewURL(id uuid.UUID) string {
 //
 // On any error it removes the workspace directory and the container it
 // created, so a failed provision leaves nothing behind.
-func (w *SandboxWorker) provision(ctx context.Context, req provisionRequest) (_ *provisionResult, err error) {
+func (w *Worker) provision(ctx context.Context, req provisionRequest) (_ *provisionResult, err error) {
 	totalStart := time.Now()
 
 	if err := validateGitURL(req.GitURL); err != nil {
@@ -223,7 +223,7 @@ func (w *SandboxWorker) provision(ctx context.Context, req provisionRequest) (_ 
 	if memoryLimit == 0 {
 		memoryLimit = 512 * 1024 * 1024
 	}
-	// SandboxSpec.CPULimit is milli-cores (the docker runtime divides by
+	// ContainerSpec.CPULimit is milli-cores (the docker runtime divides by
 	// 1000 to get a CPU count). Callers holding nanocpus must convert with
 	// cpuMilliCores first, otherwise 1e9 nanocores becomes 1,000,000 CPUs and
 	// docker refuses with "range of CPUs is from 0.01 to 12.00".
@@ -233,8 +233,8 @@ func (w *SandboxWorker) provision(ctx context.Context, req provisionRequest) (_ 
 	}
 	execProfile := domain.DefaultExecutionProfile()
 
-	spec := func(baseImage string, cmd []string) domain.SandboxSpec {
-		return domain.SandboxSpec{
+	spec := func(baseImage string, cmd []string) domain.ContainerSpec {
+		return domain.ContainerSpec{
 			ID:               req.ID,
 			BaseImage:        baseImage,
 			WorkDir:          req.WorkDir,

@@ -20,22 +20,22 @@ const (
 
 // ChangeRequest represents a request to merge changes from a fork to canonical
 type ChangeRequest struct {
-	ID                  uuid.UUID           `json:"id"`
-	ProjectID           uuid.UUID           `json:"project_id"`
-	SourceWorkspaceID   uuid.UUID           `json:"source_workspace_id"`
-	TargetWorkspaceID   uuid.UUID           `json:"target_workspace_id"`
-	Title               string              `json:"title"`
-	Description         string              `json:"description,omitempty"`
-	AuthorID            uuid.UUID           `json:"author_id"`
-	State               ChangeRequestState  `json:"state"`
-	Commits             []CommitEntry        `json:"commits,omitempty"`
-	FilesChanged        []string            `json:"files_changed,omitempty"`
-	ReviewerID          *uuid.UUID          `json:"reviewer_id,omitempty"`
-	ReviewedAt          *time.Time          `json:"reviewed_at,omitempty"`
-	MergedAt            *time.Time          `json:"merged_at,omitempty"`
-	MergeCommitHash     string              `json:"merge_commit_hash,omitempty"`
-	CreatedAt           time.Time           `json:"created_at"`
-	UpdatedAt           time.Time           `json:"updated_at"`
+	ID                uuid.UUID          `json:"id"`
+	ProjectID         uuid.UUID          `json:"project_id"`
+	SourceWorkspaceID uuid.UUID          `json:"source_workspace_id"`
+	TargetWorkspaceID uuid.UUID          `json:"target_workspace_id"`
+	Title             string             `json:"title"`
+	Description       string             `json:"description,omitempty"`
+	AuthorID          uuid.UUID          `json:"author_id"`
+	State             ChangeRequestState `json:"state"`
+	Commits           []CommitEntry      `json:"commits,omitempty"`
+	FilesChanged      []string           `json:"files_changed,omitempty"`
+	ReviewerID        *uuid.UUID         `json:"reviewer_id,omitempty"`
+	ReviewedAt        *time.Time         `json:"reviewed_at,omitempty"`
+	MergedAt          *time.Time         `json:"merged_at,omitempty"`
+	MergeCommitHash   string             `json:"merge_commit_hash,omitempty"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
 }
 
 // CommitInfo represents a commit in a change request

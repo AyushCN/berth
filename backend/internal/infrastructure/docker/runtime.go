@@ -52,7 +52,7 @@ func (d *DockerRuntime) Close() error {
 	return nil
 }
 
-func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.SandboxSpec) (string, error) {
+func (d *DockerRuntime) CreateSandbox(ctx context.Context, spec domain.ContainerSpec) (string, error) {
 	// Pull image if not present
 	if err := d.ensureImage(ctx, spec.BaseImage); err != nil {
 		return "", fmt.Errorf("failed to ensure image: %w", err)

@@ -221,14 +221,18 @@ func (r *ProjectRepository) RemoveCollaborator(ctx context.Context, projectID uu
 	})
 }
 
-func (r *ProjectRepository) ListSandboxes(ctx context.Context, projectID uuid.UUID) ([]*domain.Sandbox, error) {
-	rows, err := r.queries.ListSandboxesByProject(ctx, pgtype.UUID{Bytes: projectID, Valid: true})
+// ListEnvironments returns the environments belonging to a project's
+// workspaces. It previously read the legacy `sandboxes` table, whose project_id
+// column was never written, so it always returned an empty set.
+func (r *ProjectRepository) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]*domain.Environment, error) {
+	rows, err := r.queries.ListEnvironmentsByProject(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	var res []*domain.Sandbox
-	for _, s := range rows {
-		res = append(res, toDomainSandbox(s))
+	envRepo := &EnvironmentRepository{queries: r.queries}
+	res := make([]*domain.Environment, 0, len(rows))
+	for i := range rows {
+		res = append(res, envRepo.rowToEnvironment(rows[i]))
 	}
 	return res, nil
 }

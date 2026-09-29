@@ -160,10 +160,12 @@ func (u *ProjectUsecase) RemoveCollaborator(ctx context.Context, currentUserID u
 	return u.projRepo.RemoveCollaborator(ctx, projectID, targetUserID)
 }
 
-func (u *ProjectUsecase) ListSandboxes(ctx context.Context, currentUserID uuid.UUID, projectID uuid.UUID) ([]*domain.Sandbox, error) {
-	_, err := u.GetByID(ctx, currentUserID, projectID)
-	if err != nil {
+// ListEnvironments returns the environments in a project. The HTTP route is
+// still /projects/:id/sandboxes for frontend compatibility, but the data now
+// comes from the environments table via the project's workspaces.
+func (u *ProjectUsecase) ListEnvironments(ctx context.Context, currentUserID uuid.UUID, projectID uuid.UUID) ([]*domain.Environment, error) {
+	if _, err := u.GetByID(ctx, currentUserID, projectID); err != nil {
 		return nil, err
 	}
-	return u.projRepo.ListSandboxes(ctx, projectID)
+	return u.projRepo.ListEnvironments(ctx, projectID)
 }

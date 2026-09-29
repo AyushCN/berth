@@ -16,19 +16,32 @@ import (
 
 type FileUsecase struct {
 	workspaceDir string
+	envRepo      domain.EnvironmentRepository
 	envUC        *EnvironmentUsecase // optional, used to signal reload via Exec
 }
 
-func NewFileUsecase(dir string, envUC *EnvironmentUsecase) *FileUsecase {
-	return &FileUsecase{workspaceDir: dir, envUC: envUC}
+func NewFileUsecase(dir string, envRepo domain.EnvironmentRepository, envUC *EnvironmentUsecase) *FileUsecase {
+	return &FileUsecase{workspaceDir: dir, envRepo: envRepo, envUC: envUC}
 }
 
-func (uc *FileUsecase) getSandboxDir(sandboxID uuid.UUID) string {
-	return filepath.Join(uc.workspaceDir, sandboxID.String())
+// workspaceDirFor resolves the host checkout directory for an environment.
+// The directory is keyed by workspace id, which is what the worker provisions;
+// keying it by environment id only coincided for rows backfilled by migration
+// 000006 and pointed at a nonexistent directory for anything created through
+// the api.
+func (uc *FileUsecase) workspaceDirFor(ctx context.Context, environmentID uuid.UUID) (string, error) {
+	wsID, err := workspaceIDFor(ctx, uc.envRepo, environmentID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(uc.workspaceDir, wsID.String()), nil
 }
 
-func (uc *FileUsecase) resolvePath(sandboxID uuid.UUID, reqPath string) (string, error) {
-	baseDir := uc.getSandboxDir(sandboxID)
+func (uc *FileUsecase) resolvePath(ctx context.Context, environmentID uuid.UUID, reqPath string) (string, error) {
+	baseDir, err := uc.workspaceDirFor(ctx, environmentID)
+	if err != nil {
+		return "", err
+	}
 	cleanPath := filepath.Clean(filepath.Join(baseDir, reqPath))
 	if !strings.HasPrefix(cleanPath, baseDir) {
 		return "", fmt.Errorf("path traversal denied")
@@ -44,8 +57,12 @@ type FileInfo struct {
 	ModTime time.Time `json:"mod_time"`
 }
 
-func (uc *FileUsecase) ListFiles(ctx context.Context, sandboxID uuid.UUID, reqPath string) (any, error) {
-	target, err := uc.resolvePath(sandboxID, reqPath)
+func (uc *FileUsecase) ListFiles(ctx context.Context, environmentID uuid.UUID, reqPath string) (any, error) {
+	baseDir, err := uc.workspaceDirFor(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	target, err := uc.resolvePath(ctx, environmentID, reqPath)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +81,9 @@ func (uc *FileUsecase) ListFiles(ctx context.Context, sandboxID uuid.UUID, reqPa
 		if err != nil {
 			continue
 		}
-		relPath, _ := filepath.Rel(uc.getSandboxDir(sandboxID), filepath.Join(target, e.Name()))
+		// Paths are relative to the workspace root, not to the directory being
+		// listed, so the client can navigate without re-joining prefixes.
+		relPath, _ := filepath.Rel(baseDir, filepath.Join(target, e.Name()))
 		result = append(result, FileInfo{
 			Name:    e.Name(),
 			Path:    relPath,
@@ -76,8 +95,8 @@ func (uc *FileUsecase) ListFiles(ctx context.Context, sandboxID uuid.UUID, reqPa
 	return result, nil
 }
 
-func (uc *FileUsecase) GetFileContent(ctx context.Context, sandboxID uuid.UUID, path string) ([]byte, error) {
-	target, err := uc.resolvePath(sandboxID, path)
+func (uc *FileUsecase) GetFileContent(ctx context.Context, environmentID uuid.UUID, path string) ([]byte, error) {
+	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +108,8 @@ type SaveResult struct {
 	ReloadSignaled bool
 }
 
-func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUID, path string, content []byte) (*SaveResult, error) {
-	target, err := uc.resolvePath(sandboxID, path)
+func (uc *FileUsecase) UpdateFileContent(ctx context.Context, environmentID uuid.UUID, path string, content []byte) (*SaveResult, error) {
+	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +126,7 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 	// Signal a hot-reload by touching the file inside the container via exec
 	reloadSignaled := false
 	if uc.envUC != nil && uc.envUC.runtime != nil {
-		env, err := uc.envUC.envRepo.GetByID(ctx, sandboxID)
+		env, err := uc.envUC.envRepo.GetByID(ctx, environmentID)
 		if err == nil && env.State == domain.EnvironmentStateRunning && env.ContainerID != "" {
 			inContainerPath := "/workspace/" + strings.TrimPrefix(path, "/")
 			touchCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -116,13 +135,16 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 			if touchErr == nil {
 				reloadSignaled = true
 			} else {
-				slog.Warn("touch-on-save failed", "environment_id", sandboxID, "path", inContainerPath, "err", touchErr)
+				slog.Warn("touch-on-save failed", "environment_id", environmentID, "path", inContainerPath, "err", touchErr)
 			}
 		}
 	}
 
 	// Async: stage file in git and update git tracking in DB
-	sandboxDir := uc.getSandboxDir(sandboxID)
+	sandboxDir, dirErr := uc.workspaceDirFor(ctx, environmentID)
+	if dirErr != nil {
+		return nil, dirErr
+	}
 	go func() {
 		backgroundCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -130,7 +152,7 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 		cmd := exec.CommandContext(backgroundCtx, "git", "add", path)
 		cmd.Dir = sandboxDir
 		if err := cmd.Run(); err != nil {
-			slog.Warn("git add failed on save", "environment_id", sandboxID, "path", path, "err", err)
+			slog.Warn("git add failed on save", "environment_id", environmentID, "path", path, "err", err)
 		}
 		// Git tracking is updated via workspace - skip for now
 	}()
@@ -138,8 +160,8 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, sandboxID uuid.UUI
 	return &SaveResult{ReloadSignaled: reloadSignaled}, nil
 }
 
-func (uc *FileUsecase) CreateFile(ctx context.Context, sandboxID uuid.UUID, path string, isDir bool) error {
-	target, err := uc.resolvePath(sandboxID, path)
+func (uc *FileUsecase) CreateFile(ctx context.Context, environmentID uuid.UUID, path string, isDir bool) error {
+	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return err
 	}
@@ -156,14 +178,17 @@ func (uc *FileUsecase) CreateFile(ctx context.Context, sandboxID uuid.UUID, path
 	return os.WriteFile(target, []byte{}, 0644)
 }
 
-func (uc *FileUsecase) DeleteFile(ctx context.Context, sandboxID uuid.UUID, path string) error {
-	target, err := uc.resolvePath(sandboxID, path)
+func (uc *FileUsecase) DeleteFile(ctx context.Context, environmentID uuid.UUID, path string) error {
+	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return err
 	}
-	
+
 	// Prevent deleting the root workspace directory
-	baseDir := uc.getSandboxDir(sandboxID)
+	baseDir, err := uc.workspaceDirFor(ctx, environmentID)
+	if err != nil {
+		return err
+	}
 	if target == baseDir || target == filepath.Clean(baseDir) {
 		return fmt.Errorf("cannot delete workspace root")
 	}

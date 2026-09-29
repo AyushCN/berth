@@ -45,7 +45,7 @@ func TestResolveGitTokenDecryptsBoxOutput(t *testing.T) {
 	}
 
 	ownerID := uuid.New()
-	w := &SandboxWorker{
+	w := &Worker{
 		userRepo: &stubUserRepo{user: &domain.User{
 			ID:                   ownerID,
 			GithubTokenEncrypted: encrypted,
@@ -67,7 +67,7 @@ func TestResolveGitTokenNoTokenIsNotAnError(t *testing.T) {
 	ownerID := uuid.New()
 
 	// Public repo with no stored token must clone unauthenticated, not fail.
-	w := &SandboxWorker{userRepo: &stubUserRepo{user: &domain.User{ID: ownerID}}, tokenBox: box}
+	w := &Worker{userRepo: &stubUserRepo{user: &domain.User{ID: ownerID}}, tokenBox: box}
 	got, err := w.resolveGitToken(context.Background(), ownerID)
 	if err != nil || got != "" {
 		t.Fatalf("expected empty token and no error, got %q / %v", got, err)
@@ -76,7 +76,7 @@ func TestResolveGitTokenNoTokenIsNotAnError(t *testing.T) {
 
 func TestResolveGitTokenNilSafe(t *testing.T) {
 	// Must not panic when the worker was built without a box or owner.
-	w := &SandboxWorker{}
+	w := &Worker{}
 	if got, err := w.resolveGitToken(context.Background(), uuid.Nil); err != nil || got != "" {
 		t.Fatalf("expected empty token and no error, got %q / %v", got, err)
 	}
@@ -91,7 +91,7 @@ func TestResolveGitTokenWrongKeyIsAnError(t *testing.T) {
 	encrypted, _ := good.Encrypt("gho_realtoken")
 
 	ownerID := uuid.New()
-	w := &SandboxWorker{
+	w := &Worker{
 		userRepo: &stubUserRepo{user: &domain.User{ID: ownerID, GithubTokenEncrypted: encrypted}},
 		tokenBox: other,
 	}
@@ -103,7 +103,7 @@ func TestResolveGitTokenWrongKeyIsAnError(t *testing.T) {
 func TestResolveGitTokenRepoErrorPropagates(t *testing.T) {
 	box, _ := crypto.NewBox(testKey)
 	ownerID := uuid.New()
-	w := &SandboxWorker{
+	w := &Worker{
 		userRepo: &stubUserRepo{err: errors.New("db down")},
 		tokenBox: box,
 	}

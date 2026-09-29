@@ -9,16 +9,16 @@ import (
 
 // ShareLink represents a project invitation link
 type ShareLink struct {
-	ID           uuid.UUID  `json:"id"`
-	ProjectID    uuid.UUID  `json:"project_id"`
-	Code         string     `json:"code"`
-	Role         string     `json:"role"` // VIEWER, EDITOR
-	CreatedBy    uuid.UUID  `json:"created_by"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
-	MaxUses      *int       `json:"max_uses,omitempty"`
-	UsesCount    int        `json:"uses_count"`
-	CreatedAt    time.Time  `json:"created_at"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	ID        uuid.UUID  `json:"id"`
+	ProjectID uuid.UUID  `json:"project_id"`
+	Code      string     `json:"code"`
+	Role      string     `json:"role"` // VIEWER, EDITOR
+	CreatedBy uuid.UUID  `json:"created_by"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	MaxUses   *int       `json:"max_uses,omitempty"`
+	UsesCount int        `json:"uses_count"`
+	CreatedAt time.Time  `json:"created_at"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 }
 
 // ShareLinkRepository defines the interface for share link persistence

@@ -10,9 +10,9 @@ import (
 type ProjectRole string
 
 const (
-	ProjectRoleOwner       ProjectRole = "OWNER"
+	ProjectRoleOwner        ProjectRole = "OWNER"
 	ProjectRoleCollaborator ProjectRole = "COLLABORATOR"
-	ProjectRoleViewer      ProjectRole = "VIEWER"
+	ProjectRoleViewer       ProjectRole = "VIEWER"
 )
 
 type Project struct {
@@ -51,5 +51,8 @@ type ProjectRepository interface {
 	ListCollaborators(ctx context.Context, projectID uuid.UUID) ([]*ProjectCollaborator, error)
 	UpdateRole(ctx context.Context, projectID uuid.UUID, userID uuid.UUID, role ProjectRole) error
 	RemoveCollaborator(ctx context.Context, projectID uuid.UUID, userID uuid.UUID) error
-	ListSandboxes(ctx context.Context, projectID uuid.UUID) ([]*Sandbox, error)
+	// ListEnvironments returns the environments belonging to a project's
+	// workspaces. It previously read the legacy `sandboxes` table, whose
+	// project_id column was never populated, so it always returned nothing.
+	ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]*Environment, error)
 }

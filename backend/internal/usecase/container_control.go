@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/AyushCN/berth/internal/domain"
+	"github.com/google/uuid"
 )
 
 // containerControl abstracts "stop or start this environment's container".
@@ -26,6 +27,27 @@ type containerControl interface {
 // eventPublisher is the subset of the NATS client these controllers need.
 type eventPublisher interface {
 	Publish(subject string, data []byte) error
+}
+
+// workspaceIDFor maps an environment to the workspace that owns its checkout.
+//
+// The on-disk directory is keyed by workspace id because that is what the
+// worker provisions (worker.provision is called with
+// WORKSPACE_ROOT/<workspace_id>). The api's file and git endpoints used to
+// build the path from the *environment* id instead, which only coincided for
+// rows backfilled by migration 000006, where each sandbox id was reused as both
+// the workspace and the environment id. For any environment created through the
+// API the two differ, so the file browser and every git operation pointed at a
+// directory that was never created.
+func workspaceIDFor(ctx context.Context, envRepo domain.EnvironmentRepository, environmentID uuid.UUID) (uuid.UUID, error) {
+	env, err := envRepo.GetByID(ctx, environmentID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("environment %s not found", environmentID)
+	}
+	if env.WorkspaceID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("environment %s has no workspace", environmentID)
+	}
+	return env.WorkspaceID, nil
 }
 
 // dockerContainerControl acts directly through a container runtime. Used by the

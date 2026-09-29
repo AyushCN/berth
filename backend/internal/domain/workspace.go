@@ -19,36 +19,36 @@ const (
 type WorkspaceMemberRole string
 
 const (
-	WorkspaceMemberRoleOwner   WorkspaceMemberRole = "OWNER"
-	WorkspaceMemberRoleEditor  WorkspaceMemberRole = "EDITOR"
-	WorkspaceMemberRoleViewer  WorkspaceMemberRole = "VIEWER"
+	WorkspaceMemberRoleOwner  WorkspaceMemberRole = "OWNER"
+	WorkspaceMemberRoleEditor WorkspaceMemberRole = "EDITOR"
+	WorkspaceMemberRoleViewer WorkspaceMemberRole = "VIEWER"
 )
 
 // Workspace represents an editable code state (canonical or fork)
 type Workspace struct {
-	ID                  uuid.UUID      `json:"id"`
-	ProjectID           uuid.UUID      `json:"project_id"`
-	Name                string         `json:"name"`
-	Type                WorkspaceType  `json:"type"` // CANONICAL, FORK
-	BaseWorkspaceID     *uuid.UUID     `json:"base_workspace_id,omitempty"` // for forks
-	OwnerID             uuid.UUID      `json:"owner_id"` // workspace owner
-	GitURL              string         `json:"git_url"`
-	GitBranch           string         `json:"git_branch"`
-	CommitHash          string         `json:"commit_hash,omitempty"`
-	HasUncommittedChanges bool         `json:"has_uncommitted_changes"`
-	LastSyncedAt        *time.Time     `json:"last_synced_at,omitempty"`
-	CreatedAt           time.Time      `json:"created_at"`
-	UpdatedAt           time.Time      `json:"updated_at"`
-	DeletedAt           *time.Time     `json:"deleted_at,omitempty"`
+	ID                    uuid.UUID     `json:"id"`
+	ProjectID             uuid.UUID     `json:"project_id"`
+	Name                  string        `json:"name"`
+	Type                  WorkspaceType `json:"type"`                        // CANONICAL, FORK
+	BaseWorkspaceID       *uuid.UUID    `json:"base_workspace_id,omitempty"` // for forks
+	OwnerID               uuid.UUID     `json:"owner_id"`                    // workspace owner
+	GitURL                string        `json:"git_url"`
+	GitBranch             string        `json:"git_branch"`
+	CommitHash            string        `json:"commit_hash,omitempty"`
+	HasUncommittedChanges bool          `json:"has_uncommitted_changes"`
+	LastSyncedAt          *time.Time    `json:"last_synced_at,omitempty"`
+	CreatedAt             time.Time     `json:"created_at"`
+	UpdatedAt             time.Time     `json:"updated_at"`
+	DeletedAt             *time.Time    `json:"deleted_at,omitempty"`
 }
 
 // WorkspaceMember represents a user's membership in a workspace
 type WorkspaceMember struct {
-	ID          uuid.UUID            `json:"id"`
-	WorkspaceID uuid.UUID            `json:"workspace_id"`
-	UserID      uuid.UUID            `json:"user_id"`
-	Role        WorkspaceMemberRole  `json:"role"` // OWNER, EDITOR, VIEWER
-	CreatedAt   time.Time            `json:"created_at"`
+	ID          uuid.UUID           `json:"id"`
+	WorkspaceID uuid.UUID           `json:"workspace_id"`
+	UserID      uuid.UUID           `json:"user_id"`
+	Role        WorkspaceMemberRole `json:"role"` // OWNER, EDITOR, VIEWER
+	CreatedAt   time.Time           `json:"created_at"`
 }
 
 // WorkspaceRepository defines the interface for workspace persistence

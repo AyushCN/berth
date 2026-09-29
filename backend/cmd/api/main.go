@@ -134,7 +134,7 @@ func main() {
 		workspaceDir = filepath.Join(home, ".local", "state", "berth", "workspaces")
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
-	fileUC := usecase.NewFileUsecase(workspaceDir, envUC)
+	fileUC := usecase.NewFileUsecase(workspaceDir, envRepo, envUC)
 
 	// Initialize Docker runtime for Git operations in API mode
 	gitRuntime, err := usecase.NewDockerRuntimeForGit(workspaceDir)
