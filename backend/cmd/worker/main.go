@@ -17,6 +17,7 @@ import (
 	"github.com/AyushCN/berth/internal/repository"
 	"github.com/AyushCN/berth/internal/usecase"
 	"github.com/AyushCN/berth/internal/worker"
+	"github.com/AyushCN/berth/pkg/crypto"
 )
 
 func main() {
@@ -78,6 +79,16 @@ func main() {
 
 	queries := repository.New(db.Pool())
 	sandboxRepo := repository.NewSandboxRepository(queries)
+	userRepo := repository.NewUserRepository(queries)
+
+	// Token encryption box, used to decrypt the stored GitHub OAuth token so
+	// private repositories can be cloned. config.Load has already validated
+	// the key. This is the same Box the api uses to encrypt on login.
+	tokenBox, err := crypto.NewBox(os.Getenv("ENCRYPTION_KEY"))
+	if err != nil {
+		slog.Error("failed to init token encryption", "error", err)
+		os.Exit(1)
+	}
 
 	// Prediction repositories
 	modelRepo := repository.NewModelRepository(db.Pool())
@@ -85,18 +96,14 @@ func main() {
 	predictionRepo := repository.NewPredictionRepository(db.Pool())
 
 	// Prediction service
-	modelDir := os.Getenv("MODEL_DIR")
-	if modelDir == "" {
-		modelDir = "/tmp/berth/models"
-	}
-	_ = os.MkdirAll(modelDir, 0755)
+	_ = os.MkdirAll(cfg.ModelDir, 0755)
 
-	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, modelDir)
+	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, cfg.ModelDir)
 	predictionService := usecase.NewPredictionService(modelTrainer, predictionRepo)
 	dataCollector := usecase.NewDataCollector(trainingDataRepo, repository.NewBuildRepository(queries), repository.NewRuntimeProfileRepository(queries))
 
 	// Inject data collector into sandbox worker
-	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, runtime, natsClient, dataCollector)
+	sandboxWorker := worker.NewSandboxWorker(sandboxRepo, userRepo, runtime, natsClient, dataCollector, tokenBox)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

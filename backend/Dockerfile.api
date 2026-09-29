@@ -1,5 +1,7 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+# Must be >= the `go` directive in go.mod (1.26.3), otherwise the build fails
+# with "go.mod requires go >= 1.26.3".
+FROM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache git gcc musl-dev
 

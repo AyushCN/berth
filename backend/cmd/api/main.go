@@ -22,6 +22,7 @@ import (
 	"github.com/AyushCN/berth/internal/infrastructure/redis"
 	"github.com/AyushCN/berth/internal/repository"
 	"github.com/AyushCN/berth/internal/usecase"
+	"github.com/AyushCN/berth/pkg/crypto"
 )
 
 func main() {
@@ -89,10 +90,17 @@ func main() {
 	// OAuth client
 	oauthClient := github.NewOAuthClient(cfg.GithubClientID, cfg.GithubClientSecret, cfg.FrontendURL+"/api/auth/github/callback")
 
+	// Token encryption box. config.Load has already validated the key.
+	tokenBox, err := crypto.NewBox(os.Getenv("ENCRYPTION_KEY"))
+	if err != nil {
+		slog.Error("failed to init token encryption", "error", err)
+		os.Exit(1)
+	}
+
 	// Usecases
 	orgUC := usecase.NewOrganizationUsecase(orgRepo)
 	projUC := usecase.NewProjectUsecase(projRepo, orgRepo, workspaceRepo, workspaceMemberRepo)
-	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, orgUC, projUC)
+	authUC := usecase.NewAuthUsecase(userRepo, oauthClient, cfg.JWTSecret, tokenBox, orgUC, projUC)
 	envUC := usecase.NewEnvironmentUsecase(envRepo, workspaceRepo, projRepo, orgRepo, nil, natsClient) // runtime nil in API mode
 	shareLinkUC := usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, nil) // gitUC not yet initialized
 
@@ -160,10 +168,7 @@ func main() {
 	go warmPool.Start(context.Background())
 
 	// Prediction service
-	modelDir := os.Getenv("MODEL_DIR")
-	if modelDir == "" {
-		modelDir = "/tmp/berth/models"
-	}
+	modelDir := cfg.ModelDir
 	_ = os.MkdirAll(modelDir, 0755)
 
 	modelTrainer := usecase.NewModelTrainer(modelRepo, trainingDataRepo, modelDir)

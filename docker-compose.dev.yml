@@ -27,6 +27,22 @@ services:
     networks:
       - berth
 
+  # NATS with JetStream. Both the api (publisher) and the worker (subscriber)
+  # need this: the worker receives berth.environment.* provisioning messages
+  # over it, and internal/infrastructure/nats uses JetStream consumers.
+  nats:
+    image: nats:2.10-alpine
+    command: ["--jetstream", "--store_dir", "/data/jetstream", "--http_port", "8222"]
+    volumes:
+      - berth_nats:/data/jetstream
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - berth
+
   traefik:
     image: traefik:v2.11
     command:
@@ -56,25 +72,33 @@ services:
       PORT: "8080"
       DATABASE_URL: postgres://berth:berth@postgres:5432/berth?sslmode=disable
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_at_least_32_chars_long}
+      NATS_URL: nats://nats:4222
+      # Must be byte-identical to the worker's ENCRYPTION_KEY: the api
+      # encrypts GitHub tokens with it and the worker decrypts them to clone
+      # private repositories.
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0d71f78929e8b688442387dd10478006998c1fa490c42c02c627a3e5ec8a3bed}
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_at_least_32_chars_long}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-dev_client_id}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-dev_client_secret}
       FRONTEND_URL: http://localhost:3000
-      WORKSPACE_ROOT: /home/swordrookie/berth-data/workspaces
+      WORKSPACE_ROOT: /workspaces
+      MODEL_DIR: /models
       DOCKER_HOST: unix:///var/run/docker.sock
       DOCKER_NETWORK: berth
       TRAEFIK_DOMAIN: localhost
       ENV: development
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/swordrookie/berth-data/workspaces:/home/swordrookie/berth-data/workspaces
+      - ${BERTH_WORKSPACES:-./data/workspaces}:/workspaces
+      - berth_models:/models
     networks:
       - berth
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
@@ -89,20 +113,31 @@ services:
       MODE: worker
       DATABASE_URL: postgres://berth:berth@postgres:5432/berth?sslmode=disable
       REDIS_URL: redis://redis:6379
-      WORKSPACE_ROOT: /home/swordrookie/berth-data/workspaces
+      NATS_URL: nats://nats:4222
+      # Required: internal/usecase links pkg/crypto, and config.Load rejects
+      # a missing or malformed key. The worker panics at startup without it.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0d71f78929e8b688442387dd10478006998c1fa490c42c02c627a3e5ec8a3bed}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-dev_client_id}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-dev_client_secret}
+      FRONTEND_URL: http://localhost:3000
+      WORKSPACE_ROOT: /workspaces
+      MODEL_DIR: /models
       DOCKER_HOST: unix:///var/run/docker.sock
       DOCKER_NETWORK: berth
       TRAEFIK_DOMAIN: localhost
       ENV: development
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/swordrookie/berth-data/workspaces:/home/swordrookie/berth-data/workspaces
+      - ${BERTH_WORKSPACES:-./data/workspaces}:/workspaces
+      - berth_models:/models
     networks:
       - berth
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
 
   frontend:
@@ -121,6 +156,8 @@ services:
 volumes:
   berth_pg:
   berth_redis:
+  berth_nats:
+  berth_models:
 
 networks:
   berth:

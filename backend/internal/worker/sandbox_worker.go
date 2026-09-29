@@ -23,22 +23,28 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/AyushCN/berth/pkg/crypto"
 )
 
 type SandboxWorker struct {
-	repo           domain.SandboxRepository
-	runtime        domain.ContainerRuntime
-	natsClient     *natsInfra.Client
-	dataCollector  *usecase.DataCollector
-	wg             sync.WaitGroup
+	repo          domain.SandboxRepository
+	userRepo      domain.UserRepository
+	runtime       domain.ContainerRuntime
+	natsClient    *natsInfra.Client
+	dataCollector *usecase.DataCollector
+	tokenBox      *crypto.Box
+	wg            sync.WaitGroup
 }
 
-func NewSandboxWorker(repo domain.SandboxRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client, dataCollector *usecase.DataCollector) *SandboxWorker {
+func NewSandboxWorker(repo domain.SandboxRepository, userRepo domain.UserRepository, runtime domain.ContainerRuntime, natsClient *natsInfra.Client, dataCollector *usecase.DataCollector, tokenBox *crypto.Box) *SandboxWorker {
 	return &SandboxWorker{
 		repo:          repo,
+		userRepo:      userRepo,
 		runtime:       runtime,
 		natsClient:    natsClient,
 		dataCollector: dataCollector,
+		tokenBox:      tokenBox,
 	}
 }
 
@@ -189,6 +195,12 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	slog.Info("processing pending sandbox", "sandbox_id", sandbox.ID, "git_url", sandbox.GitURL, "db_pop_duration", dbPopDuration)
 
+	// Transition to BUILDING state early so frontend shows progress
+	if err := w.repo.UpdateState(ctx, sandbox.ID, domain.StateBuilding); err != nil {
+		slog.Error("failed to update state to BUILDING", "sandbox_id", sandbox.ID, "error", err)
+		// Continue anyway, don't fail hard
+	}
+
 	// Validate Git URL before any filesystem or network operation
 	if err := validateGitURL(sandbox.GitURL); err != nil {
 		slog.Error("invalid git url", "sandbox_id", sandbox.ID, "error", err)
@@ -203,8 +215,14 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 		return
 	}
 
-	// Prepare workspace directory
-	workspaceDir := filepath.Join(workspaceRoot(), sandbox.ID.String())
+	// Prepare workspace directory - ensure parent exists
+	workspaceRootDir := workspaceRoot()
+	workspaceDir := filepath.Join(workspaceRootDir, sandbox.ID.String())
+	if err := os.MkdirAll(workspaceRootDir, 0755); err != nil {
+		slog.Error("failed to create workspace root dir", "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
 
 	success := false
 	var cid string
@@ -221,6 +239,17 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 			}
 		}
 	}()
+
+	// Decrypt the owner's GitHub token so private repositories can be cloned.
+	// Public repositories need no token and remain the common case.
+	gitToken, err := w.resolveGitToken(ctx, sandbox.OwnerID)
+	if err != nil {
+		slog.Warn("could not resolve git token, falling back to unauthenticated clone",
+			"sandbox_id", sandbox.ID, "error", err)
+	}
+	if gitToken != "" {
+		slog.Info("using owner GitHub token for clone", "sandbox_id", sandbox.ID)
+	}
 
 	// Clone repository in background
 	bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
@@ -251,7 +280,16 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 			if sandbox.GitBranch != "" {
 				cloneArgs = append(cloneArgs, "-b", sandbox.GitBranch)
 			}
-			cloneArgs = append(cloneArgs, sandbox.GitURL, cacheDir)
+			
+			// Use authenticated URL for private repos
+			cloneURL := sandbox.GitURL
+			if gitToken != "" {
+				// Convert https://github.com/... to https://token@github.com/...
+				if strings.HasPrefix(cloneURL, "https://github.com/") {
+					cloneURL = strings.Replace(cloneURL, "https://github.com/", "https://"+gitToken+"@github.com/", 1)
+				}
+			}
+			cloneArgs = append(cloneArgs, cloneURL, cacheDir)
 
 			cloneCmd := exec.CommandContext(bgCtx, "git", cloneArgs...)
 			if out, cmdErr := cloneCmd.CombinedOutput(); cmdErr != nil {
@@ -279,6 +317,12 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 				for _, e := range entries {
 					slog.Info("workspace entry", "name", e.Name(), "is_dir", e.IsDir())
 				}
+				
+				// Critical: verify workspace has actual content
+				if len(entries) == 0 {
+					err = fmt.Errorf("workspace is empty after clone")
+					slog.Error("workspace is empty after clone", "sandbox_id", sandbox.ID)
+				}
 			}
 		}
 
@@ -288,11 +332,20 @@ func (w *SandboxWorker) processPending(ctx context.Context) {
 
 	// Wait for the repository clone before detecting its runtime.
 	if err := <-cloneDone; err != nil {
-		slog.Error("worker failing due to clone error")
+		slog.Error("worker failing due to clone error", "error", err)
 		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
 		return
 	}
 	slog.Info("git clone completed", "sandbox_id", sandbox.ID, "duration", cloneDuration)
+
+	// Verify workspace has content before proceeding
+	entries, err := os.ReadDir(workspaceDir)
+	if err != nil || len(entries) == 0 {
+		slog.Error("workspace is empty or unreadable after clone", "sandbox_id", sandbox.ID, "error", err)
+		_ = w.repo.UpdateState(context.Background(), sandbox.ID, domain.StateFailed)
+		return
+	}
+	slog.Info("workspace verified with content", "sandbox_id", sandbox.ID, "entries", len(entries))
 
 	// Analyze the repository using the rule-based engine
 	analyzeStart := time.Now()
@@ -595,6 +648,28 @@ func (w *SandboxWorker) StartInteractiveShell(ctx context.Context, sandboxID, co
 		stdin.Close()
 	}
 	shellMutex.Unlock()
+}
+
+// resolveGitToken returns the owner's decrypted GitHub token, or an empty
+// string when no token is available (anonymous clone of a public repo).
+//
+// Decryption goes through the same crypto.Box the api uses to encrypt on
+// login. An earlier version of this file hand-rolled a decryptor that
+// expected hex(nonce || ciphertext) with a 32-byte nonce, which is not the
+// format crypto.Encrypt ever produced; it failed on every token and the
+// error was discarded, so the "authenticated clone" log line was a lie.
+func (w *SandboxWorker) resolveGitToken(ctx context.Context, ownerID uuid.UUID) (string, error) {
+	if w.tokenBox == nil || ownerID == uuid.Nil {
+		return "", nil
+	}
+	user, err := w.userRepo.GetByID(ctx, ownerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load owner %s: %w", ownerID, err)
+	}
+	if user == nil || user.GithubTokenEncrypted == "" {
+		return "", nil
+	}
+	return w.tokenBox.Decrypt(user.GithubTokenEncrypted)
 }
 
 // getFreePort asks the kernel for a free open port that is ready to use

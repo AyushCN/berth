@@ -1,3 +1,11 @@
+// Package crypto provides symmetric encryption for secrets at rest
+// (currently GitHub OAuth tokens stored in users.github_token_encrypted).
+//
+// The key is supplied explicitly by the caller rather than read from the
+// environment at package init time. Reading the environment in init() runs
+// before main() and therefore before config.Load() and godotenv, which made
+// both binaries panic on startup whenever ENCRYPTION_KEY was not present in
+// the real process environment.
 package crypto
 
 import (
@@ -5,79 +13,87 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 )
 
-var key []byte
-
-func init() {
-	k := os.Getenv("ENCRYPTION_KEY")
-	if k == "" {
-		panic("ENCRYPTION_KEY is required")
-	}
-	// Accept 32-byte raw key or 64-char hex string
-	if len(k) == 64 {
-		key = make([]byte, 32)
-		for i := 0; i < 32; i++ {
-			b, _ := fmt.Sscanf(k[i*2:i*2+2], "%02x", &key[i])
-			_ = b
-		}
-	} else if len(k) == 32 {
-		key = []byte(k)
-	} else {
-		panic("ENCRYPTION_KEY must be 32 bytes raw or 64 chars hex")
-	}
+// Box encrypts and decrypts secrets with AES-256-GCM.
+//
+// Wire format (do not change without a data migration):
+//
+//	base64.StdEncoding( nonce[12] || ciphertext )
+//
+// The nonce is gcm.NonceSize() and is prepended to the sealed output by
+// gcm.Seal, then the whole buffer is base64 encoded.
+type Box struct {
+	aead cipher.AEAD
 }
 
-// Encrypt encrypts plaintext with AES-256-GCM and returns base64(ciphertext||nonce).
-func Encrypt(plaintext string) (string, error) {
+// NewBox derives a 32-byte key from secret and returns a ready Box.
+//
+// Two key formats are accepted for backwards compatibility with keys that
+// were generated before this was centralised:
+//   - 64 hex characters  -> decoded to 32 bytes
+//   - 32 raw characters  -> used as the 32 key bytes directly
+//
+// Anything else is an error. Callers should fail fast on a bad key at
+// startup rather than silently degrading to an empty key.
+func NewBox(secret string) (*Box, error) {
+	if secret == "" {
+		return nil, fmt.Errorf("encryption key is required")
+	}
+
+	var key []byte
+	switch len(secret) {
+	case 64:
+		decoded, err := hex.DecodeString(secret)
+		if err != nil {
+			return nil, fmt.Errorf("encryption key is not valid hex: %w", err)
+		}
+		key = decoded
+	case 32:
+		key = []byte(secret)
+	default:
+		return nil, fmt.Errorf("encryption key must be 32 raw bytes or 64 hex characters, got %d characters", len(secret))
+	}
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
-
-	gcm, err := cipher.NewGCM(block)
+	aead, err := cipher.NewGCM(block)
 	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
+	return &Box{aead: aead}, nil
+}
 
-	nonce := make([]byte, gcm.NonceSize())
+// Encrypt seals plaintext and returns base64(nonce || ciphertext).
+func (b *Box) Encrypt(plaintext string) (string, error) {
+	nonce := make([]byte, b.aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
-
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	// Seal appends the ciphertext to nonce, giving nonce || ciphertext.
+	sealed := b.aead.Seal(nonce, nonce, []byte(plaintext), nil)
+	return base64.StdEncoding.EncodeToString(sealed), nil
 }
 
-// Decrypt decrypts base64(ciphertext||nonce) and returns plaintext.
-func Decrypt(ciphertextB64 string) (string, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextB64)
+// Decrypt opens a value produced by Encrypt.
+func (b *Box) Decrypt(encoded string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
-
-	if len(ciphertext) < gcm.NonceSize() {
-		return "", fmt.Errorf("ciphertext too short")
+	ns := b.aead.NonceSize()
+	if len(raw) < ns {
+		return "", fmt.Errorf("ciphertext too short: %d bytes, need at least %d", len(raw), ns)
 	}
-
-	nonce, ciphertext := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	nonce, ciphertext := raw[:ns], raw[ns:]
+	plaintext, err := b.aead.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt: %w", err)
 	}
-
 	return string(plaintext), nil
 }

@@ -2,9 +2,12 @@ package config
 
 import (
 	"fmt"
-	"github.com/joho/godotenv"
 	"os"
 	"path/filepath"
+
+	"github.com/joho/godotenv"
+
+	"github.com/AyushCN/berth/pkg/crypto"
 )
 
 // Config holds all application configuration.
@@ -27,6 +30,9 @@ type Config struct {
 	DockerHost       string
 	DockerNetwork    string
 	TraefikDomain    string
+
+	// ModelDir is where trained prediction artefacts are written.
+	ModelDir string
 }
 
 // Load reads configuration from environment variables.
@@ -59,6 +65,18 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required in api mode")
 	}
 
+	// ENCRYPTION_KEY protects GitHub OAuth tokens at rest. Both the api
+	// (encrypt on login) and the worker (decrypt to clone private repos)
+	// need it, so it is required in every mode. Validated here so a missing
+	// or malformed key fails with a clear message instead of a panic.
+	encryptionKey := os.Getenv("ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		return nil, fmt.Errorf("ENCRYPTION_KEY is required (32 raw bytes or 64 hex characters)")
+	}
+	if _, err := crypto.NewBox(encryptionKey); err != nil {
+		return nil, fmt.Errorf("invalid ENCRYPTION_KEY: %w", err)
+	}
+
 	cfg := &Config{
 		Mode:               mode,
 		Env:                getEnv("ENV", "development"),
@@ -75,6 +93,7 @@ func Load() (*Config, error) {
 		DockerHost:       getEnv("DOCKER_HOST", "unix:///var/run/docker.sock"),
 		DockerNetwork:    getEnv("DOCKER_NETWORK", "berth"),
 		TraefikDomain:    getEnv("TRAEFIK_DOMAIN", ""),
+		ModelDir:         getEnv("MODEL_DIR", "/tmp/berth/models"),
 	}
 
 	workspaceDir := os.Getenv("WORKSPACE_ROOT")

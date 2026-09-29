@@ -25,6 +25,7 @@ ml/*.pyc
 
 # Docker/Infra
 infra/data/
+data/
 *.rdb
 
 # OS & IDE

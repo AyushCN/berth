@@ -19,15 +19,17 @@ type AuthUsecase struct {
 	userRepo      domain.UserRepository
 	oauthProvider domain.OAuthProvider
 	jwtSecret     string
+	tokenBox      *crypto.Box
 	orgUC         *OrganizationUsecase
 	projUC        *ProjectUsecase
 }
 
-func NewAuthUsecase(repo domain.UserRepository, provider domain.OAuthProvider, secret string, orgUC *OrganizationUsecase, projUC *ProjectUsecase) *AuthUsecase {
+func NewAuthUsecase(repo domain.UserRepository, provider domain.OAuthProvider, secret string, tokenBox *crypto.Box, orgUC *OrganizationUsecase, projUC *ProjectUsecase) *AuthUsecase {
 	return &AuthUsecase{
 		userRepo:      repo,
 		oauthProvider: provider,
 		jwtSecret:     secret,
+		tokenBox:      tokenBox,
 		orgUC:         orgUC,
 		projUC:        projUC,
 	}
@@ -73,7 +75,7 @@ func (uc *AuthUsecase) ProcessCallback(ctx context.Context, code, verifier strin
 		}
 	}
 
-	encryptedToken, err := crypto.Encrypt(token)
+	encryptedToken, err := uc.tokenBox.Encrypt(token)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to encrypt token: %w", err)
 	}
