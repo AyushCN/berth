@@ -134,14 +134,14 @@ func main() {
 		workspaceDir = filepath.Join(home, ".local", "state", "berth", "workspaces")
 	}
 	_ = os.MkdirAll(workspaceDir, 0755)
-	fileUC := usecase.NewFileUsecase(workspaceDir, envRepo, envUC)
+	fileUC := usecase.NewFileUsecase(workspaceDir, envRepo, workspaceRepo, projRepo, envUC)
 
 	// Initialize Docker runtime for Git operations in API mode
 	gitRuntime, err := usecase.NewDockerRuntimeForGit(workspaceDir)
 	if err != nil {
 		slog.Warn("failed to init git runtime, git operations will use host filesystem", "error", err)
 	}
-	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, envRepo, workspaceRepo, gitRuntime)
+	gitUC := usecase.NewGitUsecase(workspaceDir, userRepo, envRepo, workspaceRepo, projRepo, gitRuntime)
 	changeRequestUC := usecase.NewChangeRequestUsecase(changeRequestRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 	shareLinkUC = usecase.NewShareLinkUsecase(shareLinkRepo, projRepo, workspaceRepo, workspaceMemberRepo, gitUC)
 

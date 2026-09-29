@@ -17,11 +17,20 @@ import (
 type FileUsecase struct {
 	workspaceDir string
 	envRepo      domain.EnvironmentRepository
+	wsRepo       domain.WorkspaceRepository
+	projRepo     domain.ProjectRepository
 	envUC        *EnvironmentUsecase // optional, used to signal reload via Exec
 }
 
-func NewFileUsecase(dir string, envRepo domain.EnvironmentRepository, envUC *EnvironmentUsecase) *FileUsecase {
-	return &FileUsecase{workspaceDir: dir, envRepo: envRepo, envUC: envUC}
+func NewFileUsecase(dir string, envRepo domain.EnvironmentRepository, wsRepo domain.WorkspaceRepository, projRepo domain.ProjectRepository, envUC *EnvironmentUsecase) *FileUsecase {
+	return &FileUsecase{workspaceDir: dir, envRepo: envRepo, wsRepo: wsRepo, projRepo: projRepo, envUC: envUC}
+}
+
+// authorize is called before every file operation. The endpoints previously
+// performed no ownership check at all, so any authenticated user could read,
+// overwrite or delete any environment's files by guessing its UUID.
+func (uc *FileUsecase) authorize(ctx context.Context, environmentID, userID uuid.UUID, want accessLevel) error {
+	return requireAccess(ctx, uc.envRepo, uc.wsRepo, uc.projRepo, environmentID, userID, want, "file operation")
 }
 
 // workspaceDirFor resolves the host checkout directory for an environment.
@@ -57,7 +66,10 @@ type FileInfo struct {
 	ModTime time.Time `json:"mod_time"`
 }
 
-func (uc *FileUsecase) ListFiles(ctx context.Context, environmentID uuid.UUID, reqPath string) (any, error) {
+func (uc *FileUsecase) ListFiles(ctx context.Context, environmentID, userID uuid.UUID, reqPath string) (any, error) {
+	if err := uc.authorize(ctx, environmentID, userID, accessRead); err != nil {
+		return nil, err
+	}
 	baseDir, err := uc.workspaceDirFor(ctx, environmentID)
 	if err != nil {
 		return nil, err
@@ -95,7 +107,10 @@ func (uc *FileUsecase) ListFiles(ctx context.Context, environmentID uuid.UUID, r
 	return result, nil
 }
 
-func (uc *FileUsecase) GetFileContent(ctx context.Context, environmentID uuid.UUID, path string) ([]byte, error) {
+func (uc *FileUsecase) GetFileContent(ctx context.Context, environmentID, userID uuid.UUID, path string) ([]byte, error) {
+	if err := uc.authorize(ctx, environmentID, userID, accessRead); err != nil {
+		return nil, err
+	}
 	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return nil, err
@@ -108,7 +123,10 @@ type SaveResult struct {
 	ReloadSignaled bool
 }
 
-func (uc *FileUsecase) UpdateFileContent(ctx context.Context, environmentID uuid.UUID, path string, content []byte) (*SaveResult, error) {
+func (uc *FileUsecase) UpdateFileContent(ctx context.Context, environmentID, userID uuid.UUID, path string, content []byte) (*SaveResult, error) {
+	if err := uc.authorize(ctx, environmentID, userID, accessWrite); err != nil {
+		return nil, err
+	}
 	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return nil, err
@@ -160,7 +178,10 @@ func (uc *FileUsecase) UpdateFileContent(ctx context.Context, environmentID uuid
 	return &SaveResult{ReloadSignaled: reloadSignaled}, nil
 }
 
-func (uc *FileUsecase) CreateFile(ctx context.Context, environmentID uuid.UUID, path string, isDir bool) error {
+func (uc *FileUsecase) CreateFile(ctx context.Context, environmentID, userID uuid.UUID, path string, isDir bool) error {
+	if err := uc.authorize(ctx, environmentID, userID, accessWrite); err != nil {
+		return err
+	}
 	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return err
@@ -178,7 +199,10 @@ func (uc *FileUsecase) CreateFile(ctx context.Context, environmentID uuid.UUID, 
 	return os.WriteFile(target, []byte{}, 0644)
 }
 
-func (uc *FileUsecase) DeleteFile(ctx context.Context, environmentID uuid.UUID, path string) error {
+func (uc *FileUsecase) DeleteFile(ctx context.Context, environmentID, userID uuid.UUID, path string) error {
+	if err := uc.authorize(ctx, environmentID, userID, accessWrite); err != nil {
+		return err
+	}
 	target, err := uc.resolvePath(ctx, environmentID, path)
 	if err != nil {
 		return err

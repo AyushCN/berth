@@ -124,7 +124,12 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *gin.Engine {
 		}
 	}
 
-	api.GET("/auth/dev-login", handler.DevLogin(cfg.JWTSecret, cfg.Env))
+	// Development login mints a session for a fixed user signed with the real
+	// JWT_SECRET. It must not exist in production, so it is not registered
+	// there at all rather than relying on the handler to refuse.
+	if cfg.Env != "production" {
+		api.GET("/auth/dev-login", handler.DevLogin(cfg.JWTSecret, cfg.Env))
+	}
 	api.POST("/auth/logout", deps.AuthHandler.Logout)
 
 	// Protected routes (auth via query param or cookie)

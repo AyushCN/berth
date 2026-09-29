@@ -18,15 +18,17 @@ type GitUsecase struct {
 	userRepo      domain.UserRepository
 	envRepo       domain.EnvironmentRepository
 	workspaceRepo domain.WorkspaceRepository
+	projectRepo   domain.ProjectRepository
 	runtime       domain.ContainerRuntime
 }
 
-func NewGitUsecase(dir string, userRepo domain.UserRepository, envRepo domain.EnvironmentRepository, workspaceRepo domain.WorkspaceRepository, runtime domain.ContainerRuntime) *GitUsecase {
+func NewGitUsecase(dir string, userRepo domain.UserRepository, envRepo domain.EnvironmentRepository, workspaceRepo domain.WorkspaceRepository, projectRepo domain.ProjectRepository, runtime domain.ContainerRuntime) *GitUsecase {
 	return &GitUsecase{
 		workspaceDir:  dir,
 		userRepo:      userRepo,
 		envRepo:       envRepo,
 		workspaceRepo: workspaceRepo,
+		projectRepo:   projectRepo,
 		runtime:       runtime,
 	}
 }
